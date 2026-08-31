@@ -39,6 +39,8 @@ The preparer extracts these exact existing tags and inserts them immediately bef
 
 Run commands from the deployment directory shown above. All supplied package/backup paths must be absolute. The scripts reject path traversal, alternate data streams, reserved device names, linked/reparse files and directories, and unexpected target roots. Use Windows PowerShell 5.1 or newer.
 
+`test-family24-guards.ps1` runs 27 pure synthetic process-identity checks without contacting the server or writing files. It passes in PowerShell 5.1 and 7.6.4, including the different timestamp types produced by their JSON readers. Exact UTC instants must match; one-tick differences, invalid/default/unspecified dates and changed process/path/version/plugin values still fail closed.
+
 1. Finish the final production build and offline/authenticated browser smoke checks. Confirm no more edits or builds are running.
 2. Read-only build/live preflight: `& '.\prepare-family24-web.ps1' -VerifyOnly`. It writes no package, manifest, result, or backup.
 3. Only after the operator declares the build stable: `& '.\prepare-family24-web.ps1' -BuildVerifiedStable`. This creates a unique local `family24-package-...` directory containing frozen assets, original/built/staged entry pages, the hash manifest, and a summary. It never writes to the live server. An interrupted package without a completed manifest is unusable; leave it for review and prepare a new unique package.

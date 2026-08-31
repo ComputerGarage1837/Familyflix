@@ -245,7 +245,30 @@ function Get-FFServerState {
 
 function Assert-FFSameServer {
     param($Before, $After)
-    if ($Before.processId -ne $After.processId -or $Before.processStartUtc -ne $After.processStartUtc -or
+    # PS5 keeps JSON timestamps as strings; PS7 can deserialize them as UTC
+    # DateTime objects. Compare exact instants, never localized date strings.
+    $ffStartTicks = @(foreach ($ffState in @($Before, $After)) {
+        $ffStart = $ffState.processStartUtc
+        if ($ffStart -is [DateTime]) {
+            if ($ffStart.Kind -ne [DateTimeKind]::Utc) { throw 'Process start DateTime must explicitly be UTC.' }
+            $ffTicks = $ffStart.Ticks
+        } elseif ($ffStart -is [DateTimeOffset]) {
+            $ffTicks = $ffStart.UtcDateTime.Ticks
+        } elseif ($ffStart -is [string]) {
+            $ffParsed = [DateTimeOffset]::MinValue
+            $ffFormats = [string[]]@("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'", "yyyy-MM-dd'T'HH:mm:ss.fffffffzzz")
+            if (-not [DateTimeOffset]::TryParseExact($ffStart, $ffFormats,
+                [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$ffParsed)) {
+                throw 'Process start timestamp must be a valid round-trip date with an explicit UTC offset.'
+            }
+            $ffTicks = $ffParsed.UtcDateTime.Ticks
+        } else { throw 'Process start timestamp is missing or has an unsupported type.' }
+        if ($ffTicks -eq [DateTime]::MinValue.Ticks -or $ffTicks -eq [DateTime]::MaxValue.Ticks) {
+            throw 'A boundary/default date is not a valid recorded process start.'
+        }
+        [long]$ffTicks
+    })
+    if ($Before.processId -ne $After.processId -or $ffStartTicks[0] -ne $ffStartTicks[1] -or
         $Before.processPath -ne $After.processPath -or $Before.stockVersion -ne $After.stockVersion -or
         $Before.pluginSha256 -ne $After.pluginSha256) { throw 'Jellyfin process/version/plugin changed during the operation.' }
 }
