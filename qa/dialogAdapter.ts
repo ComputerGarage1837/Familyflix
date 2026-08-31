@@ -1,3 +1,4 @@
+/* eslint-disable compat/compat -- QA runs only in the current local browser. */
 // Fixture-only seam. The deployed app uses Jellyfin's existing dialog/focus/history helper.
 export default {
     createDialog() {
@@ -18,3 +19,4 @@ export default {
         setTimeout(() => dialog.remove(), 0);
     }
 };
+/* eslint-enable compat/compat */

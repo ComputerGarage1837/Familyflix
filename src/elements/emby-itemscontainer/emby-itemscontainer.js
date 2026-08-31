@@ -13,6 +13,8 @@ import { bindFamilyBrowseVisibility, cancelFamilyBrowse, resumeFamilyBrowse, run
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 import serverNotifications from '../../scripts/serverNotifications';
 import Events from '../../utils/events.ts';
+import { installFamilyIssueDecorations } from 'familyflix/issueDecorations';
+import { beginFamilySpeed } from 'familyflix/speedReport';
 
 const ItemsContainerPrototype = Object.create(HTMLDivElement.prototype);
 
@@ -282,6 +284,7 @@ ItemsContainerPrototype.createdCallback = function () {
 };
 
 ItemsContainerPrototype.attachedCallback = function () {
+    installFamilyIssueDecorations();
     this.familyBrowseLifecycleCleanup?.();
     this.familyBrowseLifecycleCleanup = bindFamilyBrowseVisibility(this, () => {
         if (this.familyResumeBrowse) this.familyResumeBrowse();
@@ -392,8 +395,12 @@ ItemsContainerPrototype.refreshItems = function () {
 
     // A preparation function freezes mutable paging/filter state once for both automatic and explicit Retry.
     const read = this.prepareFetchData ? this.prepareFetchData() : this.fetchData.bind(this);
+    const finishTiming = this.familySpeedStage ? beginFamilySpeed(this.familySpeedStage, ServerConnections.currentApiClient()) : undefined;
     return runFamilyBrowse(this, read, (result, context) => {
-        if (this.fetchData && !this.paused) onDataFetched.call(this, result, context);
+        if (this.fetchData && !this.paused) {
+            onDataFetched.call(this, result, context);
+            finishTiming?.();
+        }
     }, {
         isCurrent: () => !!this.fetchData && !this.paused,
         errorParent: this.parentContainer,

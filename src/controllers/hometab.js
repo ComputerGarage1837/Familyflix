@@ -7,6 +7,8 @@ import { cancelFamilyBrowse, captureFamilyBrowseSession, clearFamilyBrowseError,
 import { getUserViewsQuery } from 'hooks/useUserViews';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { queryClient } from 'utils/query/queryClient';
+import { bindFamilyHomeTools } from 'familyflix/homeFamilyTools';
+import { beginFamilySpeed } from 'familyflix/speedReport';
 
 import '../elements/emby-itemscontainer/emby-itemscontainer';
 
@@ -19,9 +21,11 @@ class HomeTab {
         this.sectionsContainer = view.querySelector('.sections');
         this.onSettingsChanged = onHomeScreenSettingsChanged.bind(this);
         this.sectionsContainer.addEventListener('settingschange', this.onSettingsChanged);
+        this.familyTools = bindFamilyHomeTools(view, this.apiClient);
     }
     onResume(options = {}) {
         this.paused = false;
+        this.familyTools?.resume();
         if (!this.view || !this.sectionsContainer) return Promise.resolve();
         if (!this.sessionCurrent()) {
             cancelFamilyBrowse(this.sectionsContainer);
@@ -31,6 +35,8 @@ class HomeTab {
             this.homeLoad = null;
             this.apiClient = ServerConnections.currentApiClient();
             this.sessionCurrent = captureFamilyBrowseSession();
+            this.familyTools?.destroy();
+            this.familyTools = bindFamilyHomeTools(this.view, this.apiClient);
         }
         if (!this.sessionCurrent()) return Promise.resolve();
         if (this.sectionsRendered) {
@@ -45,6 +51,7 @@ class HomeTab {
         if (this.homeLoad) return this.homeLoad;
 
         loading.show();
+        const finishHomeTiming = beginFamilySpeed('home-ready', this.apiClient);
         const view = this.view;
         const apiClient = this.apiClient;
         const sectionsContainer = this.sectionsContainer;
@@ -65,6 +72,7 @@ class HomeTab {
                 if (options.autoFocus && (!document.activeElement || document.activeElement === document.body)) {
                     focusManager.autoFocus(view);
                 }
+                finishHomeTiming();
             }
         }, { isCurrent: () => !this.paused && this.view === view, settled: () => loading.hide() });
         this.homeLoad = promise;
@@ -75,6 +83,7 @@ class HomeTab {
     }
     onPause() {
         this.paused = true;
+        this.familyTools?.pause();
         const sectionsContainer = this.sectionsContainer;
 
         if (sectionsContainer) {
@@ -85,6 +94,8 @@ class HomeTab {
     }
     destroy() {
         this.onPause();
+        this.familyTools?.destroy();
+        this.familyTools = null;
         this.sectionsContainer?.removeEventListener('settingschange', this.onSettingsChanged);
         this.view = null;
         this.params = null;

@@ -34,6 +34,8 @@ import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { captureSeriesPreferencesSession, loadSeriesPreferences, rememberSeriesAudio } from 'familyflix/seriesPreferences';
 import { SERIES_DEFAULTS, seriesAutoplayAllowed } from 'familyflix/seriesPreferencePolicy';
 import { sharedSeriesTrackOptions } from 'familyflix/seriesPlaybackPolicy';
+import { confirmFamilyPlayback } from 'familyflix/playbackWarnings';
+import { beginFamilySpeed } from 'familyflix/speedReport';
 import { bindSkipSegment } from './skipsegment.ts';
 
 const UNLIMITED_ITEMS = -1;
@@ -2355,7 +2357,16 @@ export class PlaybackManager {
             }
         }
 
-        function playInternal(item, playOptions, onPlaybackStartedFn, prevSource) {
+        let familyPlaybackAttempt = 0;
+        let lastFamilyItem;
+        async function playInternal(item, playOptions, onPlaybackStartedFn, prevSource) {
+            const apiClient = ServerConnections.getApiClient(item.ServerId);
+            const attempt = ++familyPlaybackAttempt;
+            const allowed = await confirmFamilyPlayback(item, apiClient, lastFamilyItem);
+            if (!allowed || attempt !== familyPlaybackAttempt) {
+                loading.hide();
+                return;
+            }
             if (item.IsPlaceHolder) {
                 loading.hide();
                 showPlaybackInfoErrorMessage(self, 'PlaybackErrorPlaceHolder');
@@ -2371,8 +2382,6 @@ export class PlaybackManager {
                 playOptions.isFirstItem = true;
             }
 
-            const apiClient = ServerConnections.getApiClient(item.ServerId);
-
             // TODO: This should be the media type requested, not the original media type
             const mediaType = item.MediaType;
 
@@ -2380,11 +2389,19 @@ export class PlaybackManager {
                 loading.show();
             }
 
+            const finishFamilyPlaybackTiming = beginFamilySpeed('playback-start', apiClient);
+
             return runInterceptors(item, playOptions)
                 .catch(onInterceptorRejection)
                 .then(() => detectBitrate(apiClient, item, mediaType))
                 .then((bitrate) => {
-                    return playAfterBitrateDetect(bitrate, item, playOptions, onPlaybackStartedFn, prevSource)
+                    return playAfterBitrateDetect(bitrate, item, playOptions, function (succeeded) {
+                        if (succeeded) {
+                            finishFamilyPlaybackTiming();
+                            lastFamilyItem = item;
+                        }
+                        onPlaybackStartedFn();
+                    }, prevSource)
                         .catch(onPlaybackRejection);
                 })
                 .catch(() => {
@@ -2638,7 +2655,7 @@ export class PlaybackManager {
                     getPlayerData(player).isChangingStream = false;
                     return player.play(streamInfo).then(() => {
                         loading.hide();
-                        onPlaybackStartedFn();
+                        onPlaybackStartedFn(true);
                         onPlaybackStarted(player, playOptions, streamInfo);
                     }).catch((errorCode) => {
                         self.stop(player);
@@ -2759,11 +2776,11 @@ export class PlaybackManager {
 
                     return player.play(streamInfo).then(function () {
                         loading.hide();
-                        onPlaybackStartedFn();
+                        onPlaybackStartedFn(true);
                         onPlaybackStarted(player, playOptions, streamInfo, mediaSource);
                     }, function (err) {
                         // TODO: Improve this because it will report playback start on a failure
-                        onPlaybackStartedFn();
+                        onPlaybackStartedFn(false);
                         onPlaybackStarted(player, playOptions, streamInfo, mediaSource);
                         setTimeout(function () {
                             onPlaybackError.call(player, err, {

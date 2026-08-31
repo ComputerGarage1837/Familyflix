@@ -1,0 +1,87 @@
+.familyDialog {
+    box-sizing: border-box;
+    max-width: 52em;
+    padding: 1.5em;
+    width: 94vw;
+
+    h2 { margin-top: 0; }
+
+    label {
+        display: block;
+        margin: 1em 0;
+    }
+
+    select,
+    textarea {
+        box-sizing: border-box;
+        display: block;
+        font: inherit;
+        margin-top: 0.45em;
+        max-width: 100%;
+        padding: 0.65em;
+        width: 100%;
+    }
+}
+
+.familyDialogActions,
+.familyHomeTools,
+.familySettingsTools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6em;
+    margin: 1em 0;
+}
+
+.familyDialogActions [aria-disabled="true"] { opacity: 0.55; }
+
+.familyProblemsList {
+    display: grid;
+    gap: 0.7em;
+
+    button { text-align: start; }
+}
+
+.familyProblemTitle { font-size: 1.2em; }
+
+.familyReportContext {
+    border-top: 1px solid rgb(128 128 128 / 45%);
+    overflow-wrap: anywhere;
+    padding: 0.6em 0;
+}
+
+.familyIssueBadge,
+.familyIssueNotice,
+.familyGapNotice {
+    border-inline-start: 0.25em solid #f3b64b;
+    display: block;
+    font-size: 0.85em;
+    margin: 0.4em 0;
+    padding: 0.3em 0.5em;
+    text-align: start;
+    white-space: normal;
+}
+
+.familyIssueBadge[hidden],
+.familyIssueNotice[hidden],
+.familyGapNotice[hidden] { display: none; }
+
+.familyIssueUnavailable {
+    border-color: #aaa;
+    opacity: 0.8;
+}
+
+.familyNewProblems {
+    flex-basis: 100%;
+    margin: 0;
+}
+
+.familySpeedTable {
+    border-collapse: collapse;
+    width: 100%;
+
+    td,
+    th {
+        padding: 0.6em;
+        text-align: start;
+    }
+}

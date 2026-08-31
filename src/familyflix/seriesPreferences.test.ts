@@ -10,6 +10,10 @@ import {
 
 const connections = vi.hoisted(() => ({ currentApiClient: vi.fn() }));
 vi.mock('../lib/jellyfin-apiclient', () => ({ ServerConnections: connections }));
+vi.mock('./seriesIdentity', () => ({
+    cachedPreferenceSeriesId: (seriesId: string) => seriesId,
+    resolvePreferenceSeriesId: (seriesId: string) => Promise.resolve(seriesId)
+}));
 
 const SERVER = '20000000-0000-0000-0000-000000000001';
 const USER = '00000000-0000-0000-0000-000000000001';

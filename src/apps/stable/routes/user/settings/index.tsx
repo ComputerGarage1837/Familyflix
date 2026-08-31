@@ -1,5 +1,5 @@
 import type { UserDto } from '@jellyfin/sdk/lib/generated-client/models/user-dto';
-import React, { useEffect, useMemo, useState, type FC } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { appHost } from 'components/apphost';
@@ -16,9 +16,13 @@ import browser from 'scripts/browser';
 import Dashboard from 'utils/dashboard';
 import shell from 'scripts/shell';
 import keyboardNavigation from 'scripts/keyboardNavigation';
+import { captureFamilySession } from 'familyflix/familySession';
+import { openProblemsInbox } from 'familyflix/issueDialogs';
+import { issueCapabilities, loadAdminIssueSummary } from 'familyflix/issues';
+import { openFamilySpeedReport } from 'familyflix/speedReportDialog';
 
 const UserSettingsPage: FC = () => {
-    const { user: currentUser } = useApi();
+    const { user: currentUser, __legacyApiClient__: legacyClient } = useApi();
     const [ searchParams ] = useSearchParams();
     const {
         data: isQuickConnectEnabled,
@@ -26,6 +30,7 @@ const UserSettingsPage: FC = () => {
     } = useQuickConnectEnabled();
     const { data: users } = useUsers();
     const [ user, setUser ] = useState<UserDto>();
+    const [ problemCount, setProblemCount ] = useState<number>();
 
     const userId = useMemo(() => (
         searchParams.get('userId') || currentUser?.Id
@@ -33,6 +38,12 @@ const UserSettingsPage: FC = () => {
     const isLoggedInUser = useMemo(() => (
         userId && userId === currentUser?.Id
     ), [ currentUser, userId ]);
+    const showSpeedReport = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+        if (legacyClient) openFamilySpeedReport(legacyClient, event.currentTarget);
+    }, [ legacyClient ]);
+    const showProblemsInbox = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+        if (legacyClient) openProblemsInbox(legacyClient, event.currentTarget);
+    }, [ legacyClient ]);
 
     useEffect(() => {
         if (userId) {
@@ -40,6 +51,24 @@ const UserSettingsPage: FC = () => {
             else setUser(users?.find(({ Id }) => userId === Id));
         }
     }, [ currentUser, userId, users ]);
+
+    useEffect(() => {
+        setProblemCount(undefined);
+        if (!legacyClient || !isLoggedInUser) return;
+        const session = captureFamilySession(legacyClient);
+        if (!session) return;
+        let current = true;
+        void issueCapabilities(session).then(async capability => {
+            if (!current || !session.current() || !capability?.isAdmin) return;
+            try {
+                const summary = await loadAdminIssueSummary(session);
+                if (current && session.current()) setProblemCount(summary.openCount);
+            } catch { /* Fail closed: no administrator link without a confirmed response. */ }
+        });
+        return () => {
+            current = false;
+        };
+    }, [ isLoggedInUser, legacyClient ]);
 
     if (!userId || !user || isQuickConnectEnabledPending) {
         return (
@@ -73,6 +102,21 @@ const UserSettingsPage: FC = () => {
                         >
                             {user.Name}
                         </h2>
+
+                        {isLoggedInUser && legacyClient && (
+                            <div className='familySettingsTools'>
+                                <LinkButton
+                                    onClick={showSpeedReport}
+                                    className='listItem-border'
+                                >Speed report</LinkButton>
+                                {problemCount !== undefined && (
+                                    <LinkButton
+                                        onClick={showProblemsInbox}
+                                        className='listItem-border'
+                                    >{`Problems (${problemCount})`}</LinkButton>
+                                )}
+                            </div>
+                        )}
 
                         <LinkButton
                             href={`#/userprofile?userId=${userId}`}

@@ -128,6 +128,13 @@ export function openSeriesPreferences(item: BaseItemDto, client: ApiClient, orig
         setBusy(true);
         status.textContent = action === 'retry' ? 'Checking shared settings…' : 'Saving…';
         try {
+            // The first bounded read resolves a verified provider-stable preference
+            // identity before a quick Save can choose a DisplayPreferences document.
+            if (action !== 'retry') await initialLoad;
+            if (!activeSession()) {
+                close();
+                return;
+            }
             const operations = {
                 save: () => saveSeriesPreferences(item, patch, client),
                 reset: () => resetSeriesPreferences(item, client),
@@ -180,7 +187,8 @@ export function openSeriesPreferences(item: BaseItemDto, client: ApiClient, orig
         if (activeSession() && origin?.isConnected && (!document.activeElement || document.activeElement === document.body)) origin.focus();
     }, { once: true });
     void dialogHelper.open(dialog);
-    void loadSeriesPreferences(item, client, true, 1500).then(result => {
+    const initialLoad = loadSeriesPreferences(item, client, true, 1500);
+    void initialLoad.then(result => {
         if (closed || busy) return;
         if (!activeSession()) {
             close();

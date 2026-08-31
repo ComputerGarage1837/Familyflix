@@ -37,6 +37,8 @@ import { getItemBackdropImageUrl } from 'utils/jellyfin-apiclient/backdropImage'
 import { cachedSeriesPreferences, loadSeriesPreferences, rememberSeriesAudio } from 'familyflix/seriesPreferences';
 import { seriesIdForItem, seriesTrackChoices } from 'familyflix/seriesPreferencePolicy';
 import { openSeriesPreferences } from 'familyflix/seriesPreferencesDialog';
+import { bindFamilyItemTools } from 'familyflix/itemFamilyTools';
+import { beginFamilySpeed } from 'familyflix/speedReport';
 
 import 'elements/emby-itemscontainer/emby-itemscontainer';
 import 'elements/emby-checkbox/emby-checkbox';
@@ -1372,6 +1374,7 @@ function renderChildren(page, item) {
 
     let promise;
     const apiClient = ServerConnections.getApiClient(item.ServerId);
+    const finishSeasonTiming = item.Type === 'Season' ? beginFamilySpeed('season-ready', apiClient) : null;
     const userId = apiClient.getCurrentUserId();
 
     if (item.Type == 'Series') {
@@ -1493,6 +1496,7 @@ function renderChildren(page, item) {
             childrenItemsContainer.classList.remove('padded-right');
         }
         childrenItemsContainer.innerHTML = html;
+        finishSeasonTiming?.();
         imageLoader.lazyChildren(childrenItemsContainer);
         if (item.Type == 'BoxSet') {
             const collectionItemTypes = [{
@@ -1925,6 +1929,7 @@ export default function (view, params) {
     let detailGeneration = 0;
     let detailVisible = false;
     let closeSeriesSettings;
+    let closeFamilyItemTools;
 
     function getApiClient() {
         return params.serverId ? ServerConnections.getApiClient(params.serverId) : ApiClient;
@@ -1944,6 +1949,8 @@ export default function (view, params) {
             view.querySelector('.selectAudio').dataset.familyExplicit = 'false';
             view.querySelector('.selectSubtitles').dataset.familyExplicit = 'false';
             reloadFromItem(instance, page, pageParams, item, user);
+            closeFamilyItemTools?.();
+            closeFamilyItemTools = bindFamilyItemTools(view, item, apiClient);
             refreshSeriesSettings();
         }).catch((error) => {
             console.error('failed to get item or current user: ', error);
@@ -2185,6 +2192,8 @@ export default function (view, params) {
                 view.querySelector('.selectAudio').dataset.familyExplicit = 'false';
                 view.querySelector('.selectSubtitles').dataset.familyExplicit = 'false';
                 refreshSeriesSettings();
+                closeFamilyItemTools?.();
+                closeFamilyItemTools = bindFamilyItemTools(view, currentItem, getApiClient());
                 renderBackdrop(page, currentItem);
             } else {
                 reload(self, page, params);
@@ -2200,6 +2209,8 @@ export default function (view, params) {
             detailGeneration++;
             closeSeriesSettings?.();
             closeSeriesSettings = undefined;
+            closeFamilyItemTools?.();
+            closeFamilyItemTools = undefined;
             itemShortcuts.off(view.querySelector('.nameContainer'));
             Events.off(apiClient, 'message', onWebSocketMessage);
             Events.off(playbackManager, 'playerchange', onPlayerChange);

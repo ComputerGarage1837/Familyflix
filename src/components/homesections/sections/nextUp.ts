@@ -104,4 +104,5 @@ export function loadNextUp(
     itemsContainer.fetchData = getNextUpFetchFn(apiClient.serverId(), userSettings, options);
     itemsContainer.getItemsHtml = getNextUpItemsHtmlFn(userSettings.useEpisodeImagesInNextUpAndResume(), options);
     itemsContainer.parentContainer = elem;
+    (itemsContainer as SectionContainerElement & { familySpeedStage?: string }).familySpeedStage = 'deck-ready';
 }

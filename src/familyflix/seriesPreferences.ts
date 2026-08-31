@@ -8,6 +8,7 @@ import {
     sameSeriesValues, sameSeriesDocument,
     type SeriesCache, type SeriesDocument, type SeriesKey, type SeriesValues
 } from './seriesPreferencePolicy';
+import { cachedPreferenceSeriesId, resolvePreferenceSeriesId } from './seriesIdentity';
 
 const DOCUMENT_KEY = 'familyFlixSeriesPlaybackV1';
 const CACHE_PREFIX = 'familyflix-series-v1:';
@@ -100,10 +101,11 @@ export function captureSeriesPreferencesSession(client = ServerConnections.curre
     };
 }
 
-function contextFor(item: BaseItemDto, client = ServerConnections.currentApiClient()): Context | undefined {
+function contextFor(item: BaseItemDto, client = ServerConnections.currentApiClient(), resolvedId?: string): Context | undefined {
     const identity = observeAuthentication();
-    const seriesId = seriesIdForItem(item);
-    if (!identity || identity.client !== client || !seriesId) return undefined;
+    const actualId = seriesIdForItem(item);
+    if (!identity || identity.client !== client || !actualId) return undefined;
+    const seriesId = resolvedId || cachedPreferenceSeriesId(actualId, client);
     return {
         ...identity, seriesId, epoch: authEpoch,
         key: CACHE_PREFIX + identity.serverId + ':' + identity.userId + ':' + seriesId
@@ -379,10 +381,14 @@ export function cachedSeriesPreferences(item: BaseItemDto, client = ServerConnec
     }
 }
 
-export function loadSeriesPreferences(item: BaseItemDto, client = ServerConnections.currentApiClient(), force = false, timeout = TOTAL_TIMEOUT_MS): Promise<SeriesSyncResult> {
-    const context = contextFor(item, client);
-    return context ? loadContext(context, force, deadlineFrom(timeout)) :
-        Promise.resolve({ values: { ...SERIES_DEFAULTS }, status: 'no-series' });
+export async function loadSeriesPreferences(item: BaseItemDto, client = ServerConnections.currentApiClient(), force = false, timeout = TOTAL_TIMEOUT_MS): Promise<SeriesSyncResult> {
+    const deadline = deadlineFrom(timeout);
+    const initial = contextFor(item, client);
+    const actualId = seriesIdForItem(item);
+    if (!initial || !actualId || !client) return { values: { ...SERIES_DEFAULTS }, status: 'no-series' };
+    const resolved = await resolvePreferenceSeriesId(actualId, client, Math.max(0, deadline - Date.now()), force);
+    const context = contextFor(item, client, resolved);
+    return context ? loadContext(context, force, deadline) : { values: { ...SERIES_DEFAULTS }, status: 'no-series' };
 }
 
 async function savePatch(item: BaseItemDto, patch: Partial<SeriesValues>, client: ApiClient | undefined, reset: boolean): Promise<SeriesSyncResult> {
