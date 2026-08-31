@@ -8,6 +8,7 @@ import globalize from '../../lib/globalize';
 import Events from '../../utils/events.ts';
 import { playbackManager } from '../../components/playback/playbackmanager';
 import { setFilterStatus } from 'components/filterdialog/filterIndicator';
+import { cancelFamilyBrowse, updateFamilyBrowseHtml } from 'familyflix/browseRecovery';
 
 import '../../elements/emby-itemscontainer/emby-itemscontainer';
 
@@ -20,14 +21,21 @@ export default function (view, params, tabContent, options) {
             itemsContainer.classList.remove('vertical-list');
             itemsContainer.classList.add('vertical-wrap');
         }
-
-        itemsContainer.innerHTML = '';
     };
 
     function fetchData() {
-        isLoading = true;
-        loading.show();
-        return ApiClient.getItems(ApiClient.getCurrentUserId(), query);
+        return prepareFetchData()();
+    }
+
+    function prepareFetchData() {
+        const apiClient = ApiClient;
+        const userId = apiClient.getCurrentUserId();
+        const request = JSON.parse(JSON.stringify(query));
+        return () => {
+            isLoading = true;
+            loading.show();
+            return apiClient.getItems(userId, request);
+        };
     }
 
     function playAll() {
@@ -52,7 +60,7 @@ export default function (view, params, tabContent, options) {
         });
     }
 
-    const afterRefresh = (result) => {
+    const afterRefresh = (result, context) => {
         setFilterStatus(tabContent, query);
 
         function onNextPageClick() {
@@ -77,7 +85,7 @@ export default function (view, params, tabContent, options) {
             itemsContainer.refreshItems();
         }
 
-        window.scrollTo(0, 0);
+        const hadCardFocus = itemsContainer.contains(document.activeElement);
         this.alphaPicker?.updateControls(query);
         const pagingHtml = libraryBrowser.getQueryPagingHtml({
             startIndex: query.StartIndex,
@@ -91,15 +99,15 @@ export default function (view, params, tabContent, options) {
         });
 
         for (const elem of tabContent.querySelectorAll('.paging')) {
-            elem.innerHTML = pagingHtml;
+            updateFamilyBrowseHtml(elem, pagingHtml);
         }
 
         for (const elem of tabContent.querySelectorAll('.btnNextPage')) {
-            elem.addEventListener('click', onNextPageClick);
+            elem.onclick = onNextPageClick;
         }
 
         for (const elem of tabContent.querySelectorAll('.btnPreviousPage')) {
-            elem.addEventListener('click', onPreviousPageClick);
+            elem.onclick = onPreviousPageClick;
         }
 
         tabContent.querySelector('.btnPlayAll')?.classList.toggle('hide', result.TotalRecordCount < 1);
@@ -109,7 +117,7 @@ export default function (view, params, tabContent, options) {
         loading.hide();
 
         import('../../components/autoFocuser').then(({ default: autoFocuser }) => {
-            autoFocuser.autoFocus(tabContent);
+            if (context.isCurrent() && !hadCardFocus && (!document.activeElement || document.activeElement === document.body)) autoFocuser.autoFocus(tabContent);
         });
     };
 
@@ -183,6 +191,7 @@ export default function (view, params, tabContent, options) {
 
     const initPage = (tabElement) => {
         itemsContainer.fetchData = fetchData;
+        itemsContainer.prepareFetchData = prepareFetchData;
         itemsContainer.getItemsHtml = getItemsHtml;
         itemsContainer.afterRefresh = afterRefresh;
         const alphaPickerElement = tabElement.querySelector('.alphaPicker');
@@ -280,6 +289,10 @@ export default function (view, params, tabContent, options) {
     };
 
     let itemsContainer = tabContent.querySelector('.itemsContainer');
+    itemsContainer.afterRefreshSettled = () => {
+        isLoading = false;
+        loading.hide();
+    };
     const savedQueryKey = params.topParentId + '-' + options.mode;
     const savedViewKey = savedQueryKey + '-view';
     let query = {
@@ -337,6 +350,7 @@ export default function (view, params, tabContent, options) {
     };
 
     this.destroy = function () {
+        if (itemsContainer) cancelFamilyBrowse(itemsContainer);
         itemsContainer = null;
     };
 }

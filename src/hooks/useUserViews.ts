@@ -5,6 +5,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import type { AxiosRequestConfig } from 'axios';
 
 import { useApi } from './useApi';
+import { isFamilyLibrary } from 'familyflix/videoPolicy';
 
 const fetchUserViews = async (
     api: Api,
@@ -14,7 +15,8 @@ const fetchUserViews = async (
 ) => {
     const response = await getUserViewsApi(api)
         .getUserViews({ ...params, userId }, options);
-    return response.data;
+    // Settings must retain every library when saving order/exclusions, even ones hidden from browsing.
+    return params?.includeHidden ? response.data : { ...response.data, Items: response.data.Items?.filter(isFamilyLibrary) };
 };
 
 export const getUserViewsQuery = (

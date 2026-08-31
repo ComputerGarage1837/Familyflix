@@ -9,6 +9,8 @@ import dom from 'utils/dom';
 import globalize from 'lib/globalize';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 import { getBackdropShape, getPortraitShape, getSquareShape } from 'utils/card';
+import { isFamilyFavoriteSection } from 'familyflix/videoPolicy';
+import { captureFamilyBrowseSession } from 'familyflix/browseRecovery';
 
 import 'elements/emby-itemscontainer/emby-itemscontainer';
 import 'elements/emby-scroller/emby-scroller';
@@ -170,7 +172,7 @@ function getSections() {
         overlayPlayButton: true,
         overlayText: false,
         centerText: true
-    }];
+    }].filter(section => isFamilyFavoriteSection(section.types));
 }
 
 function getFetchDataFn(section) {
@@ -306,11 +308,23 @@ class FavoritesTab {
         this.view = view;
         this.params = params;
         this.apiClient = ServerConnections.currentApiClient();
+        this.sessionCurrent = captureFamilyBrowseSession();
+        this.resumeGeneration = 0;
         this.sectionsContainer = view.querySelector('.sections');
         createSections(this, this.sectionsContainer, this.apiClient);
     }
 
-    onResume(options) {
+    onResume(options = {}) {
+        this.paused = false;
+        const generation = ++this.resumeGeneration;
+        if (!this.sessionCurrent()) {
+            this.apiClient = ServerConnections.currentApiClient();
+            this.sessionCurrent = captureFamilyBrowseSession();
+            this.sectionsContainer.innerHTML = '';
+            if (!this.sessionCurrent()) return Promise.resolve();
+            createSections(this, this.sectionsContainer, this.apiClient);
+            options = { ...options, refresh: true };
+        }
         const promises = [];
         const view = this.view;
         const elems = this.sectionsContainer.querySelectorAll('.itemsContainer');
@@ -319,14 +333,17 @@ class FavoritesTab {
             promises.push(elem.resume(options));
         }
 
-        Promise.all(promises).then(function () {
-            if (options.autoFocus) {
+        return Promise.all(promises).then(() => {
+            if (!this.paused && generation === this.resumeGeneration && this.sessionCurrent() && view.isConnected
+                && options.autoFocus && (!document.activeElement || document.activeElement === document.body)) {
                 focusManager.autoFocus(view);
             }
         });
     }
 
     onPause() {
+        this.paused = true;
+        this.resumeGeneration++;
         if (this.sectionsContainer) {
             Array.from(this.sectionsContainer.querySelectorAll('.itemsContainer'))
                 .forEach(e => { e.pause(); });
@@ -334,6 +351,7 @@ class FavoritesTab {
     }
 
     destroy() {
+        this.onPause();
         this.view = null;
         this.params = null;
         this.apiClient = null;

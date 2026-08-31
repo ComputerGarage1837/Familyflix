@@ -137,7 +137,7 @@ export function loadRecentlyAdded(
     options: SectionOptions
 ) {
     elem.classList.remove('verticalSection');
-    const excludeViewTypes = ['playlists', 'livetv', 'boxsets', 'channels', 'folders'];
+    const excludeViewTypes = ['playlists', 'livetv', 'music', 'musicvideos', 'boxsets', 'channels', 'folders'];
     const userExcludeItems = user.Configuration?.LatestItemsExcludes ?? [];
 
     userViews.forEach(item => {

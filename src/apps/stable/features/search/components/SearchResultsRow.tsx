@@ -1,7 +1,8 @@
 import type { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
-import React, { type FC, useEffect, useRef } from 'react';
+import React, { type FC, useEffect, useMemo, useRef } from 'react';
 
 import cardBuilder from 'components/cardbuilder/cardBuilder';
+import { captureFamilyBrowseFocus, restoreFamilyBrowseFocus } from 'familyflix/browseRecovery';
 import type { CardOptions } from 'types/cardOptions';
 import 'elements/emby-scroller/emby-scroller';
 import 'elements/emby-itemscontainer/emby-itemscontainer';
@@ -24,21 +25,27 @@ interface SearchResultsRowProps {
 
 const SearchResultsRow: FC<SearchResultsRowProps> = ({ title, items = [], cardOptions = {} }) => {
     const element = useRef<HTMLDivElement>(null);
+    const scroller = useMemo(() => createScroller({ title }), [title]);
 
     useEffect(() => {
+        const container = element.current?.querySelector<HTMLElement>('.itemsContainer');
+        if (!container) return;
+        const focus = captureFamilyBrowseFocus(container);
         cardBuilder.buildCards(items, {
-            itemsContainer: element.current?.querySelector('.itemsContainer'),
+            itemsContainer: container,
             ...cardOptions
         });
+        restoreFamilyBrowseFocus(container, focus);
     }, [cardOptions, items]);
 
     return (
         <div
             ref={element}
             className='verticalSection'
-            dangerouslySetInnerHTML={createScroller({ title })}
+            dangerouslySetInnerHTML={scroller}
         />
     );
 };
 
-export default SearchResultsRow;
+export default React.memo(SearchResultsRow, (previous, next) => previous.title === next.title
+    && previous.items === next.items && JSON.stringify(previous.cardOptions) === JSON.stringify(next.cardOptions));

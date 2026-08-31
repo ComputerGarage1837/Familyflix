@@ -8,6 +8,7 @@ import * as userSettings from '../../scripts/settings/userSettings';
 import globalize from '../../lib/globalize';
 import Events from '../../utils/events.ts';
 import { setFilterStatus } from 'components/filterdialog/filterIndicator';
+import { cancelFamilyBrowse, runFamilyBrowse, updateFamilyBrowseHtml } from 'familyflix/browseRecovery';
 
 import '../../elements/emby-itemscontainer/emby-itemscontainer';
 
@@ -61,8 +62,6 @@ export default function (view, params, tabContent) {
             itemsContainer.classList.remove('vertical-list');
             itemsContainer.classList.add('vertical-wrap');
         }
-
-        itemsContainer.innerHTML = '';
     };
 
     const reloadItems = (page) => {
@@ -71,7 +70,17 @@ export default function (view, params, tabContent) {
         const query = getQuery();
         setFilterStatus(page, query);
 
-        ApiClient.getItems(ApiClient.getCurrentUserId(), query).then((result) => {
+        const apiClient = ApiClient;
+        const userId = apiClient.getCurrentUserId();
+        const request = JSON.parse(JSON.stringify(query));
+        const container = page.querySelector('.itemsContainer');
+        return runFamilyBrowse(container, () => {
+            isLoading = true;
+            loading.show();
+            return apiClient.getItems(userId, request);
+        }, (result, context) => {
+            // Focus can move while the server is responding. Capture it only when committing the cards.
+            const hadCardFocus = container.contains(document.activeElement);
             function onNextPageClick() {
                 if (isLoading) {
                     return;
@@ -94,7 +103,6 @@ export default function (view, params, tabContent) {
                 reloadItems(tabContent);
             }
 
-            window.scrollTo(0, 0);
             this.alphaPicker?.updateControls(query);
             let html;
             const pagingHtml = libraryBrowser.getQueryPagingHtml({
@@ -168,34 +176,41 @@ export default function (view, params, tabContent) {
             let elems = tabContent.querySelectorAll('.paging');
 
             for (const elem of elems) {
-                elem.innerHTML = pagingHtml;
+                updateFamilyBrowseHtml(elem, pagingHtml);
             }
 
             elems = tabContent.querySelectorAll('.btnNextPage');
             for (const elem of elems) {
-                elem.addEventListener('click', onNextPageClick);
+                elem.onclick = onNextPageClick;
             }
 
             elems = tabContent.querySelectorAll('.btnPreviousPage');
             for (const elem of elems) {
-                elem.addEventListener('click', onPreviousPageClick);
+                elem.onclick = onPreviousPageClick;
             }
 
             const itemsContainer = tabContent.querySelector('.itemsContainer');
-            itemsContainer.innerHTML = html;
+            updateFamilyBrowseHtml(itemsContainer, html);
             imageLoader.lazyChildren(itemsContainer);
             userSettings.saveQuerySettings(getSavedQueryKey(), query);
             loading.hide();
             isLoading = false;
 
             import('../../components/autoFocuser').then(({ default: autoFocuser }) => {
-                autoFocuser.autoFocus(page);
+                if (context.isCurrent() && !hadCardFocus && (!document.activeElement || document.activeElement === document.body)) autoFocuser.autoFocus(page);
             });
-        });
+        }, { settled: () => {
+            isLoading = false;
+            loading.hide();
+        } });
     };
 
     const data = {};
     let isLoading = false;
+    const browseContainer = tabContent.querySelector('.itemsContainer');
+    browseContainer.familyResumeBrowse = () => {
+        if (!isLoading) reloadItems(tabContent);
+    };
 
     this.showFilterMenu = function () {
         import('../../components/filterdialog/filterdialog').then(({ default: FilterDialog }) => {
@@ -300,6 +315,11 @@ export default function (view, params, tabContent) {
     this.renderTab = () => {
         reloadItems(tabContent);
         this.alphaPicker?.updateControls(getQuery());
+    };
+
+    this.destroy = () => {
+        cancelFamilyBrowse(browseContainer);
+        browseContainer.familyResumeBrowse = null;
     };
 }
 

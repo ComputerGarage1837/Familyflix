@@ -5,11 +5,11 @@ import { DEFAULT_SECTIONS, HomeSectionType } from 'types/homeSectionType';
 import Dashboard from 'utils/dashboard';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { queryClient } from 'utils/query/queryClient';
+import { isFamilyHomeSection } from 'familyflix/videoPolicy';
+import { captureFamilyBrowseFocus, restoreFamilyBrowseFocus } from 'familyflix/browseRecovery';
 
-import { loadRecordings } from './sections/activeRecordings';
 import { loadLibraryButtons } from './sections/libraryButtons';
 import { loadLibraryTiles } from './sections/libraryTiles';
-import { loadLiveTV } from './sections/liveTv';
 import { loadNextUp } from './sections/nextUp';
 import { loadRecentlyAdded } from './sections/recentlyAdded';
 import { loadResume } from './sections/resume';
@@ -34,7 +34,7 @@ function getAllSectionsToShow(userSettings, sectionCount) {
             section = getDefaultSection(0);
         }
 
-        sections.push(section);
+        if (isFamilyHomeSection(section)) sections.push(section);
     }
 
     // Ensure libraries are visible in TV layout
@@ -52,12 +52,17 @@ function getAllSectionsToShow(userSettings, sectionCount) {
     return sections;
 }
 
-export function loadSections(elem, apiClient, user, userSettings) {
+export function loadSections(elem, apiClient, user, userSettings, prepared = {}) {
     const userId = user.Id || apiClient.getCurrentUserId();
-    return queryClient
-        .fetchQuery(getUserViewsQuery(toApi(apiClient), userId))
-        .then(result => result.Items || [])
+    const isCurrent = prepared.isCurrent || (() => elem.isConnected);
+    const views = prepared.userViews ? Promise.resolve(prepared.userViews) : queryClient
+        .fetchQuery(getUserViewsQuery(toApi(apiClient), userId)).then(result => result.Items || []);
+    return views
         .then(function (userViews) {
+            if (!isCurrent()) throw new DOMException('Home changed', 'AbortError');
+            const previousFocus = captureFamilyBrowseFocus(elem);
+            // Do not destroy cached cards until the bootstrap read has successfully returned.
+            destroySections(elem);
             let html = '';
 
             if (userViews.length) {
@@ -70,6 +75,7 @@ export function loadSections(elem, apiClient, user, userSettings) {
 
                 elem.innerHTML = html;
                 elem.classList.add('homeSectionsContainer');
+                prepared.onCommitted?.();
 
                 const promises = [];
                 const sections = getAllSectionsToShow(userSettings, userSectionCount);
@@ -81,9 +87,12 @@ export function loadSections(elem, apiClient, user, userSettings) {
                 // Timeout for polyfilled CustomElements (webOS 1.2)
                     .then(() => new Promise((resolve) => setTimeout(resolve, 0)))
                     .then(() => {
+                        if (!isCurrent()) throw new DOMException('Home changed', 'AbortError');
                         return resume(elem, {
                             refresh: true
                         });
+                    }).then(() => {
+                        if (isCurrent()) restoreFamilyBrowseFocus(elem, previousFocus);
                     });
             } else {
                 let noLibDescription;
@@ -98,6 +107,7 @@ export function loadSections(elem, apiClient, user, userSettings) {
                 html += '<p>' + noLibDescription + '</p>';
                 html += '</div>';
                 elem.innerHTML = html;
+                prepared.onCommitted?.();
 
                 const createNowLink = elem.querySelector('#button-createLibrary');
                 if (createNowLink) {
@@ -146,24 +156,17 @@ function loadSection(page, apiClient, user, userSettings, userViews, allSections
     const options = { enableOverflow: enableScrollX() };
 
     switch (section) {
-        case HomeSectionType.ActiveRecordings:
-            loadRecordings(elem, true, apiClient, options);
-            break;
         case HomeSectionType.LatestMedia:
             loadRecentlyAdded(elem, apiClient, user, userViews, options);
             break;
         case HomeSectionType.LibraryButtons:
             loadLibraryButtons(elem, userViews);
             break;
-        case HomeSectionType.LiveTv:
-            return loadLiveTV(elem, apiClient, user, options);
         case HomeSectionType.NextUp:
             loadNextUp(elem, apiClient, userSettings, options);
             break;
         case HomeSectionType.Resume:
             return loadResume(elem, apiClient, 'HeaderContinueWatching', 'Video', userSettings, options);
-        case HomeSectionType.ResumeAudio:
-            return loadResume(elem, apiClient, 'HeaderContinueListening', 'Audio', userSettings, options);
         case HomeSectionType.ResumeBook:
             return loadResume(elem, apiClient, 'HeaderContinueReading', 'Book', userSettings, options);
         case HomeSectionType.SmallLibraryTiles:

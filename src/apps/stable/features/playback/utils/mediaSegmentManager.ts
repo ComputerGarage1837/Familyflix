@@ -10,6 +10,9 @@ import { currentSettings as userSettings } from 'scripts/settings/userSettings';
 import type { PlayerState } from 'types/playbackStopInfo';
 import type { Event } from 'utils/events';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
+import { cachedSeriesPreferences } from 'familyflix/seriesPreferences';
+import { SERIES_DEFAULTS } from 'familyflix/seriesPreferencePolicy';
+import { seriesPlaybackIdentity, sharedIntroAction } from 'familyflix/seriesPlaybackPolicy';
 
 import { getMediaSegmentAction } from './mediaSegmentSettings';
 import { findCurrentSegment } from './mediaSegments';
@@ -93,10 +96,11 @@ class MediaSegmentManager extends PlaybackSubscriber {
         if (!this.hasSegments || !serverId || !itemId) return;
 
         // Get the user settings for media segment actions
+        const seriesValues = state.NowPlayingItem ? cachedSeriesPreferences(seriesPlaybackIdentity(state.NowPlayingItem)) : SERIES_DEFAULTS;
         this.mediaSegmentTypeActions = Object.values(MediaSegmentType)
             .map(type => ({
                 type,
-                action: getMediaSegmentAction(userSettings, type)
+                action: sharedIntroAction(seriesValues, type, getMediaSegmentAction(userSettings, type)) as MediaSegmentAction
             }))
             .filter(({ action }) => !!action && action !== MediaSegmentAction.None)
             .reduce((acc, { type, action }) => {

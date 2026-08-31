@@ -121,7 +121,7 @@ const config = {
     ],
     output: {
         filename: pathData => (
-            pathData.chunk.name === 'serviceworker' ? '[name].js' : '[name].bundle.js'
+            pathData.chunk.name === 'serviceworker' ? '[name].js' : '[name].[contenthash].bundle.js'
         ),
         chunkFilename: '[name].[contenthash].chunk.js',
         assetModuleFilename: pathData => {

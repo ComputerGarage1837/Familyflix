@@ -34,6 +34,9 @@ import { getPortraitShape, getSquareShape } from 'utils/card';
 import Dashboard from 'utils/dashboard';
 import Events from 'utils/events';
 import { getItemBackdropImageUrl } from 'utils/jellyfin-apiclient/backdropImage';
+import { cachedSeriesPreferences, loadSeriesPreferences, rememberSeriesAudio } from 'familyflix/seriesPreferences';
+import { seriesIdForItem, seriesTrackChoices } from 'familyflix/seriesPreferencePolicy';
+import { openSeriesPreferences } from 'familyflix/seriesPreferencesDialog';
 
 import 'elements/emby-itemscontainer/emby-itemscontainer';
 import 'elements/emby-checkbox/emby-checkbox';
@@ -1919,6 +1922,10 @@ function onTrackSelectionsSubmit(e) {
 window.ItemDetailPage = new ItemDetailPage();
 
 export default function (view, params) {
+    let detailGeneration = 0;
+    let detailVisible = false;
+    let closeSeriesSettings;
+
     function getApiClient() {
         return params.serverId ? ServerConnections.getApiClient(params.serverId) : ApiClient;
     }
@@ -1927,10 +1934,17 @@ export default function (view, params) {
         loading.show();
 
         const apiClient = getApiClient();
+        const generation = ++detailGeneration;
+        const userId = apiClient.getCurrentUserId();
+        const token = apiClient.accessToken();
 
         Promise.all([getPromise(apiClient, pageParams), apiClient.getCurrentUser()]).then(([item, user]) => {
+            if (!detailVisible || generation !== detailGeneration || apiClient.getCurrentUserId() !== userId || apiClient.accessToken() !== token) return;
             currentItem = item;
+            view.querySelector('.selectAudio').dataset.familyExplicit = 'false';
+            view.querySelector('.selectSubtitles').dataset.familyExplicit = 'false';
             reloadFromItem(instance, page, pageParams, item, user);
+            refreshSeriesSettings();
         }).catch((error) => {
             console.error('failed to get item or current user: ', error);
         });
@@ -1955,8 +1969,36 @@ export default function (view, params) {
             startPositionTicks: startPosition,
             mediaSourceId: view.querySelector('.selectSource').value,
             audioStreamIndex: audioStreamIndex,
-            subtitleStreamIndex: view.querySelector('.selectSubtitles').value
+            subtitleStreamIndex: view.querySelector('.selectSubtitles').value,
+            familyExplicitAudio: view.querySelector('.selectAudio').dataset.familyExplicit === 'true',
+            familyExplicitSubtitle: view.querySelector('.selectSubtitles').dataset.familyExplicit === 'true'
         };
+    }
+
+    function applySeriesTrackDefaults() {
+        if (!currentItem || !detailVisible) return;
+        const source = self._currentPlaybackMediaSources && getSelectedMediaSource(view, self._currentPlaybackMediaSources);
+        const choices = seriesTrackChoices(cachedSeriesPreferences(currentItem, getApiClient()), source?.MediaStreams || []);
+        [['.selectAudio', choices.audio], ['.selectSubtitles', choices.subtitle]].forEach(([selector, index]) => {
+            const select = view.querySelector(selector);
+            if (select.dataset.familyExplicit !== 'true' && index != null && Array.from(select.options).some(option => option.value === String(index))) {
+                select.value = String(index);
+            }
+        });
+    }
+
+    function refreshSeriesSettings() {
+        const item = currentItem;
+        const client = getApiClient();
+        const available = !!seriesIdForItem(item);
+        view.querySelector('.btnFamilySeriesSettings').classList.toggle('hide', !available);
+        if (!available) return;
+        const userId = client.getCurrentUserId();
+        const token = client.accessToken();
+        applySeriesTrackDefaults();
+        void loadSeriesPreferences(item, client).then(() => {
+            if (currentItem === item && client.getCurrentUserId() === userId && client.accessToken() === token) applySeriesTrackDefaults();
+        });
     }
 
     function playItem(item, startPosition) {
@@ -2068,6 +2110,7 @@ export default function (view, params) {
 
     function onPlayerChange() {
         renderTrackSelections(view, self, currentItem);
+        applySeriesTrackDefaults();
         setTrailerButtonVisibility(view, currentItem);
     }
 
@@ -2084,7 +2127,6 @@ export default function (view, params) {
             if (userData) {
                 currentItem.UserData = userData;
                 reloadPlayButtons(view, currentItem);
-                autoFocus(view);
             }
         }
     }
@@ -2108,23 +2150,42 @@ export default function (view, params) {
             splitVersions(self, view, apiClient, params);
         });
         bindAll(view, '.btnMoreCommands', 'click', onMoreCommandsClick);
+        view.querySelector('.btnFamilySeriesSettings').addEventListener('click', function () {
+            if (!currentItem || !detailVisible) return;
+            closeSeriesSettings?.();
+            closeSeriesSettings = openSeriesPreferences(currentItem, getApiClient(), this);
+        });
+        view.querySelector('.selectAudio').addEventListener('change', function () {
+            this.dataset.familyExplicit = 'true';
+            const source = self._currentPlaybackMediaSources && getSelectedMediaSource(view, self._currentPlaybackMediaSources);
+            const track = source?.MediaStreams?.find(stream => stream.Type === 'Audio' && String(stream.Index) === this.value);
+            if (currentItem && track) rememberSeriesAudio(currentItem, track.Language);
+        });
+        view.querySelector('.selectSubtitles').addEventListener('change', function () {
+            this.dataset.familyExplicit = 'true';
+        });
         view.querySelector('.selectSource').addEventListener('change', function () {
             renderVideoSelections(view, self._currentPlaybackMediaSources);
             renderAudioSelections(view, self._currentPlaybackMediaSources);
             renderSubtitleSelections(view, self._currentPlaybackMediaSources);
+            view.querySelector('.selectAudio').dataset.familyExplicit = 'false';
+            view.querySelector('.selectSubtitles').dataset.familyExplicit = 'false';
+            applySeriesTrackDefaults();
             updateMiscInfo();
         });
         view.addEventListener('viewshow', function (e) {
             const page = this;
+            detailVisible = true;
 
             libraryMenu.setTransparentMenu(!layoutManager.mobile);
 
-            if (e.detail.isRestored) {
-                if (currentItem) {
-                    libraryMenu.setTitle('');
-                    renderTrackSelections(page, self, currentItem, true);
-                    renderBackdrop(page, currentItem);
-                }
+            if (e.detail.isRestored && currentItem) {
+                libraryMenu.setTitle('');
+                renderTrackSelections(page, self, currentItem, true);
+                view.querySelector('.selectAudio').dataset.familyExplicit = 'false';
+                view.querySelector('.selectSubtitles').dataset.familyExplicit = 'false';
+                refreshSeriesSettings();
+                renderBackdrop(page, currentItem);
             } else {
                 reload(self, page, params);
             }
@@ -2135,6 +2196,10 @@ export default function (view, params) {
             itemShortcuts.on(view.querySelector('.nameContainer'));
         });
         view.addEventListener('viewbeforehide', function () {
+            detailVisible = false;
+            detailGeneration++;
+            closeSeriesSettings?.();
+            closeSeriesSettings = undefined;
             itemShortcuts.off(view.querySelector('.nameContainer'));
             Events.off(apiClient, 'message', onWebSocketMessage);
             Events.off(playbackManager, 'playerchange', onPlayerChange);

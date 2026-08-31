@@ -6,6 +6,7 @@ import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { useQuery } from '@tanstack/react-query';
 
 import { useApi } from 'hooks/useApi';
+import { retryFamilyRead } from 'familyflix/videoPolicy';
 
 const fetchGetItems = async (
     api: Api,
@@ -19,8 +20,7 @@ const fetchGetItems = async (
             sortBy: [ItemSortBy.IsFavoriteOrLiked, ItemSortBy.Random],
             includeItemTypes: [
                 BaseItemKind.Movie,
-                BaseItemKind.Series,
-                BaseItemKind.MusicArtist
+                BaseItemKind.Series
             ],
             limit: 20,
             recursive: true,
@@ -39,9 +39,10 @@ export const useSearchSuggestions = (parentId?: string) => {
     const userId = user?.Id;
 
     return useQuery({
-        queryKey: ['SearchSuggestions', { parentId }],
+        queryKey: ['SearchSuggestions', api?.basePath, userId, { parentId }],
         queryFn: ({ signal }) =>
-            fetchGetItems(api!, userId!, parentId, { signal }),
+            fetchGetItems(api!, userId!, parentId, { signal, timeout: 12000 }),
+        retry: retryFamilyRead,
         refetchOnWindowFocus: false,
         enabled: !!api && !!userId
     });

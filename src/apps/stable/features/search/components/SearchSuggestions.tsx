@@ -13,7 +13,7 @@ type SearchSuggestionsProps = {
 };
 
 const SearchSuggestions: FunctionComponent<SearchSuggestionsProps> = ({ parentId }) => {
-    const { data: suggestions, isPending } = useSearchSuggestions(parentId || undefined);
+    const { data: suggestions, isPending, isError, refetch } = useSearchSuggestions(parentId || undefined);
 
     if (isPending) return <Loading />;
 
@@ -23,6 +23,9 @@ const SearchSuggestions: FunctionComponent<SearchSuggestionsProps> = ({ parentId
             style={{ textAlign: 'center' }}
         >
             <div>
+                {isError && <p role='status'>Suggestions are unavailable. You can still search.
+                    <button type='button' className='emby-button raised' onClick={() => { void refetch(); }}>Retry suggestions</button>
+                </p>}
                 <h2 className='sectionTitle padded-left padded-right'>
                     {globalize.translate('Suggestions')}
                 </h2>

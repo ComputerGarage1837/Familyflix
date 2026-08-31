@@ -9,7 +9,7 @@ import layoutManager from '../../components/layoutManager';
 import browser from '../../scripts/browser';
 import dom from '../../utils/dom';
 import loading from '../../components/loading/loading';
-import focusManager from '../../components/focusManager';
+import { bindFamilyBrowseVisibility, cancelFamilyBrowse, resumeFamilyBrowse, runFamilyBrowse, updateFamilyBrowseHtml } from 'familyflix/browseRecovery';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 import serverNotifications from '../../scripts/serverNotifications';
 import Events from '../../utils/events.ts';
@@ -282,6 +282,11 @@ ItemsContainerPrototype.createdCallback = function () {
 };
 
 ItemsContainerPrototype.attachedCallback = function () {
+    this.familyBrowseLifecycleCleanup?.();
+    this.familyBrowseLifecycleCleanup = bindFamilyBrowseVisibility(this, () => {
+        if (this.familyResumeBrowse) this.familyResumeBrowse();
+        else this.resume({ refresh: true });
+    });
     this.addEventListener('click', onClick);
 
     if (browser.touch) {
@@ -314,6 +319,10 @@ ItemsContainerPrototype.attachedCallback = function () {
 };
 
 ItemsContainerPrototype.detachedCallback = function () {
+    this.familyBrowseLifecycleCleanup?.();
+    this.familyBrowseLifecycleCleanup = null;
+    cancelFamilyBrowse(this);
+    clearTimeout(this.refreshTimeout);
     clearRefreshInterval(this);
 
     this.enableMultiSelect(false);
@@ -333,17 +342,23 @@ ItemsContainerPrototype.detachedCallback = function () {
     removeNotificationEvent(this, 'playbackstop', playbackManager);
 
     this.fetchData = null;
+    this.prepareFetchData = null;
+    this.familyResumeBrowse = null;
     this.getItemsHtml = null;
     this.parentContainer = null;
 };
 
 ItemsContainerPrototype.pause = function () {
+    this.needsRefresh ||= !!this.fetchData;
+    cancelFamilyBrowse(this);
+    clearTimeout(this.refreshTimeout);
     clearRefreshInterval(this, true);
     this.paused = true;
 };
 
 ItemsContainerPrototype.resume = function (options) {
     this.paused = false;
+    resumeFamilyBrowse(this);
 
     const refreshIntervalEndTime = this.refreshIntervalEndTime;
     if (refreshIntervalEndTime) {
@@ -375,7 +390,15 @@ ItemsContainerPrototype.refreshItems = function () {
 
     this.needsRefresh = false;
 
-    return this.fetchData().then(onDataFetched.bind(this));
+    // A preparation function freezes mutable paging/filter state once for both automatic and explicit Retry.
+    const read = this.prepareFetchData ? this.prepareFetchData() : this.fetchData.bind(this);
+    return runFamilyBrowse(this, read, (result, context) => {
+        if (this.fetchData && !this.paused) onDataFetched.call(this, result, context);
+    }, {
+        isCurrent: () => !!this.fetchData && !this.paused,
+        errorParent: this.parentContainer,
+        settled: () => this.afterRefreshSettled?.()
+    });
 };
 
 ItemsContainerPrototype.notifyRefreshNeeded = function (isInForeground) {
@@ -420,7 +443,7 @@ function resetRefreshInterval(itemsContainer, intervalMs) {
     }
 }
 
-function onDataFetched(result) {
+function onDataFetched(result, context) {
     const items = result.Items || result;
 
     const parentContainer = this.parentContainer;
@@ -432,44 +455,16 @@ function onDataFetched(result) {
         }
     }
 
-    const activeElement = document.activeElement;
-    let focusId;
-    let hasActiveElement;
-
-    if (this.contains(activeElement)) {
-        hasActiveElement = true;
-        focusId = activeElement.getAttribute('data-id');
-    }
-
-    this.innerHTML = this.getItemsHtml(items);
+    const html = this.getItemsHtml(items);
+    updateFamilyBrowseHtml(this, html);
 
     imageLoader.lazyChildren(this);
-
-    if (hasActiveElement) {
-        setFocus(this, focusId);
-    }
 
     resetRefreshInterval(this);
 
     if (this.afterRefresh) {
-        this.afterRefresh(result);
+        this.afterRefresh(result, context);
     }
-}
-
-function setFocus(itemsContainer, focusId) {
-    if (focusId) {
-        const newElement = itemsContainer.querySelector('[data-id="' + focusId + '"]');
-        if (newElement) {
-            try {
-                focusManager.focus(newElement);
-                return;
-            } catch (err) {
-                console.error(err);
-            }
-        }
-    }
-
-    focusManager.autoFocus(itemsContainer);
 }
 
 document.registerElement('emby-itemscontainer', {

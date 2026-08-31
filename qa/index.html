@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Family Flix isolated browser checks</title>
+<style>
+html { color-scheme:dark; font:17px/1.45 system-ui,sans-serif; background:#121720; color:#f7f8fc; }
+body { margin:2rem; } h1 { font-size:1.6rem; } .hide { display:none!important; }
+button,select { padding:.7rem .9rem; border-radius:.35rem; border:1px solid #657189; background:#263750; color:inherit; font:inherit; }
+button { cursor:pointer; } button:focus-visible,select:focus-visible { outline:3px solid #7dd9ff; outline-offset:3px; }
+.toolbar,.cards { display:flex; gap:.8rem; flex-wrap:wrap; margin:1rem 0; }
+.cards button { width:11rem; height:8rem; background:linear-gradient(150deg,#37485d,#163c59); }
+dialog { background:#222936; color:#f7f8fc; border:1px solid #64748b; }
+dialog::backdrop { background:#070b14c9; } .familySeriesDialog { margin:auto; }
+#status { color:#bee3ff; } aside { max-width:58rem; opacity:.8; }
+</style></head><body>
+<h1>Family Flix — isolated browser checks</h1>
+<aside>Production preference form and recovery logic, with a native-dialog test adapter and synthetic server responses. No connection to the real Jellyfin server. This is not a playback or Shield-device test.</aside>
+<div class="toolbar"><button id="profile">Profile: Test Alex</button><button id="connection">Connection: Online</button><button id="settings">Show playback settings</button><button id="refresh">Refresh library</button></div>
+<p id="status" role="status">Ready</p>
+<section aria-label="Synthetic library"><div id="cards" class="cards"><button data-id="one">Example Show One</button><button data-id="two">Example Show Two</button><button data-id="three">Example Show Three</button></div></section>
+<script type="module" src="/main.ts"></script></body></html>
