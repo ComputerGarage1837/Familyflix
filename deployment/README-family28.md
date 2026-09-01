@@ -11,17 +11,19 @@ These scripts are prepared for operator review, not an instruction to deploy. Do
 - Rollback directory: `C:\ProgramData\Jellyfin\Server\data\FamilyFlixWebBackups\web-family28-<UTC-timestamp>-<unique-suffix>`.
 - No media/library scan, settings API, database operation, plugin write, service restart, or asset deletion is performed.
 
+The reviewed Dashboard-only package `family28-package-20260901-033955-143-ced3d3cb` was completed against the recorded PID 7656 baseline before Jellyfin later restarted. Its manifest is immutable and remains the only approved package. The old preparation PID is no longer live, so do not repeat the preparation/build steps or select the earlier package manually; a new package would require a fresh baseline review and a new set of pins.
+
 Only `index.html` is intentionally replaced. `config.json`, `manifest.json`, and `robots.txt` are always retained byte-for-byte; these three and `index.html` are the only four root-file exclusions from the built asset-copy set. All other existing web files, including old bundles and v4 watchlist additions, are preserved and verified. Missing new assets are copied with `FileMode.CreateNew`; a pre-existing destination is never overwritten even if it appears between verification and copying.
 
-The final local collision preflight found 7 new and 2,304 identical assets, with only the four excluded root files different. This is contextual, not an installer allowlist: the frozen manifest recalculates the exact file set and counts. All colliding asset hashes must match before any copying is permitted.
+The final Dashboard-only collision preflight found 6 new and 2,305 identical assets, with only the four excluded root files different. This is contextual, not an installer allowlist: the frozen manifest recalculates the exact file set and counts. All colliding asset hashes must match before any copying is permitted.
 
 ## Reviewed live fingerprints
 
 | File | SHA-256 |
 | --- | --- |
 | `index.html` before .28 | `247B2344F7EA604BF63F01389D3A8259E6339CB0C3EEB33C472F9B9603B02399` |
-| production .28 `dist\index.html` | `74258FBC95ABEDA73DAAD2BCE4EFD1B0EC9648CB1A11ACBDC35B13B564A9782E` |
-| staged .28 `index.html` with preserved v4 tags | `1A49BD2E30D4AA6CBB4DEFEBC4F64A454BC55A1AF58126A69BBEBCA1CA420518` |
+| production .28 `dist\index.html` | `555B76840BA542F4EBE5B90EE51307CD02172010FE4844DCBF415885B3EE1E3A` |
+| staged .28 `index.html` with preserved v4 tags | `B8499B8E2252AEB66A52CB25B671ED93F437FD442F4F668C1F7E194E95B713A7` |
 | `config.json` | `4C68B3678DA63EED7BD3E0E324D46D64B7040D10E491742FD807BC135CAD982C` |
 | `manifest.json` | `2671DD8F189C9190A71F9D32EDD721C07DFF4609237404C03E8F7741A16A376D` |
 | `robots.txt` | `331EA9090DB0C9F6F597BD9840FD5B171830F6E0B3BA1CB24DFA91F0C95AEDC1` |
@@ -58,7 +60,7 @@ The installer returns read-only success for an already-installed matching packag
 
 ### One-prompt combined activation
 
-`C:\Users\Plex Server\Documents\Codex\2026-08-25\computer-plugin-computer-use-openai-bundled\work\activation-staging\activate-familyflix-v1004-family28.ps1` (SHA-256 `C9BB8103588F12043DDE06B37C32A3825B03779871857D8076B82A715DF46660`) is the exact combined wrapper for this frozen package. Its `-VerifyOnly` mode validates every pinned child script and the web manifest without requesting elevation or writing anything. A normal PowerShell 7 run requests one UAC elevation, performs the plugin activation first, and invokes the Family .28 installer only after the plugin result proves version/hash, administrator/non-administrator permission checks, and the sanitized Health contract.
+`C:\Users\Plex Server\Documents\Codex\2026-08-25\computer-plugin-computer-use-openai-bundled\work\activation-staging\activate-familyflix-v1004-family28.ps1` (SHA-256 `71A62E01BFC6B42C384E3EE8EF21B5DB8D067115D192A16E155E51AE99DAF8AC`) is the exact combined wrapper for the immutable package `family28-package-20260901-033955-143-ced3d3cb` (manifest SHA-256 `856E7B3B0A566168B5051F831883795DC1C8E8C347FEC7E1195BBBBFE9F8DAFB`). Its `-VerifyOnly` mode validates every pinned child script and the web manifest without requesting elevation or writing anything. A normal PowerShell 7 run requests one UAC elevation, performs the plugin activation first, and invokes the Family .28 installer only after the plugin result proves version/hash, administrator/non-administrator permission checks, and the sanitized Health contract. The activation preflight explicitly flattens Jellyfin's session/plugin arrays, compares plugin IDs as GUIDs, and refuses to proceed while any active or paused playback exists. The failed first activation record is retained; the reviewed retry writes to a separate result path and never overwrites it.
 
 The combined wrapper never performs a cross-component rollback. A plugin failure uses only the activation script's plugin rollback. A later web failure leaves the successfully verified plugin active and records the web installer's own result/backup paths for operator-reviewed web rollback. One unique combined JSON result is written for success or failure.
 

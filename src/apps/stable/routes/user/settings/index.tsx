@@ -17,7 +17,6 @@ import Dashboard from 'utils/dashboard';
 import shell from 'scripts/shell';
 import keyboardNavigation from 'scripts/keyboardNavigation';
 import { captureFamilySession } from 'familyflix/familySession';
-import { healthCapabilities } from 'familyflix/health';
 import { openProblemsInbox } from 'familyflix/issueDialogs';
 import { issueCapabilities, loadAdminIssueSummary } from 'familyflix/issues';
 import { openFamilySpeedReport } from 'familyflix/speedReportDialog';
@@ -32,7 +31,6 @@ const UserSettingsPage: FC = () => {
     const { data: users } = useUsers();
     const [ user, setUser ] = useState<UserDto>();
     const [ problemCount, setProblemCount ] = useState<number>();
-    const [ healthCentreAvailable, setHealthCentreAvailable ] = useState(false);
 
     const userId = useMemo(() => (
         searchParams.get('userId') || currentUser?.Id
@@ -66,20 +64,6 @@ const UserSettingsPage: FC = () => {
                 const summary = await loadAdminIssueSummary(session);
                 if (current && session.current()) setProblemCount(summary.openCount);
             } catch { /* Fail closed: no administrator link without a confirmed response. */ }
-        });
-        return () => {
-            current = false;
-        };
-    }, [ isLoggedInUser, legacyClient ]);
-
-    useEffect(() => {
-        setHealthCentreAvailable(false);
-        if (!legacyClient || !isLoggedInUser) return;
-        const session = captureFamilySession(legacyClient);
-        if (!session) return;
-        let current = true;
-        void healthCapabilities(session).then(capability => {
-            if (current && session.current()) setHealthCentreAvailable(capability?.isAdmin === true);
         });
         return () => {
             current = false;
@@ -130,12 +114,6 @@ const UserSettingsPage: FC = () => {
                                         onClick={showProblemsInbox}
                                         className='listItem-border'
                                     >{`Problems (${problemCount})`}</LinkButton>
-                                )}
-                                {healthCentreAvailable && (
-                                    <LinkButton
-                                        href='#/dashboard/health'
-                                        className='listItem-border'
-                                    >Health Centre</LinkButton>
                                 )}
                             </div>
                         )}
