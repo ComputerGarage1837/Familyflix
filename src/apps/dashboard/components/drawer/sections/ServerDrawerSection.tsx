@@ -1,4 +1,5 @@
 import Dashboard from '@mui/icons-material/Dashboard';
+import HealthAndSafety from '@mui/icons-material/HealthAndSafety';
 import ExpandLess from '@mui/icons-material/ExpandLess';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import LibraryAdd from '@mui/icons-material/LibraryAdd';
@@ -13,10 +14,13 @@ import ListItemButton from '@mui/material/ListItemButton/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import ListSubheader from '@mui/material/ListSubheader';
-import React, { type MouseEvent, useCallback, useState } from 'react';
+import React, { type MouseEvent, useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import ListItemLink from 'components/ListItemLink';
+import { captureFamilySession } from 'familyflix/familySession';
+import { healthCapabilities } from 'familyflix/health';
+import { useApi } from 'hooks/useApi';
 import globalize from 'lib/globalize';
 
 const LIBRARY_PATHS = [
@@ -35,9 +39,25 @@ const PLAYBACK_PATHS = [
 
 const ServerDrawerSection = () => {
     const location = useLocation();
+    const { __legacyApiClient__: legacyClient } = useApi();
 
     const [ isLibrarySectionOpen, setIsLibrarySectionOpen ] = useState(LIBRARY_PATHS.includes(location.pathname));
     const [ isPlaybackSectionOpen, setIsPlaybackSectionOpen ] = useState(PLAYBACK_PATHS.includes(location.pathname));
+    const [ isHealthCentreAvailable, setIsHealthCentreAvailable ] = useState(false);
+
+    useEffect(() => {
+        setIsHealthCentreAvailable(false);
+        if (!legacyClient) return;
+        const session = captureFamilySession(legacyClient);
+        if (!session) return;
+        let current = true;
+        void healthCapabilities(session).then(capability => {
+            if (current && session.current()) setIsHealthCentreAvailable(capability?.isAdmin === true);
+        });
+        return () => {
+            current = false;
+        };
+    }, [ legacyClient ]);
 
     const onLibrarySectionClick = useCallback((e: MouseEvent) => {
         e.preventDefault();
@@ -68,6 +88,16 @@ const ServerDrawerSection = () => {
                     <ListItemText primary={globalize.translate('TabDashboard')} />
                 </ListItemLink>
             </ListItem>
+            {isHealthCentreAvailable && (
+                <ListItem disablePadding>
+                    <ListItemLink to='/dashboard/health'>
+                        <ListItemIcon>
+                            <HealthAndSafety />
+                        </ListItemIcon>
+                        <ListItemText primary='Health Centre' />
+                    </ListItemLink>
+                </ListItem>
+            )}
             <ListItem disablePadding>
                 <ListItemLink to='/dashboard/settings'>
                     <ListItemIcon>
