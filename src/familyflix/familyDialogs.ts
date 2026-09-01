@@ -1,14 +1,35 @@
 import dialogHelper from 'components/dialogHelper/dialogHelper';
+import 'elements/emby-select/emby-select';
 import { onFamilySessionChange, type FamilySession } from './familySession';
 import './familyTools.scss';
 
 export function familyButton(label: string, click: () => void, className = ''): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'emby-button button-raised ' + className;
+    button.className = 'emby-button raised show-focus ' + className;
     button.textContent = label;
     button.addEventListener('click', click);
     return button;
+}
+
+export function setFamilyButtonDisabled(button: HTMLButtonElement, disabled: boolean): void {
+    button.disabled = disabled;
+    button.setAttribute('aria-disabled', String(disabled));
+}
+
+export function familySelect(label: string): { container: HTMLDivElement; select: HTMLSelectElement } {
+    const container = document.createElement('div');
+    container.className = 'selectContainer';
+    container.innerHTML = '<select is="emby-select"></select>';
+    const select = container.querySelector('select')!;
+    select.setAttribute('label', label);
+    return { container, select };
+}
+
+export function familyTextarea(): HTMLTextAreaElement {
+    const textarea = document.createElement('textarea');
+    textarea.className = 'emby-textarea';
+    return textarea;
 }
 
 export function familyParagraph(text: string, className = ''): HTMLParagraphElement {

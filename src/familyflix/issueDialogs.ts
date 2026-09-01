@@ -3,7 +3,9 @@ import type { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
 import type { ApiClient } from 'jellyfin-apiclient';
 import { appHost } from 'components/apphost';
 import { captureFamilySession, familyOperationId, FamilyRequestError, type FamilySession } from './familySession';
-import { familyButton, familyDialog, familyParagraph } from './familyDialogs';
+import {
+    familyButton, familyDialog, familyParagraph, familySelect, familyTextarea, setFamilyButtonDisabled
+} from './familyDialogs';
 import { ISSUE_LABELS, type IssueCase, type IssueCategory, type IssueStatus } from './issuePolicy';
 import {
     acknowledgeIssueInbox, createIssueReport, issueCapabilities, loadAdminIssueCases, sendIssueReport, updateIssueStatus,
@@ -15,39 +17,41 @@ function reportTime(milliseconds: number): string {
     return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString();
 }
 
+function restorePagerFocus(previous: HTMLButtonElement, next: HTMLButtonElement, reload: HTMLButtonElement,
+    previousHadFocus: boolean, nextHadFocus: boolean): void {
+    if (previousHadFocus && previous.disabled) (next.disabled ? reload : next).focus();
+    if (nextHadFocus && next.disabled) (previous.disabled ? reload : previous).focus();
+}
+
 export function openReportProblem(item: BaseItemDto, client: ApiClient, origin?: HTMLElement, context: Partial<ReportDraft> = {}): () => void {
     const session = captureFamilySession(client);
     if (!session || !['Movie', 'Episode'].includes(item.Type || '')) return () => undefined;
     const panel = familyDialog('Report a problem', session, origin);
     panel.content.append(familyParagraph(item.Name || 'This title', 'familyProblemTitle'));
     panel.content.append(familyParagraph('Reports help an administrator investigate; they do not verify that the file is defective. Only an administrator can see your name, note and device context.'));
-    const categoryLabel = document.createElement('label');
-    categoryLabel.textContent = 'Problem category';
-    const category = document.createElement('select');
-    category.className = 'emby-select';
+    const categoryControl = familySelect('Problem category');
+    const category = categoryControl.select;
     Object.entries(ISSUE_LABELS).forEach(([value, label]) => category.add(new Option(label, value)));
-    categoryLabel.append(category);
     const noteLabel = document.createElement('label');
     noteLabel.textContent = 'Optional note (up to 1,000 characters)';
-    const note = document.createElement('textarea');
-    note.className = 'emby-textarea';
+    const note = familyTextarea();
     note.maxLength = 1000;
     note.rows = 4;
     noteLabel.append(note);
-    panel.content.append(categoryLabel, noteLabel);
+    panel.content.append(categoryControl.container, noteLabel);
     let ready = false;
     let busy = false;
     let sent = false;
     let draft: ReportDraft | undefined;
     const send = familyButton('Send report', () => { void submit(); }, 'familyReportSend');
-    send.setAttribute('aria-disabled', 'true');
+    setFamilyButtonDisabled(send, true);
     const cancel = familyButton('Cancel', panel.close);
     panel.actions.append(send, cancel);
     panel.status.textContent = 'Checking whether reporting is available…';
     async function submit() {
         if (!ready || busy || sent || !panel.current()) return;
         busy = true;
-        send.setAttribute('aria-disabled', 'true');
+        setFamilyButtonDisabled(send, true);
         // The draft and operation id are immutable after an uncertain submission.
         draft ||= createIssueReport(item, category.value as IssueCategory, note.value, {
             ...context, deviceName: appHost.deviceName(), appVersion: appHost.appVersion()
@@ -69,14 +73,14 @@ export function openReportProblem(item: BaseItemDto, client: ApiClient, origin?:
                 'Not confirmed sent. Keep this form open and retry; the same report will not be duplicated.' :
                 'Not sent. Reporting is unavailable for this signed-in session. Sign in again before retrying.';
             send.textContent = 'Retry sending';
-            send.setAttribute('aria-disabled', String(!ready));
+            setFamilyButtonDisabled(send, !ready);
         }
     }
     panel.open();
     void issueCapabilities(session).then(capability => {
         if (!panel.current()) return;
         ready = !!capability;
-        send.setAttribute('aria-disabled', String(!ready));
+        setFamilyButtonDisabled(send, !ready);
         panel.status.textContent = ready ? 'Nothing is sent until you choose Send report.' : 'Reporting is unavailable. No report has been sent.';
     });
     return panel.close;
@@ -106,7 +110,7 @@ function openIssueCase(initial: IssueCase, session: FamilySession, origin: HTMLE
         panel.content.append(familyParagraph(`First reported ${reportTime(item.createdAtEpochMillis)} · Updated ${reportTime(item.updatedAtEpochMillis)}`));
         const pathLabel = document.createElement('label');
         pathLabel.textContent = 'File path (administrator only)';
-        const path = document.createElement('textarea');
+        const path = familyTextarea();
         path.readOnly = true;
         path.rows = 2;
         path.value = item.filePath || 'Path unavailable; the item may have moved or been removed.';
@@ -138,7 +142,7 @@ function openIssueCase(initial: IssueCase, session: FamilySession, origin: HTMLE
     async function perform(pending: StatusOperation) {
         if (busy || !panel.current()) return;
         busy = true;
-        [...statusButtons, retry].forEach(button => button.setAttribute('aria-disabled', 'true'));
+        [...statusButtons, retry].forEach(button => setFamilyButtonDisabled(button, true));
         panel.status.textContent = 'Updating report status…';
         try {
             const result = await updateIssueStatus(session, item.caseId, pending);
@@ -161,8 +165,8 @@ function openIssueCase(initial: IssueCase, session: FamilySession, origin: HTMLE
             panel.status.textContent = 'Status change not confirmed. Retry uses the same operation; no report is deleted.';
         } finally {
             busy = false;
-            statusButtons.forEach(button => button.setAttribute('aria-disabled', String(!!operation)));
-            retry.setAttribute('aria-disabled', 'false');
+            statusButtons.forEach(button => setFamilyButtonDisabled(button, !!operation));
+            setFamilyButtonDisabled(retry, false);
         }
     }
     paint();
@@ -175,15 +179,13 @@ export function openProblemsInbox(client: ApiClient, origin?: HTMLElement): () =
     if (!session) return () => undefined;
     let closeCase: (() => void) | undefined;
     const panel = familyDialog('Problems inbox', session, origin, () => closeCase?.());
-    const filterLabel = document.createElement('label');
-    filterLabel.textContent = 'Cases to show';
-    const filter = document.createElement('select');
+    const filterControl = familySelect('Cases to show');
+    const filter = filterControl.select;
     filter.add(new Option('Open reports', 'active'));
     filter.add(new Option('All reports, including resolved and dismissed', 'all'));
-    filterLabel.append(filter);
     const list = document.createElement('div');
     list.className = 'familyProblemsList';
-    panel.content.append(filterLabel, list);
+    panel.content.append(filterControl.container, list);
     let offset = 0;
     let total = 0;
     let generation = 0;
@@ -191,6 +193,8 @@ export function openProblemsInbox(client: ApiClient, origin?: HTMLElement): () =
     const previous = familyButton('Previous page', () => { if (offset && !busy) { offset = Math.max(0, offset - 100); void refresh(true); } });
     const next = familyButton('Next page', () => { if (offset + 100 < total && !busy) { offset += 100; void refresh(true); } });
     const reload = familyButton('Refresh inbox', () => { if (!busy) void refresh(true); });
+    setFamilyButtonDisabled(previous, true);
+    setFamilyButtonDisabled(next, true);
     panel.actions.append(previous, next, reload, familyButton('Close', panel.close));
     filter.addEventListener('change', () => { offset = 0; void refresh(true); });
     async function refresh(acknowledge: boolean) {
@@ -219,8 +223,11 @@ export function openProblemsInbox(client: ApiClient, origin?: HTMLElement): () =
             if (focused && document.activeElement === document.body) {
                 Array.from(list.querySelectorAll<HTMLButtonElement>('button')).find(button => button.dataset.caseId === focused)?.focus();
             }
-            previous.setAttribute('aria-disabled', String(offset === 0));
-            next.setAttribute('aria-disabled', String(offset + 100 >= total));
+            const previousHadFocus = document.activeElement === previous;
+            const nextHadFocus = document.activeElement === next;
+            setFamilyButtonDisabled(previous, offset === 0);
+            setFamilyButtonDisabled(next, offset + 100 >= total);
+            restorePagerFocus(previous, next, reload, previousHadFocus, nextHadFocus);
             panel.status.textContent = `${total} case(s). Reports are unverified until investigated. Historical reports do not imply an item is still playable.`;
             // A badge poll never acknowledges. Only a loaded, foreground inbox the
             // user opened/refreshed can acknowledge the revision actually rendered.

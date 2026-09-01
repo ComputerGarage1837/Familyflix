@@ -48,10 +48,10 @@ export function openSeriesPreferences(item: BaseItemDto, client: ApiClient, orig
         + 'Audio output, streaming quality and subtitle timing stay on each device.</p>'
         + '<form><div class="familySeriesFields"></div>'
         + '<p class="familySeriesStatus" role="status" aria-live="polite"></p>'
-        + '<div class="familySeriesActions"><button type="submit" class="emby-button button-raised familySeriesSave">Save</button>'
-        + '<button type="button" class="emby-button button-raised familySeriesReset">Reset this show</button>'
-        + '<button type="button" class="emby-button button-raised familySeriesRetry hide">Retry sync</button>'
-        + '<button type="button" class="emby-button button-raised familySeriesClose">Close</button></div></form>';
+        + '<div class="familySeriesActions"><button type="submit" class="emby-button raised show-focus familySeriesSave">Save</button>'
+        + '<button type="button" class="emby-button raised show-focus familySeriesReset">Reset this show</button>'
+        + '<button type="button" class="emby-button raised show-focus familySeriesRetry hide">Retry sync</button>'
+        + '<button type="button" class="emby-button raised show-focus familySeriesClose">Close</button></div></form>';
     dialog.querySelector('.familySeriesTitle')!.textContent = `Show settings · ${item.SeriesName || item.Name || 'This show'}`;
     const controls = new Map<SeriesKey, HTMLSelectElement>();
     const changed = new Set<SeriesKey>();

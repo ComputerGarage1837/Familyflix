@@ -180,7 +180,7 @@ export function showFamilyBrowseError(container: HTMLElement, retry: () => void,
         text.textContent = 'This view could not be loaded. Previously loaded titles are still available.';
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'emby-button button-raised';
+        button.className = 'emby-button raised show-focus';
         button.textContent = 'Retry loading titles';
         notice.append(text, button);
         container.before(notice);
