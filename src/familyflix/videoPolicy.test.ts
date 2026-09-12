@@ -17,10 +17,11 @@ describe('Family Flix video-first presentation policy', () => {
         expect(familySearchTypes('other')).not.toContain(BaseItemKind.Audio);
         expect(familySearchTypes('other')).not.toContain(BaseItemKind.LiveTvChannel);
     });
-    it('excludes unused music and Live TV libraries without removing video audio or spoken books', () => {
-        for (const CollectionType of ['music', 'musicvideos', 'livetv'] as const) {
+    it('excludes unused music libraries while retaining Live TV when the server exposes it', () => {
+        for (const CollectionType of ['music', 'musicvideos'] as const) {
             expect(isFamilyLibrary({ CollectionType })).toBe(false);
         }
+        expect(isFamilyLibrary({ CollectionType: 'livetv' })).toBe(true);
         expect(isFamilyLibrary({ CollectionType: 'books', Type: BaseItemKind.AudioBook })).toBe(true);
         expect(isFamilyLibrary({ CollectionType: 'books', Type: BaseItemKind.Audio })).toBe(true);
         expect(isFamilyLibrary({ Type: BaseItemKind.Movie, MediaStreams: [{ Type: 'Audio' }] })).toBe(true);

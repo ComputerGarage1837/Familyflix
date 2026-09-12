@@ -4,7 +4,7 @@ import type { CollectionType } from '@jellyfin/sdk/lib/generated-client/models/c
 
 // Client presentation only. Never change server libraries, access rules or media.
 export const isFamilyLibrary = (item: BaseItemDto) =>
-    !['music', 'musicvideos', 'livetv'].includes(item.CollectionType || '')
+    !['music', 'musicvideos'].includes(item.CollectionType || '')
     && !['LiveTvChannel', 'LiveTvProgram', 'TvChannel', 'MusicArtist', 'MusicAlbum', 'MusicVideo'].includes(item.Type || '');
 
 export const isFamilyHomeSection = (section: string) =>
