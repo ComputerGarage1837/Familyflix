@@ -13,6 +13,7 @@ import { currentSettings as userSettings } from 'scripts/settings/userSettings';
 import { PluginType } from 'types/plugin';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { isBlank } from 'utils/string';
+import { expandPlaylistIds, playlistBatches } from 'familyflix/playlistExpansion';
 
 import dialogHelper from '../dialogHelper/dialogHelper';
 import loading from '../loading/loading';
@@ -83,21 +84,22 @@ function onSubmit(this: HTMLElement, e: Event) {
     return false;
 }
 
-function createPlaylist(dlg: DialogElement) {
+async function createPlaylist(dlg: DialogElement) {
     const name = dlg.querySelector<HTMLInputElement>('#txtNewPlaylistName')?.value;
     if (isBlank(name)) return Promise.reject(new Error('Playlist name should not be blank'));
 
     const apiClient = ServerConnections.getApiClient(currentServerId);
     const api = toApi(apiClient);
 
-    const itemIds = dlg.querySelector<HTMLInputElement>('.fldSelectedItemIds')?.value || undefined;
+    const rawIds = dlg.querySelector<HTMLInputElement>('.fldSelectedItemIds')?.value || '';
+    const itemIds = rawIds ? await expandPlaylistIds(apiClient, rawIds.split(',')) : [];
 
     return getPlaylistsApi(api)
         .createPlaylist({
             createPlaylistDto: {
                 Name: name,
                 IsPublic: dlg.querySelector<HTMLInputElement>('#chkPlaylistPublic')?.checked,
-                Ids: itemIds?.split(','),
+                Ids: itemIds,
                 UserId: apiClient.getCurrentUserId()
             }
         })
@@ -136,15 +138,16 @@ function updatePlaylist(dlg: DialogElement) {
         });
 }
 
-function addToPlaylist(dlg: DialogElement, id: string) {
+async function addToPlaylist(dlg: DialogElement, id: string) {
     const apiClient = ServerConnections.getApiClient(currentServerId);
     const api = toApi(apiClient);
-    const itemIds = dlg.querySelector<HTMLInputElement>('.fldSelectedItemIds')?.value || '';
+    const rawIds = dlg.querySelector<HTMLInputElement>('.fldSelectedItemIds')?.value || '';
+    const itemIds = await expandPlaylistIds(apiClient, rawIds.split(','));
 
     if (id === 'queue') {
         playbackManager.queue({
             serverId: currentServerId,
-            ids: itemIds.split(',')
+            ids: itemIds
         }).catch(err => {
             console.error('[PlaylistEditor] failed to add to queue', err);
         });
@@ -153,16 +156,15 @@ function addToPlaylist(dlg: DialogElement, id: string) {
         return Promise.resolve();
     }
 
-    return getPlaylistsApi(api)
-        .addItemToPlaylist({
+    for (const batch of playlistBatches(itemIds)) {
+        await getPlaylistsApi(api).addItemToPlaylist({
             playlistId: id,
-            ids: itemIds.split(','),
+            ids: batch,
             userId: apiClient.getCurrentUserId()
-        })
-        .then(() => {
-            dlg.submitted = true;
-            dialogHelper.close(dlg);
         });
+    }
+    dlg.submitted = true;
+    dialogHelper.close(dlg);
 }
 
 function triggerChange(select: HTMLSelectElement) {
