@@ -1,5 +1,6 @@
 .familyNightDialog {
     width: min(90vw, 82rem);
+    max-width: 82rem;
     max-height: 90vh;
     color: #fff;
     background: #151922;
@@ -16,6 +17,8 @@
 .familyNightFilters span {
     display: block;
 }
+
+.familyNightFilters label { margin: 0; }
 
 .familyNightFilters select {
     width: 100%;
