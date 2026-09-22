@@ -1,0 +1,8 @@
+name: Build Family Flix for Windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: ComputerGarage1837/Familyflix/.github/workflows/build-windows.yml@familyflix-windows
