@@ -41,6 +41,6 @@ if errorlevel 1 (
 
 echo.
 echo Bundle complete!
-echo Installer: %BUILD_DIR%\JellyfinDesktop-*.exe
-echo Portable:  %BUILD_DIR%\JellyfinDesktop-*.zip
+echo Installer: %BUILD_DIR%\Family-Flix-*.exe
+echo Portable:  %BUILD_DIR%\Family-Flix-*.zip
 endlocal
