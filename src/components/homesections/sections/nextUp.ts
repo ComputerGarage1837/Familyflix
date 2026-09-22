@@ -9,36 +9,36 @@ import { ServerConnections } from 'lib/jellyfin-apiclient';
 import type { UserSettings } from 'scripts/settings/userSettings';
 import { getBackdropShape } from 'utils/card';
 import { selectedCoWatchFeed } from 'familyflix/coWatchFeed';
+import { eligibleDeckEpisodes } from 'familyflix/deckPolicy';
 
 import type { SectionContainerElement, SectionOptions } from './section';
 
 function getNextUpFetchFn(
     serverId: string,
-    userSettings: UserSettings,
     { enableOverflow }: SectionOptions
 ) {
     return async function () {
         const apiClient = ServerConnections.getApiClient(serverId);
-        const oldestDateForNextUp = new Date();
-        oldestDateForNextUp.setDate(oldestDateForNextUp.getDate() - userSettings.maxDaysForNextUp());
+        const displayLimit = enableOverflow ? 24 : 15;
         const options = {
-            Limit: enableOverflow ? 24 : 15,
+            Limit: displayLimit * 2,
             Fields: 'PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount',
             UserId: apiClient.getCurrentUserId(),
             ImageTypeLimit: 1,
             EnableImageTypes: 'Primary,Backdrop,Banner,Thumb',
             EnableTotalRecordCount: false,
             DisableFirstEpisode: false,
-            NextUpDateCutoff: oldestDateForNextUp.toISOString(),
             EnableResumable: false,
-            EnableRewatching: userSettings.enableRewatchingInNextUp()
+            EnableRewatching: true,
+            EnableUserData: true
         };
         try {
             const selected = await selectedCoWatchFeed(apiClient, 'Shows/NextUp',
                 options as unknown as Record<string, string>);
-            if (selected) return selected;
+            if (selected) return { ...selected, Items: eligibleDeckEpisodes(selected.Items || [], displayLimit) };
         } catch { /* Keep the normal Deck usable if a secondary profile has signed out. */ }
-        return apiClient.getNextUpEpisodes(options);
+        const result = await apiClient.getNextUpEpisodes(options);
+        return { ...result, Items: eligibleDeckEpisodes(result.Items || [], displayLimit) };
     };
 }
 
@@ -108,7 +108,7 @@ export function loadNextUp(
 
     const itemsContainer: SectionContainerElement | null = elem.querySelector('.itemsContainer');
     if (!itemsContainer) return;
-    itemsContainer.fetchData = getNextUpFetchFn(apiClient.serverId(), userSettings, options);
+    itemsContainer.fetchData = getNextUpFetchFn(apiClient.serverId(), options);
     itemsContainer.getItemsHtml = getNextUpItemsHtmlFn(userSettings.useEpisodeImagesInNextUpAndResume(), options);
     itemsContainer.parentContainer = elem;
     itemsContainer.classList.add('familyCoWatchFeed');
