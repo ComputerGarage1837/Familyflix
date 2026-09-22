@@ -12,7 +12,7 @@ check against the same Jellyfin server and user profiles before release.
 | Personal and family Watchlists | Existing server web watchlist injection | Verify additions, removals and real-time cross-device sync |
 | Mixed movie/show/episode playlists | Server web playlist support | Verify add and playback for all three item types |
 | Profile switch and Watch Together | Server web account switch | Port Watch Together participants, home-feed choice and exit flow |
-| Family Night and household voting | Android-only interface | Port picker, filters and voting interface |
+| Family Night and household voting | Shared web picker and filters coded locally, not deployed or signed-in tested | Complete multi-profile sources, votes and Windows interaction checks before release |
 | Backdrops, themes and detail actions | Server web presentation | Match TV layout, action strip, theme choices and remote focus |
 | Intro, recap, preview and outro prompts | Server web media segment controls | Verify Ask/Auto/Off and per-series choices during native playback |
 | Live TV guide, preview, categories and time shifting | Server web guide plus native player | Verify two-hour guide, preview/fullscreen and buffer controls |
