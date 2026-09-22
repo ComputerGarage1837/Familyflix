@@ -6,6 +6,7 @@ import { getItemBackdropImageUrl } from 'utils/jellyfin-apiclient/backdropImage'
 import { captureFamilySession, familyRequest, type FamilySession } from './familySession';
 import { familyButton, familyDialog, familyParagraph } from './familyDialogs';
 import { objectValue } from './issuePolicy';
+import { activeCoWatchParticipants } from './coWatchProfiles';
 import { toFamilyNightCandidate, mergeFamilyNightCandidates, pickFamilyNight,
     type FamilyNightCandidate, type FamilyNightFilter } from './familyNightPolicy';
 import './familyNight.scss';
@@ -19,6 +20,24 @@ function watchlistIds(raw: unknown): string[] {
     if (!Array.isArray(entries)) throw new Error('The Watchlist response is incomplete.');
     return entries.map((entry: WatchlistEntry) => entry.itemId || entry.ItemId || '')
         .filter(id => /^[0-9a-f-]{32,36}$/i.test(id));
+}
+
+async function householdProfiles(session: FamilySession): Promise<[string, string[]][]> {
+    const profiles = activeCoWatchParticipants(session);
+    return Promise.all(profiles.map(async profile => {
+        // eslint-disable-next-line compat/compat -- The legacy entrypoint supplies an AbortController polyfill.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 3000);
+        try {
+            const response = await fetch(session.client.getUrl('FamilyFlix/Watchlists/personal'), {
+                signal: controller.signal, headers: { 'X-Emby-Token': profile.token }
+            });
+            if (!response.ok || !session.current()) return [profile.name, []] as [string, string[]];
+            return [profile.name, watchlistIds(await response.json())] as [string, string[]];
+        } catch {
+            return [profile.name, []] as [string, string[]];
+        } finally { clearTimeout(timer); }
+    }));
 }
 
 /** Match the TV picker while retaining Jellyfin's established dialog, focus and Back handling. */
@@ -44,7 +63,9 @@ export function openFamilyNight(client: ApiClient, origin?: HTMLElement): () => 
         caption.textContent = label;
         const control = document.createElement('select');
         control.className = 'emby-select';
-        choices.forEach(([value, text]) => control.add(new Option(text, value)));
+        choices.forEach(([value, text]) => {
+            control.add(new Option(text, value));
+        });
         holder.append(caption, control);
         filters.append(holder);
         return control;
@@ -105,7 +126,9 @@ export function openFamilyNight(client: ApiClient, origin?: HTMLElement): () => 
         details.disabled = !selected;
         play.textContent = selected?.kind === 'show' ? 'Choose episode' : 'Play';
     }
-    [media, runtime, genre, age].forEach(control => control.addEventListener('change', () => choose(true)));
+    [media, runtime, genre, age].forEach(control => {
+        control.addEventListener('change', () => choose(true));
+    });
 
     async function load() {
         ui.status.textContent = 'Loading Family Night choices…';
@@ -114,7 +137,8 @@ export function openFamilyNight(client: ApiClient, origin?: HTMLElement): () => 
             if (!ui.current()) return;
             const scopes: [string, string[]][] = [
                 ['Your Watchlist', watchlistIds(snapshot.personal || snapshot.Personal)],
-                ['Family List', watchlistIds(snapshot.household || snapshot.Household)]
+                ['Family List', watchlistIds(snapshot.household || snapshot.Household)],
+                ...await householdProfiles(session)
             ];
             const wanted = [...new Map(scopes.flatMap(([, ids]) => ids)
                 .map(id => [normalizeId(id), id])).values()];
@@ -127,7 +151,9 @@ export function openFamilyNight(client: ApiClient, origin?: HTMLElement): () => 
                     EnableUserData: true, Limit: 100
                 });
                 if (!ui.current()) return;
-                (result.Items || []).forEach((item: BaseItemDto) => { if (item.Id) found.set(normalizeId(item.Id), item); });
+                (result.Items || []).forEach((item: BaseItemDto) => {
+                    if (item.Id) found.set(normalizeId(item.Id), item);
+                });
             }
             candidates = mergeFamilyNightCandidates(scopes.flatMap(([profile, ids]) => ids
                 .map(id => found.get(normalizeId(id)))
@@ -135,7 +161,9 @@ export function openFamilyNight(client: ApiClient, origin?: HTMLElement): () => 
                 .filter((item): item is FamilyNightCandidate => !!item)));
             const genres = [...new Set(candidates.flatMap(candidate => candidate.genres))]
                 .sort((left, right) => left.localeCompare(right));
-            genres.forEach(value => genre.add(new Option(value, value)));
+            genres.forEach(value => {
+                genre.add(new Option(value, value));
+            });
             ui.status.textContent = `${candidates.length} possible pick${candidates.length === 1 ? '' : 's'}.`;
             choose();
         } catch {

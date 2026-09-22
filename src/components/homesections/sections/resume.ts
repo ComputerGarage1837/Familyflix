@@ -7,6 +7,7 @@ import globalize from 'lib/globalize';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 import type { UserSettings } from 'scripts/settings/userSettings';
 import { getBackdropShape, getPortraitShape } from 'utils/card';
+import { selectedCoWatchFeed } from 'familyflix/coWatchFeed';
 
 import type { SectionContainerElement, SectionOptions } from './section';
 
@@ -20,7 +21,7 @@ function getItemsToResumeFn(
     serverId: string,
     { enableOverflow }: SectionOptions
 ) {
-    return function () {
+    return async function () {
         const apiClient = ServerConnections.getApiClient(serverId);
 
         const limit = enableOverflow ? 12 : 5;
@@ -35,6 +36,13 @@ function getItemsToResumeFn(
             MediaTypes: mediaType
         };
 
+        if (mediaType === 'Video') {
+            try {
+                const selected = await selectedCoWatchFeed(apiClient,
+                    'Users/{userId}/Items/Resume', options as unknown as Record<string, string>);
+                if (selected) return selected;
+            } catch { /* Keep the normal home usable if a secondary profile has signed out. */ }
+        }
         return apiClient.getResumableItems(apiClient.getCurrentUserId(), options);
     };
 }
@@ -102,4 +110,5 @@ export function loadResume(
     itemsContainer.fetchData = getItemsToResumeFn(mediaType, apiClient.serverId(), options);
     itemsContainer.getItemsHtml = getItemsToResumeHtmlFn(userSettings.useEpisodeImagesInNextUpAndResume(), mediaType, options);
     itemsContainer.parentContainer = elem;
+    if (mediaType === 'Video') itemsContainer.classList.add('familyCoWatchFeed');
 }

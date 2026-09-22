@@ -36,6 +36,7 @@ import { SERIES_DEFAULTS, seriesAutoplayAllowed } from 'familyflix/seriesPrefere
 import { sharedSeriesTrackOptions } from 'familyflix/seriesPlaybackPolicy';
 import { confirmFamilyPlayback } from 'familyflix/playbackWarnings';
 import { beginFamilySpeed } from 'familyflix/speedReport';
+import { mirrorCoWatchReport } from 'familyflix/coWatchController';
 import { bindSkipSegment } from './skipsegment.ts';
 
 const UNLIMITED_ITEMS = -1;
@@ -98,6 +99,14 @@ function reportPlayback(playbackManagerInstance, state, player, reportPlaylist, 
 
     const apiClient = ServerConnections.getApiClient(serverId);
     const reportPlaybackPromise = apiClient[method](info);
+    if (state.NowPlayingItem.Type === 'Movie' || state.NowPlayingItem.Type === 'Episode') {
+        try {
+            mirrorCoWatchReport(apiClient, method, info);
+        } catch (error) {
+            // Secondary profiles must never interfere with the signed-in user's report.
+            console.warn('Watching Together report could not be queued', error);
+        }
+    }
     // Notify that report has been sent
     reportPlaybackPromise.then(() => {
         Events.trigger(playbackManagerInstance, 'reportplayback', [true]);

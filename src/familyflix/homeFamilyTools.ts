@@ -4,6 +4,8 @@ import { playbackManager } from 'components/playback/playbackmanager';
 import { captureFamilySession } from './familySession';
 import { familyButton, familyParagraph } from './familyDialogs';
 import { openFamilyNight } from './familyNightDialog';
+import { openCoWatchDialog } from './coWatchDialog';
+import { readCoWatchState } from './coWatchProfiles';
 import { openProblemsInbox } from './issueDialogs';
 import { issueCapabilities, loadAdminIssueSummary } from './issues';
 import './familyTools.scss';
@@ -18,17 +20,38 @@ export function bindFamilyHomeTools(view: HTMLElement, client: ApiClient) {
         closeFamilyNight?.();
         closeFamilyNight = openFamilyNight(client, familyNight);
     });
+    const watchTogether = familyButton('Watching Together', () => {
+        closeCoWatch?.();
+        closeCoWatch = openCoWatchDialog(client, watchTogether);
+    });
+    const updateWatchTogetherLabel = () => {
+        if (!session?.current()) return;
+        const state = readCoWatchState(session);
+        const names = state.profiles.filter(profile => state.activeIds.some(value =>
+            value.toLowerCase().replace(/-/g, '') === profile.userId.toLowerCase().replace(/-/g, '')))
+            .map(profile => profile.name);
+        watchTogether.textContent = names.length ? `Watching Together · ${names.join(' / ')}` : 'Watching Together';
+    };
+    updateWatchTogetherLabel();
     const banner = familyParagraph('', 'familyNewProblems');
     banner.hidden = true;
     const button = familyButton('Problems', () => { closeInbox?.(); closeInbox = openProblemsInbox(client, button); });
     button.hidden = true;
-    tools.append(familyNight, banner, button);
+    tools.append(familyNight, watchTogether, banner, button);
     view.querySelector('.sections')?.before(tools);
+    const refreshCoWatch = () => {
+        if (!session?.current()) return;
+        updateWatchTogetherLabel();
+        const containers = view.querySelectorAll<HTMLElement & { resume?: (options: { refresh: boolean }) => Promise<unknown> }>('.familyCoWatchFeed');
+        containers.forEach(container => { container.resume?.({ refresh: true })?.catch(() => undefined); });
+    };
+    window.addEventListener('familyflix-cowatch-changed', refreshCoWatch);
     let active = true;
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let closeInbox: (() => void) | undefined;
     let closeFamilyNight: (() => void) | undefined;
+    let closeCoWatch: (() => void) | undefined;
     async function poll() {
         if (!active || disposed || !session?.current() || document.hidden || playbackManager.isPlaying()) return schedule();
         try {
@@ -53,8 +76,8 @@ export function bindFamilyHomeTools(view: HTMLElement, client: ApiClient) {
     void poll();
     return {
         resume: () => { active = true; void poll(); },
-        pause: () => { active = false; clearTimeout(timer); closeInbox?.(); closeInbox = undefined; closeFamilyNight?.(); closeFamilyNight = undefined; },
-        destroy: () => { disposed = true; active = false; clearTimeout(timer); closeInbox?.(); closeFamilyNight?.(); tools.remove(); }
+        pause: () => { active = false; clearTimeout(timer); closeInbox?.(); closeInbox = undefined; closeFamilyNight?.(); closeFamilyNight = undefined; closeCoWatch?.(); closeCoWatch = undefined; },
+        destroy: () => { disposed = true; active = false; clearTimeout(timer); window.removeEventListener('familyflix-cowatch-changed', refreshCoWatch); closeInbox?.(); closeFamilyNight?.(); closeCoWatch?.(); tools.remove(); }
     };
 }
 /* eslint-enable @stylistic/max-statements-per-line, sonarjs/no-nested-conditional */
