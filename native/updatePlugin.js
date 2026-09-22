@@ -1,47 +1,64 @@
 (function() {
+const releasesUrl = 'https://api.github.com/repos/ComputerGarage1837/Familyflix/releases?per_page=30';
+const windowsTag = /^windows-v(\d+)\.(\d+)\.(\d+)-family\.(\d+)$/i;
+
+function parts(version) {
+    const match = /^v?(\d+)\.(\d+)\.(\d+)-family\.(\d+)$/i.exec(version);
+    return match && match.slice(1).map(Number);
+}
+
+function newer(candidate, current) {
+    for (let index = 0; index < candidate.length; index++) {
+        if (candidate[index] !== current[index]) return candidate[index] > current[index];
+    }
+    return false;
+}
+
 class updatePlugin {
     constructor({ confirm }) {
-        this.name = 'Update Plugin';
+        this.name = 'Family Flix Updates';
         this.type = 'input';
         this.id = 'updatePlugin';
 
         (async () => {
+            if (!/Windows/i.test(navigator.userAgent)) return;
+            const current = parts(jmpInfo.version);
+            if (!current) return;
             const api = await window.apiPromise;
-
-            const onUpdateNotify = async (url) => {
-                if (url == "SSL_UNAVAILABLE") {
-                    // Windows (and possibly macOS) don't ship with SSL in QT......
-                    // So we get to do a full request to GitHub here :(
-                    const checkUrl = "https://github.com/jellyfin/jellyfin-desktop/releases/latest";
-                    url = (await fetch(checkUrl)).url;
-                }
-
-                const urlSegments = url.split("/");
-                const version = urlSegments[urlSegments.length - 1].substring(1);
-                const currentVersion = jmpInfo.version;
-
-                if (currentVersion.includes('pre')) return; // Do not notify for prereleases
-                if (version == currentVersion) return;
-                if (!/^[0-9.-]+$/.test(version)) return;
-
+            const check = async () => {
                 try {
-                    // wait 3 seconds before showing the dialog to prevent race conditions
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-
-                    await confirm({
-                        title: "Update Available",
-                        text: `Jellyfin Desktop version ${version} is available.`,
-                        cancelText: "Ignore",
-                        confirmText: "Download"
+                    const response = await fetch(releasesUrl, {
+                        headers: { Accept: 'application/vnd.github+json' },
+                        cache: 'no-store'
                     });
-
-                    api.system.openExternalUrl(url);
-                } catch (e) {
-                    // User cancelled update
+                    if (!response.ok) return;
+                    const releases = await response.json();
+                    const latest = releases.filter(release => !release.draft && !release.prerelease &&
+                        windowsTag.test(release.tag_name || ''))
+                        .sort((left, right) => {
+                            const l = windowsTag.exec(left.tag_name).slice(1).map(Number);
+                            const r = windowsTag.exec(right.tag_name).slice(1).map(Number);
+                            for (let index = 0; index < l.length; index++) {
+                                if (l[index] !== r[index]) return r[index] - l[index];
+                            }
+                            return 0;
+                        })[0];
+                    if (!latest) return;
+                    const available = windowsTag.exec(latest.tag_name).slice(1).map(Number);
+                    if (!newer(available, current)) return;
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    await confirm({
+                        title: 'Family Flix update available',
+                        text: `${latest.tag_name.replace('windows-v', '')} is available for Windows. Your settings and signed-in profiles will remain in place.`,
+                        cancelText: 'Later',
+                        confirmText: 'Open download'
+                    });
+                    api.system.openExternalUrl(latest.html_url);
+                } catch {
+                    // Network failure or Later: do not interrupt playback or sign-in.
                 }
-            }
-
-            api.system.updateInfoEmitted.connect(onUpdateNotify);
+            };
+            api.system.updateInfoEmitted.connect(check);
             api.system.checkForUpdates();
         })();
     }

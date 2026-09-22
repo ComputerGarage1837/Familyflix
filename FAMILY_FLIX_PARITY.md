@@ -11,14 +11,14 @@ check against the same Jellyfin server and user profiles before release.
 | Home libraries, preferred order, hidden libraries, Continue Watching and Deck | Server web home | Port Android TV Home/Deck rules and remote focus memory |
 | Personal and family Watchlists | Existing server web watchlist injection | Verify additions, removals and real-time cross-device sync |
 | Mixed movie/show/episode playlists | Server web playlist support | Verify add and playback for all three item types |
-| Profile switch and Watch Together | Server web account switch | Port Watch Together participants, home-feed choice and exit flow |
-| Family Night and household voting | Shared web picker and filters coded locally, not deployed or signed-in tested | Complete multi-profile sources, votes and Windows interaction checks before release |
+| Profile switch and Watch Together | Shared web participant sign-in, saved presets, selected home feed, playback reporting and exit flow coded locally | Deploy and verify with two real visible profiles, switching, and independent watched status |
+| Family Night and household voting | Shared web picker includes active participants' personal lists and household list, coded locally | Deploy and verify votes and Windows interaction before release |
 | Backdrops, themes and detail actions | Server web presentation | Match TV layout, action strip, theme choices and remote focus |
 | Intro, recap, preview and outro prompts | Server web media segment controls | Verify Ask/Auto/Off and per-series choices during native playback |
 | Live TV guide, preview, categories and time shifting | Server web guide plus native player | Verify two-hour guide, preview/fullscreen and buffer controls |
 | Movie/show and Live TV one-hour buffers | Separate up-to-one-hour native settings with memory-first and temporary-disk fallback | Test long VOD and live playback, storage cap and seek behavior; actual hour depends on bitrate and stream seekability |
 | Issues, broken-media warnings and admin Health Centre | Server web and plugins | Verify reports and warnings on details and playback |
-| Settings sync and updates | Different Windows settings and build feed | Port profile settings sync and Windows update prompt/install |
+| Settings sync and updates | Separate Windows settings; Family Flix Windows release check and download prompt coded | Verify update prompt against a Windows-tagged release; installation and profile settings sync remain unimplemented |
 | Keyboard, mouse and remote | Qt input plus server web | Test D-pad, Back, page restoration and focus on every screen |
 
 The Windows installer should be published only after all checks pass. Until
