@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { FamilySession } from './familySession';
-import { activeCoWatchParticipants, disableCoWatch, readCoWatchState, writeCoWatchState } from './coWatchProfiles';
+import { activeCoWatchParticipants, disableCoWatch, readCoWatchState, visibleActiveCoWatchNames, writeCoWatchState } from './coWatchProfiles';
 
 const session = (userId: string): FamilySession => ({
     userId, serverId: 'server', token: 'primary-token', address: 'https://example.test',
@@ -30,5 +30,15 @@ describe('Watching Together local profile scope', () => {
     it('fails closed on corrupt saved state', () => {
         localStorage.setItem('familyFlixCoWatchV1:server:dylan', '{');
         expect(readCoWatchState(session('dylan')).activeIds).toEqual([]);
+    });
+
+    it('never names a participant hidden from the public login screen', async () => {
+        const dylan = session('dylan');
+        dylan.client.getPublicUsers = async () => [{ Id: 'kristine', Name: 'Kristine' }];
+        writeCoWatchState(dylan, {
+            profiles: [{ serverId: 'server', userId: 'amanda', name: 'Amanda', token: 'a' }],
+            presets: [], activeIds: ['amanda'], homeUserId: 'amanda'
+        });
+        expect(await visibleActiveCoWatchNames(dylan)).toEqual([]);
     });
 });

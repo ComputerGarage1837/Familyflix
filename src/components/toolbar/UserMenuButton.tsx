@@ -6,7 +6,7 @@ import UserAvatar from 'components/UserAvatar';
 import { useApi } from 'hooks/useApi';
 import globalize from 'lib/globalize';
 import { captureFamilySession } from 'familyflix/familySession';
-import { readCoWatchState } from 'familyflix/coWatchProfiles';
+import { visibleActiveCoWatchNames } from 'familyflix/coWatchProfiles';
 
 import AppUserMenu, { ID } from './AppUserMenu';
 
@@ -16,20 +16,20 @@ const UserMenuButton = () => {
     const [ userMenuAnchorEl, setUserMenuAnchorEl ] = useState<null | HTMLElement>(null);
     const [ togetherNames, setTogetherNames ] = useState<string[]>([]);
     useEffect(() => {
+        let mounted = true;
         const update = () => {
             const session = captureFamilySession();
+            setTogetherNames([]);
             if (!session || session.userId !== user?.Id?.toLowerCase().replace(/-/g, '')) {
-                setTogetherNames([]);
                 return;
             }
-            const state = readCoWatchState(session);
-            setTogetherNames(state.profiles.filter(profile => state.activeIds.some(value =>
-                value.toLowerCase().replace(/-/g, '') === profile.userId.toLowerCase().replace(/-/g, '')))
-                .map(profile => profile.name));
+            visibleActiveCoWatchNames(session).then(names => {
+                if (mounted && session.current()) setTogetherNames(names);
+            }).catch(() => { if (mounted && session.current()) setTogetherNames([]); });
         };
         update();
         window.addEventListener('familyflix-cowatch-changed', update);
-        return () => window.removeEventListener('familyflix-cowatch-changed', update);
+        return () => { mounted = false; window.removeEventListener('familyflix-cowatch-changed', update); };
     }, [user?.Id]);
     const isUserMenuOpen = Boolean(userMenuAnchorEl);
 

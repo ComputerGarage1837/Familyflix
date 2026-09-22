@@ -5,7 +5,7 @@ import { captureFamilySession } from './familySession';
 import { familyButton, familyParagraph } from './familyDialogs';
 import { openFamilyNight } from './familyNightDialog';
 import { openCoWatchDialog } from './coWatchDialog';
-import { readCoWatchState } from './coWatchProfiles';
+import { visibleActiveCoWatchNames } from './coWatchProfiles';
 import { openProblemsInbox } from './issueDialogs';
 import { issueCapabilities, loadAdminIssueSummary } from './issues';
 import './familyTools.scss';
@@ -26,11 +26,10 @@ export function bindFamilyHomeTools(view: HTMLElement, client: ApiClient) {
     });
     const updateWatchTogetherLabel = () => {
         if (!session?.current()) return;
-        const state = readCoWatchState(session);
-        const names = state.profiles.filter(profile => state.activeIds.some(value =>
-            value.toLowerCase().replace(/-/g, '') === profile.userId.toLowerCase().replace(/-/g, '')))
-            .map(profile => profile.name);
-        watchTogether.textContent = names.length ? `Watching Together · ${names.join(' / ')}` : 'Watching Together';
+        watchTogether.textContent = 'Watching Together';
+        visibleActiveCoWatchNames(session).then(names => {
+            if (!disposed && session.current() && names.length) watchTogether.textContent = `Watching Together · ${names.join(' / ')}`;
+        }).catch(() => undefined);
     };
     updateWatchTogetherLabel();
     const banner = familyParagraph('', 'familyNewProblems');

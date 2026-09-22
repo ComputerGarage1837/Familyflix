@@ -61,6 +61,15 @@ export function activeCoWatchParticipants(session: FamilySession): CoWatchPartic
     return state.profiles.filter(profile => selected.has(id(profile.userId)));
 }
 
+/** Never display a saved participant's name without checking the visible login list. */
+export async function visibleActiveCoWatchNames(session: FamilySession): Promise<string[]> {
+    const users = await session.client.getPublicUsers();
+    if (!session.current()) return [];
+    const visible = new Set(users.map(user => id(user.Id || '')));
+    return activeCoWatchParticipants(session).filter(profile => visible.has(id(profile.userId)))
+        .map(profile => profile.name);
+}
+
 /** Authenticates without changing the browser's primary Jellyfin session. */
 export async function addCoWatchProfile(session: FamilySession, client: ApiClient,
     user: { Id?: string | null; Name?: string | null }, password: string): Promise<CoWatchParticipant> {

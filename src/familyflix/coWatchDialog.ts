@@ -109,29 +109,28 @@ export function openCoWatchDialog(client: ApiClient, origin?: HTMLElement): () =
                 });
                 label.append(check, document.createTextNode(' Watch with ' + profile.name));
                 row.append(label);
-            } else {
-                const password = document.createElement('input');
-                password.type = 'password';
-                password.className = 'emby-input';
-                password.placeholder = 'Password';
-                password.autocomplete = 'current-password';
-                password.setAttribute('aria-label', `Password for ${user.Name || 'family member'}`);
-                const add = familyButton('Sign in for Watching Together', async () => {
-                    if (!ui.current() || !password.value) return;
-                    add.disabled = true;
-                    try {
-                        await addCoWatchProfile(session, client, user, password.value);
-                        password.value = '';
-                        if (ui.current()) {
-                            render();
-                            ui.status.textContent = `${user.Name} is ready to watch together.`;
-                        }
-                    } catch (error) {
-                        if (ui.current()) ui.status.textContent = error instanceof Error ? error.message : 'Sign in failed.';
-                    } finally { add.disabled = false; }
-                });
-                row.append(password, add);
             }
+            const password = document.createElement('input');
+            password.type = 'password';
+            password.className = 'emby-input';
+            password.placeholder = profile ? 'Password to refresh sign-in (if any)' : 'Password (if any)';
+            password.autocomplete = 'current-password';
+            password.setAttribute('aria-label', `Password for ${user.Name || 'family member'}`);
+            const add = familyButton(profile ? 'Refresh sign-in' : 'Sign in for Watching Together', async () => {
+                if (!ui.current()) return;
+                add.disabled = true;
+                try {
+                    await addCoWatchProfile(session, client, user, password.value);
+                    password.value = '';
+                    if (ui.current()) {
+                        render();
+                        ui.status.textContent = `${user.Name} is ready to watch together.`;
+                    }
+                } catch (error) {
+                    if (ui.current()) ui.status.textContent = error instanceof Error ? error.message : 'Sign in failed.';
+                } finally { add.disabled = false; }
+            });
+            row.append(password, add);
             participants.append(row);
         });
         renderHome(state);
@@ -158,9 +157,10 @@ export function openCoWatchDialog(client: ApiClient, origin?: HTMLElement): () =
         primaryName = primary?.Name || primaryName;
         const allowed = new Set(visible.map(user => id(user.Id)));
         const state = readCoWatchState(session);
+        const oldCount = state.profiles.length + state.activeIds.length;
         state.profiles = state.profiles.filter(profile => allowed.has(id(profile.userId)));
         state.activeIds = state.activeIds.filter(value => allowed.has(id(value)));
-        writeCoWatchState(session, state);
+        if (oldCount !== state.profiles.length + state.activeIds.length) writeCoWatchState(session, state);
         render();
         ui.status.textContent = '';
     }).catch(() => {
