@@ -24,11 +24,15 @@ export function bindFamilyHomeTools(view: HTMLElement, client: ApiClient) {
         closeCoWatch?.();
         closeCoWatch = openCoWatchDialog(client, watchTogether);
     });
+    let labelRequest = 0;
     const updateWatchTogetherLabel = () => {
+        const currentRequest = ++labelRequest;
         if (!session?.current()) return;
         watchTogether.textContent = 'Watching Together';
         visibleActiveCoWatchNames(session).then(names => {
-            if (!disposed && session.current() && names.length) watchTogether.textContent = `Watching Together · ${names.join(' / ')}`;
+            if (!disposed && labelRequest === currentRequest && session.current() && names.length) {
+                watchTogether.textContent = `Watching Together · ${names.join(' / ')}`;
+            }
         }).catch(() => undefined);
     };
     updateWatchTogetherLabel();

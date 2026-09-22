@@ -17,15 +17,17 @@ const UserMenuButton = () => {
     const [ togetherNames, setTogetherNames ] = useState<string[]>([]);
     useEffect(() => {
         let mounted = true;
+        let request = 0;
         const update = () => {
+            const currentRequest = ++request;
             const session = captureFamilySession();
             setTogetherNames([]);
             if (!session || session.userId !== user?.Id?.toLowerCase().replace(/-/g, '')) {
                 return;
             }
             visibleActiveCoWatchNames(session).then(names => {
-                if (mounted && session.current()) setTogetherNames(names);
-            }).catch(() => { if (mounted && session.current()) setTogetherNames([]); });
+                if (mounted && request === currentRequest && session.current()) setTogetherNames(names);
+            }).catch(() => { if (mounted && request === currentRequest && session.current()) setTogetherNames([]); });
         };
         update();
         window.addEventListener('familyflix-cowatch-changed', update);
