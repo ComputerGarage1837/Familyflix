@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
   try
   {
     QCommandLineParser parser;
-    parser.setApplicationDescription("Jellyfin Desktop");
+    parser.setApplicationDescription("Family Flix for Windows");
     parser.addVersionOption();
     parser.addOptions({{{"h", "help"},              "Show this help"},
                        {{"l", "licenses"},          "Show license information"},

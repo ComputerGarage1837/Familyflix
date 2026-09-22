@@ -9,7 +9,7 @@ set SCRIPT_DIR=%~dp0
 for %%i in ("%SCRIPT_DIR%\..\..") do set "PROJECT_ROOT=%%~fi"
 set DEPS_DIR=%SCRIPT_DIR%deps
 set BUILD_DIR=%PROJECT_ROOT%\build
-set EXE_NAME=Jellyfin Desktop.exe
+set EXE_NAME=Family Flix.exe
 
 REM === Find Visual Studio ===
 set VCVARS=

@@ -30,7 +30,7 @@
       },
       {
         "value": "layout",
-        "default": "desktop",
+        "default": "tv",
         "hidden": true,
         "possible_values": [
           [ "desktop", "desktop" ],
@@ -609,7 +609,7 @@
     "values": [
       {
         "value": "startupurl_desktop",
-        "default": "bundled"
+        "default": "https://myfamilyflix.duckdns.org/web/"
       },
       {
         "value": "startupurl_extension",

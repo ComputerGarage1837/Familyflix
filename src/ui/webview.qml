@@ -9,7 +9,7 @@ import Qt.labs.platform as Labs
 Window
 {
   id: mainWindow
-  title: "Jellyfin Desktop"
+  title: "Family Flix"
   objectName: "mainWindow"
   width: 1280
   height: 720
@@ -422,7 +422,7 @@ Window
   Labs.SystemTrayIcon {
     visible: showSystemTrayIcon
     icon.source: "qrc:/images/icon.png"
-    tooltip: "Jellyfin Desktop"
+    tooltip: "Family Flix"
 
     onActivated: function(reason) {
       if (reason === Labs.SystemTrayIcon.Context) {
