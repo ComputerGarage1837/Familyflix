@@ -16,7 +16,7 @@ check against the same Jellyfin server and user profiles before release.
 | Backdrops, themes and detail actions | Server web presentation | Match TV layout, action strip, theme choices and remote focus |
 | Intro, recap, preview and outro prompts | Server web media segment controls | Verify Ask/Auto/Off and per-series choices during native playback |
 | Live TV guide, preview, categories and time shifting | Server web guide plus native player | Verify two-hour guide, preview/fullscreen and buffer controls |
-| Movie/show and Live TV one-hour buffers | Native libmpv cache defaults | Port separate settings and disk-backed ahead cache |
+| Movie/show and Live TV one-hour buffers | Separate up-to-one-hour native settings with memory-first and temporary-disk fallback | Test long VOD and live playback, storage cap and seek behavior; actual hour depends on bitrate and stream seekability |
 | Issues, broken-media warnings and admin Health Centre | Server web and plugins | Verify reports and warnings on details and playback |
 | Settings sync and updates | Different Windows settings and build feed | Port profile settings sync and Windows update prompt/install |
 | Keyboard, mouse and remote | Qt input plus server web | Test D-pad, Back, page restoration and focus on every screen |

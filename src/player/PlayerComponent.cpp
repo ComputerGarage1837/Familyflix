@@ -2,6 +2,7 @@
 #include <QString>
 #include <Qt>
 #include <QDir>
+#include <QStorageInfo>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QDebug>
@@ -294,6 +295,27 @@ void PlayerComponent::queueMedia(const QString& url, const QVariantMap& options,
   m_mediaFrameRate = metadata["frameRate"].toFloat(); // returns 0 on failure
   m_serverMediaInfo = metadata["media"].toMap();
 
+  const QVariantMap item = metadata["metadata"].toMap();
+  const bool isMusic = metadata["type"].toString().compare("music", Qt::CaseInsensitive) == 0;
+  const QString itemType = item.value("Type", item.value("type")).toString();
+  const bool isLiveTv = itemType.compare("TvChannel", Qt::CaseInsensitive) == 0
+    || itemType.compare("LiveTvChannel", Qt::CaseInsensitive) == 0
+    || url.contains("/LiveTv/", Qt::CaseInsensitive);
+  m_familyBufferMinutes = isMusic ? 0 : SettingsComponent::Get().value(
+    SETTINGS_SECTION_VIDEO, isLiveTv ? "familyLiveBufferMinutes" : "familyVodBufferMinutes").toInt();
+  m_familyBufferMinutes = qBound(0, m_familyBufferMinutes, 60);
+  m_familyDiskCacheActive = false;
+  m_familyDiskCacheExhausted = false;
+  const qint64 freeBytes = QStorageInfo(QDir::tempPath()).bytesAvailable();
+  constexpr qint64 diskReserve = 2LL * 1024 * 1024 * 1024;
+  constexpr qint64 diskMaximum = 32LL * 1024 * 1024 * 1024;
+  m_familyDiskCacheBudget = freeBytes > diskReserve
+    ? qMin(diskMaximum, (freeBytes - diskReserve) / 2) : 0;
+  if (m_familyDiskCacheBudget < 1024LL * 1024 * 1024)
+    m_familyDiskCacheBudget = 0;
+
+  // A queued audio item must not inherit temporary-disk caching from video.
+  m_mpv->setProperty("cache-on-disk", "no");
   updateVideoConfiguration();
 
   QUrl qurl = url;
@@ -576,6 +598,25 @@ void PlayerComponent::handleMpvEvent(mpv_event *event)
         constexpr double ticksPerSecond = 10000000.0; // 100ns ticks (Jellyfin's internal unit)
         auto *node = static_cast<mpv_node*>(prop->data);
         QVariantMap cacheState = mpv::qt::node_to_variant(node).toMap();
+        constexpr qint64 memorySwitchBytes = 192LL * 1024 * 1024;
+        if (m_familyBufferMinutes > 0 && !m_familyDiskCacheActive
+            && !m_familyDiskCacheExhausted && m_familyDiskCacheBudget > 0
+            && cacheState.value(QStringLiteral("total-bytes")).toLongLong() >= memorySwitchBytes)
+        {
+          // mpv retains the existing in-memory packets and writes subsequent
+          // packets to a temporary file which it deletes when playback closes.
+          m_mpv->setProperty("cache-on-disk", "yes");
+          m_familyDiskCacheActive = true;
+          qInfo() << "Family Flix buffer switched to temporary disk storage";
+        }
+        if (m_familyDiskCacheActive && cacheState.value(QStringLiteral("file-cache-bytes")).toLongLong()
+              >= m_familyDiskCacheBudget)
+        {
+          m_mpv->setProperty("cache-on-disk", "no");
+          m_familyDiskCacheActive = false;
+          m_familyDiskCacheExhausted = true;
+          qWarning() << "Family Flix disk buffer reached its per-playback storage budget";
+        }
         QVariantList seekableRanges = cacheState[QStringLiteral("seekable-ranges")].toList();
         QVariantList ranges;
         for (const QVariant &entry : seekableRanges)
@@ -1467,8 +1508,19 @@ void PlayerComponent::setVideoConfiguration()
 
   setAudioDelay(m_playbackAudioDelay);
 
-  QVariant cache = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "cache");
-  m_mpv->setProperty( "demuxer-max-bytes", cache.toInt() * 1024 * 1024);
+  if (m_familyBufferMinutes > 0)
+  {
+    m_mpv->setProperty("cache", "yes");
+    m_mpv->setProperty("cache-secs", m_familyBufferMinutes * 60);
+    m_mpv->setProperty("demuxer-max-bytes", 256LL * 1024 * 1024);
+    m_mpv->setProperty("cache-on-disk", m_familyDiskCacheActive ? "yes" : "no");
+    m_mpv->setProperty("demuxer-cache-dir", QDir::tempPath());
+  }
+  else
+  {
+    QVariant cache = SettingsComponent::Get().value(SETTINGS_SECTION_VIDEO, "cache");
+    m_mpv->setProperty("demuxer-max-bytes", cache.toInt() * 1024 * 1024);
+  }
 
   updateVideoAspectSettings();
   setOtherConfiguration();

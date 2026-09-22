@@ -1,6 +1,8 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
+#include <QStorageInfo>
 #include "SettingsComponent.h"
 #include "SettingsSection.h"
 #include "Paths.h"
@@ -491,7 +493,30 @@ QVariantList SettingsComponent::settingDescriptions()
   for(SettingsSection* section : sectionList)
   {
     if (!section->isHidden())
-      desc.push_back(QJsonValue::fromVariant(section->descriptions()));
+    {
+      QVariantMap description = section->descriptions();
+      if (section->sectionName() == SETTINGS_SECTION_VIDEO)
+      {
+        QVariantList settings = description.value("settings").toList();
+        const qint64 available = QStorageInfo(QDir::tempPath()).bytesAvailable();
+        const QString freeSpace = available >= 0
+          ? QString::number(available / (1024.0 * 1024 * 1024), 'f', 1) + " GiB"
+          : "unavailable";
+        for (QVariant& setting : settings)
+        {
+          QVariantMap entry = setting.toMap();
+          const QString key = entry.value("key").toString();
+          if (key == "familyVodBufferMinutes" || key == "familyLiveBufferMinutes")
+          {
+            entry["help"] = entry.value("help").toString()
+              + " Temporary storage available: " + freeSpace + ". Family Flix reserves free space.";
+            setting = entry;
+          }
+        }
+        description["settings"] = settings;
+      }
+      desc.push_back(QJsonValue::fromVariant(description));
+    }
   }
 
   return desc.toVariantList();

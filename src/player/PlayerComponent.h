@@ -268,6 +268,10 @@ private:
   bool m_doAc3Transcoding;
   QStringList m_passthroughCodecs;
   QVariantMap m_serverMediaInfo;
+  int m_familyBufferMinutes = 0;
+  bool m_familyDiskCacheActive = false;
+  bool m_familyDiskCacheExhausted = false;
+  qint64 m_familyDiskCacheBudget = 0;
   QVariant m_currentSubtitleStream;
   QVariant m_currentAudioStream;
   QRect m_videoRectangle;

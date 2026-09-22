@@ -421,11 +421,38 @@
         "display_name": "Cache Size",
         "help": "Controls cache size in MB for video streaming. The default is 75 MB",
         "default": 75,
+        "hidden": true,
         "possible_values": [
           [ 10, "Tiny (10 MB)" ],
           [ 75, "Default (75 MB)" ],
           [ 150, "Large (150 MB)", { "platforms_excluded": "oe_rpi" } ],
           [ 500, "Very Large (500 MB)", { "platforms_excluded": "oe_rpi" } ]
+        ]
+      },
+      {
+        "value": "familyVodBufferMinutes",
+        "display_name": "Movie and show buffer",
+        "help": "Prefetch up to this many minutes ahead. Family Flix uses memory first, then temporary disk storage when space allows. Available bitrate and storage can reduce the actual amount.",
+        "default": 60,
+        "possible_values": [
+          [ 5, "5 minutes" ],
+          [ 10, "10 minutes" ],
+          [ 20, "20 minutes" ],
+          [ 30, "30 minutes" ],
+          [ 60, "1 hour" ]
+        ]
+      },
+      {
+        "value": "familyLiveBufferMinutes",
+        "display_name": "Live TV buffer",
+        "help": "Keep up to this much of the active channel for pausing and rewinding where the stream supports it. Temporary disk storage is used after the memory buffer fills.",
+        "default": 60,
+        "possible_values": [
+          [ 5, "5 minutes" ],
+          [ 10, "10 minutes" ],
+          [ 20, "20 minutes" ],
+          [ 30, "30 minutes" ],
+          [ 60, "1 hour" ]
         ]
       },
       {
