@@ -23,7 +23,10 @@ function watchlistIds(raw: unknown): string[] {
 }
 
 async function householdProfiles(session: FamilySession): Promise<[string, string[]][]> {
-    const profiles = activeCoWatchParticipants(session);
+    const visible = new Set((await session.client.getPublicUsers()).map(user =>
+        normalizeId(user.Id || '')));
+    if (!session.current()) return [];
+    const profiles = activeCoWatchParticipants(session).filter(profile => visible.has(normalizeId(profile.userId)));
     return Promise.all(profiles.map(async profile => {
         // eslint-disable-next-line compat/compat -- The legacy entrypoint supplies an AbortController polyfill.
         const controller = new AbortController();
