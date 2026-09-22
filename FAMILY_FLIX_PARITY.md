@@ -8,9 +8,9 @@ check against the same Jellyfin server and user profiles before release.
 | --- | --- | --- |
 | Fixed server URL and visible-user sign in | Fixed URL configured; server web sign in | Verify only visible users appear and switching preserves the current session |
 | Native playback, audio and subtitle tracks, resume | Jellyfin Desktop libmpv integration | Play representative x265 movies, older TV audio, subtitles, resume and seek |
-| Home libraries, preferred order, hidden libraries, Continue Watching and Deck | Server web home | Port Android TV Home/Deck rules and remote focus memory |
+| Home libraries, preferred order, hidden libraries, Continue Watching and Deck | Server web home; shared web now filters watched/resumable Deck episodes and chooses one episode per show | Deploy, verify library/focus restoration, and port the Android active-older-season Deck correction |
 | Personal and family Watchlists | Existing server web watchlist injection | Verify additions, removals and real-time cross-device sync |
-| Mixed movie/show/episode playlists | Server web playlist support | Verify add and playback for all three item types |
+| Mixed movie/show/episode playlists | Shared web now expands Series into playable episodes while preserving movie and individual-episode order, coded locally | Deploy and verify create, add, and playback with one mixed list |
 | Profile switch and Watch Together | Shared web participant sign-in, saved presets, selected home feed, playback reporting and exit flow coded locally | Deploy and verify with two real visible profiles, switching, and independent watched status |
 | Family Night and household voting | Shared web picker includes active participants' personal lists and household list, coded locally | Deploy and verify votes and Windows interaction before release |
 | Backdrops, themes and detail actions | Server web presentation | Match TV layout, action strip, theme choices and remote focus |
