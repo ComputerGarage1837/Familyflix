@@ -46,6 +46,15 @@ jobs:
         version: "${{ env.QT_VERSION }}"
         arch: "${{ matrix.qt_arch }}"
         modules: "qtwebengine qtwebchannel qtpositioning"
+    - name: Validate native QML syntax
+      shell: powershell
+      run: |
+        $formatter = Join-Path $env:QT_ROOT_DIR "bin\qmlformat.exe"
+        if (-not (Test-Path -LiteralPath $formatter)) { throw "qmlformat is missing" }
+        foreach ($qml in @('src/ui/nativeview.qml', 'src/ui/NativeAction.qml')) {
+          & $formatter --ignore-settings $qml > $null
+          if ($LASTEXITCODE -ne 0) { throw "Invalid QML: $qml" }
+        }
     - name: Install Inno Setup
       run: |
         choco install innosetup -y
