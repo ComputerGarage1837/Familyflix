@@ -2357,10 +2357,9 @@ void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
     const QString token = userId == m_userId ? m_token
       : m_settings.value(QStringLiteral("profiles/%1/token").arg(userId)).toString();
     load->names.append(profile.value(QStringLiteral("Name")).toString());
-    const auto complete = [this, load, session, homeRevision, groupRevision] {
+    const auto publish = [this, load, session, homeRevision, groupRevision] {
       if (session != m_sessionRevision || homeRevision != m_homeRevision
-          || groupRevision != m_groupDeckRevision) return;
-      if (--load->pending != 0) return;
+          || groupRevision != m_groupDeckRevision || load->pending != 0) return;
       QHash<QString, int> positions;
       QVariantList merged;
       int largest = 0;
@@ -2396,6 +2395,7 @@ void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
       m_groupDeckItems = merged;
       emit homeChanged();
     };
+    const auto complete = [load, publish] { --load->pending; publish(); };
     if (userId.isEmpty() || token.isEmpty()) { complete(); continue; }
     requestAs("GET", QStringLiteral("Shows/NextUp"),
               { { QStringLiteral("UserId"), userId },
@@ -2404,7 +2404,7 @@ void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
                 { QStringLiteral("EnableRewatching"), true },
                 { QStringLiteral("EnableUserData"), true },
                 { QStringLiteral("EnableTotalRecordCount"), false } }, {}, token, userId,
-              [this, load, index, complete, session, homeRevision, groupRevision]
+              [this, load, index, complete, publish, userId, token, session, homeRevision, groupRevision]
               (const QVariant& response, const QString& error, int) {
       if (session != m_sessionRevision || homeRevision != m_homeRevision
           || groupRevision != m_groupDeckRevision) return;
@@ -2420,6 +2420,89 @@ void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
         }
       }
       complete();
+      if (!error.isEmpty() || load->lists[index].isEmpty()) return;
+      requestAs("GET", QStringLiteral("Users/%1/Items").arg(userId),
+                { { QStringLiteral("Recursive"), true },
+                  { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+                  { QStringLiteral("SortBy"), QStringLiteral("DatePlayed") },
+                  { QStringLiteral("SortOrder"), QStringLiteral("Descending") },
+                  { QStringLiteral("Limit"), 80 },
+                  { QStringLiteral("EnableUserData"), true },
+                  { QStringLiteral("EnableImages"), false },
+                  { QStringLiteral("EnableTotalRecordCount"), false } }, {}, token, userId,
+                [this, load, index, publish, userId, token, session, homeRevision, groupRevision]
+                (const QVariant& recentResponse, const QString& recentError, int) {
+        if (session != m_sessionRevision || homeRevision != m_homeRevision
+            || groupRevision != m_groupDeckRevision || !recentError.isEmpty()) return;
+        QSet<QString> handled;
+        int checked = 0;
+        for (const auto& value : items(recentResponse)) {
+          const auto latest = value.toMap();
+          const QString series = deckSeriesId(latest);
+          const int seasonNumber = latest.value(QStringLiteral("ParentIndexNumber")).toInt();
+          const int episodeNumber = latest.value(QStringLiteral("IndexNumberEnd"),
+                                                 latest.value(QStringLiteral("IndexNumber"))).toInt();
+          const auto state = latest.value(QStringLiteral("UserData")).toMap();
+          if (series.isEmpty() || handled.contains(series) || seasonNumber <= 0 || episodeNumber <= 0
+              || state.value(QStringLiteral("LastPlayedDate")).toString().isEmpty()) continue;
+          int fallbackIndex = -1;
+          for (int candidate = 0; candidate < load->lists[index].size(); ++candidate) {
+            if (deckSeriesId(load->lists[index][candidate].toMap()) == series) {
+              fallbackIndex = candidate;
+              break;
+            }
+          }
+          if (fallbackIndex < 0) continue;
+          handled.insert(series);
+          if (++checked > 8) break;
+          if (!state.value(QStringLiteral("Played")).toBool()
+              && state.value(QStringLiteral("PlaybackPositionTicks")).toLongLong() > 0) {
+            load->lists[index].removeAt(fallbackIndex);
+            publish();
+            continue;
+          }
+          const int firstEligible = episodeNumber + (state.value(QStringLiteral("Played")).toBool() ? 1 : 0);
+          const auto fallback = load->lists[index][fallbackIndex].toMap();
+          if (fallback.value(QStringLiteral("ParentIndexNumber")).toInt() == seasonNumber
+              && fallback.value(QStringLiteral("IndexNumber")).toInt() == firstEligible) continue;
+          const QString seasonId = latest.value(QStringLiteral("SeasonId")).toString();
+          if (seasonId.isEmpty()) continue;
+          requestAs("GET", QStringLiteral("Users/%1/Items").arg(userId),
+                    { { QStringLiteral("ParentId"), seasonId },
+                      { QStringLiteral("Recursive"), true },
+                      { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+                      { QStringLiteral("IsPlayed"), false },
+                      { QStringLiteral("IsMissing"), false },
+                      { QStringLiteral("SortBy"), QStringLiteral("IndexNumber") },
+                      { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+                      { QStringLiteral("EnableUserData"), true },
+                      { QStringLiteral("Limit"), 250 } }, {}, token, userId,
+                    [this, load, index, publish, series, seasonNumber, firstEligible,
+                     session, homeRevision, groupRevision]
+                    (const QVariant& seasonResponse, const QString& seasonError, int) {
+            if (session != m_sessionRevision || homeRevision != m_homeRevision
+                || groupRevision != m_groupDeckRevision || !seasonError.isEmpty()) return;
+            QVariantMap replacement;
+            for (const auto& episodeValue : items(seasonResponse)) {
+              const auto candidate = episodeValue.toMap();
+              if (deckSeriesId(candidate) != series
+                  || candidate.value(QStringLiteral("ParentIndexNumber")).toInt() != seasonNumber
+                  || candidate.value(QStringLiteral("IndexNumber")).toInt() < firstEligible
+                  || !untouchedEpisode(candidate)) continue;
+              if (replacement.isEmpty()
+                  || candidate.value(QStringLiteral("IndexNumber")).toInt()
+                      < replacement.value(QStringLiteral("IndexNumber")).toInt()) replacement = candidate;
+            }
+            if (replacement.isEmpty()) return;
+            for (int candidate = 0; candidate < load->lists[index].size(); ++candidate) {
+              if (deckSeriesId(load->lists[index][candidate].toMap()) != series) continue;
+              load->lists[index][candidate] = replacement;
+              publish();
+              break;
+            }
+          });
+        }
+      });
     });
   }
 }
