@@ -209,6 +209,16 @@ Window {
         familyApi.renamePlaylist(familyApi.selectedPlaylistId, name)
     }
 
+    function createNamedPlaylist() {
+        const name = newPlaylistName.text.trim()
+        if (!name) { notice = "Enter a playlist name"; noticeTimer.restart(); return }
+        if (page === "playlistPicker") {
+            familyApi.createPlaylistAndAdd(name, playlistTarget)
+            page = "detail"
+        } else familyApi.createPlaylist(name)
+        newPlaylistName.clear()
+    }
+
     function playItem(item, returnPage) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
         if (!familyApi.kidsPlaybackAllowed()) {
@@ -1711,17 +1721,11 @@ Window {
                     height: 48
                     placeholderText: "New playlist name"
                     font.pixelSize: 18
-                    onAccepted: {
-                        familyApi.createPlaylist(text)
-                        text = ""
-                    }
+                    onAccepted: window.createNamedPlaylist()
                 }
                 NativeAction {
-                    text: "Create Playlist"
-                    onClicked: {
-                        familyApi.createPlaylist(newPlaylistName.text)
-                        newPlaylistName.clear()
-                    }
+                    text: page === "playlistPicker" ? "Create & Add" : "Create Playlist"
+                    onClicked: window.createNamedPlaylist()
                 }
             }
             ScrollView {

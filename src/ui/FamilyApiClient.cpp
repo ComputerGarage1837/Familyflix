@@ -2010,6 +2010,32 @@ void FamilyApiClient::createPlaylist(const QString& name)
     });
 }
 
+void FamilyApiClient::createPlaylistAndAdd(const QString& name, const QVariantMap& item)
+{
+  if (!signedIn() || name.trimmed().isEmpty() || item.value(QStringLiteral("Id")).toString().isEmpty()) return;
+  const quint64 revision = m_sessionRevision;
+  const QVariantMap command{
+    { QStringLiteral("Name"), name.trimmed() },
+    { QStringLiteral("Ids"), QVariantList{} },
+    { QStringLiteral("UserId"), m_userId },
+    { QStringLiteral("MediaType"), QStringLiteral("Video") },
+    { QStringLiteral("Users"), QVariantList{} },
+    { QStringLiteral("IsPublic"), false }
+  };
+  requestWithStatus("POST", QStringLiteral("Playlists"), {},
+    QJsonDocument(QJsonObject::fromVariantMap(command)).toJson(QJsonDocument::Compact),
+    [this, revision, item](const QVariant& response, const QString& error, int status) {
+      if (revision != m_sessionRevision) return;
+      const QString playlistId = response.toMap().value(QStringLiteral("Id")).toString();
+      if (!error.isEmpty() || status < 200 || status >= 300 || playlistId.isEmpty()) {
+        emit errorOccurred(QStringLiteral("Playlist could not be created and filled."));
+        return;
+      }
+      refreshPlaylists();
+      addToPlaylist(playlistId, item);
+    });
+}
+
 void FamilyApiClient::renamePlaylist(const QString& playlistId, const QString& name)
 {
   if (!signedIn() || playlistId.isEmpty() || name.trimmed().isEmpty()) return;
