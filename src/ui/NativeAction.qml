@@ -29,7 +29,7 @@ FocusScope {
         if (!parent) return
         const actions = []
         for (let item of parent.children) {
-            if (item && item.clicked !== undefined && item.visible) actions.push(item)
+            if (item && item.clicked !== undefined && item.visible && item.enabled) actions.push(item)
         }
         const index = actions.indexOf(action)
         const next = actions[index + direction]

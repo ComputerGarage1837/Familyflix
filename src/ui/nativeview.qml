@@ -1778,7 +1778,18 @@ Window {
                             spacing: 8
                             function focusNeighbor(delta, column) {
                                 const row = playlistRows.itemAt(index + delta)
-                                if (row && row.children[column]) row.children[column].forceActiveFocus()
+                                if (!row) return
+                                const preferred = row.children[column]
+                                if (preferred && preferred.visible && preferred.enabled) {
+                                    preferred.forceActiveFocus()
+                                    return
+                                }
+                                for (const action of row.children) {
+                                    if (action && action.clicked !== undefined && action.visible && action.enabled) {
+                                        action.forceActiveFocus()
+                                        return
+                                    }
+                                }
                             }
                             NativeAction {
                                 width: Math.max(300, window.width - 720)
