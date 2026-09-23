@@ -465,6 +465,7 @@ void FamilyApiClient::reconcileCoWatchParty()
     if (hasSavedProfile(id) && id != m_userId) allowed.append(id);
   }
   if (allowed == m_coWatchUserIds) return;
+  if (m_coWatchPlayback) m_coWatchPlayback->abandoned = true;
   m_coWatchUserIds = allowed;
   if (m_homeFeedOwnerId != m_userId && !allowed.contains(m_homeFeedOwnerId))
     m_homeFeedOwnerId = m_userId;
@@ -475,6 +476,7 @@ void FamilyApiClient::reconcileCoWatchParty()
 bool FamilyApiClient::setCoWatchProfile(const QString& userId, bool selected)
 {
   if (!signedIn() || userId == m_userId || !hasSavedProfile(userId)) return false;
+  if (m_coWatchPlayback) m_coWatchPlayback->abandoned = true;
   if (selected && !m_coWatchUserIds.contains(userId)) m_coWatchUserIds.append(userId);
   else if (!selected) m_coWatchUserIds.removeAll(userId);
   if (m_homeFeedOwnerId != m_userId && !m_coWatchUserIds.contains(m_homeFeedOwnerId))
@@ -496,6 +498,7 @@ void FamilyApiClient::setHomeFeedOwner(const QString& userId)
 void FamilyApiClient::stopWatchingTogether()
 {
   if (!signedIn() || m_coWatchUserIds.isEmpty()) return;
+  if (m_coWatchPlayback) m_coWatchPlayback->abandoned = true;
   m_coWatchUserIds.clear();
   m_homeFeedOwnerId = m_userId;
   saveCoWatchParty();
@@ -598,6 +601,8 @@ void FamilyApiClient::useSavedProfile(const QString& userId)
 void FamilyApiClient::activateSession(const QString& token, const QString& userId,
                                       const QString& userName)
 {
+  if (m_coWatchPlayback) m_coWatchPlayback->abandoned = true;
+  m_coWatchPlayback.reset();
   ++m_sessionRevision;
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
@@ -635,6 +640,8 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
 
 void FamilyApiClient::signOut()
 {
+  if (m_coWatchPlayback) m_coWatchPlayback->abandoned = true;
+  m_coWatchPlayback.reset();
   ++m_profileAttemptRevision;
   ++m_sessionRevision;
   ++m_homeRevision;
@@ -1382,6 +1389,18 @@ void FamilyApiClient::reportPlaybackStart(const QVariantMap& item, qlonglong pos
   m_playSessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   const auto sources = item.value(QStringLiteral("MediaSources")).toList();
   m_mediaSourceId = sources.isEmpty() ? QString() : sources.first().toMap().value(QStringLiteral("Id")).toString();
+  auto party = std::make_shared<CoWatchPlaybackState>();
+  party->playSessionId = m_playSessionId;
+  party->itemId = itemId;
+  party->mediaSourceId = m_mediaSourceId;
+  for (const auto& userId : m_coWatchUserIds) {
+    if (!hasSavedProfile(userId)) continue;
+    const QString token = m_settings.value(QStringLiteral("profiles/%1/token").arg(userId)).toString();
+    if (!token.isEmpty()) party->targets.append(QVariantMap{
+      { QStringLiteral("userId"), userId }, { QStringLiteral("token"), token }
+    });
+  }
+  m_coWatchPlayback = party;
   m_playbackStartConfirmed = false;
   m_pendingStopMilliseconds = -1;
   const quint64 revision = m_sessionRevision;
@@ -1398,13 +1417,28 @@ void FamilyApiClient::reportPlaybackStart(const QVariantMap& item, qlonglong pos
   const QString seriesId = item.value(QStringLiteral("SeriesId")).toString();
   request("POST", QStringLiteral("Sessions/Playing"), {},
           QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
-          [this, revision, playSession, itemId, seriesId](const QVariant&, const QString& error) {
+          [this, revision, playSession, itemId, seriesId, party, report](const QVariant&, const QString& error) {
     if (revision != m_sessionRevision || playSession != m_playSessionId) return;
     if (!error.isEmpty()) {
       emit errorOccurred(QStringLiteral("Playback status could not sync with Jellyfin."));
       return;
     }
     m_playbackStartConfirmed = true;
+    if (!party->abandoned) {
+      const QByteArray body = QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact);
+      for (const auto& value : party->targets) {
+        const auto target = value.toMap();
+        const QString userId = target.value(QStringLiteral("userId")).toString();
+        requestAs("POST", QStringLiteral("Sessions/Playing"), {}, body,
+                  target.value(QStringLiteral("token")).toString(), userId,
+                  [this, party, target, userId](const QVariant&, const QString& secondaryError, int) {
+          if (party->abandoned || !secondaryError.isEmpty()) return;
+          if (party->stopMilliseconds >= 0)
+            sendCoWatchStop(party, target, party->stopMilliseconds);
+          else party->startedUserIds.insert(userId);
+        });
+      }
+    }
     // Match Android's watchlist rule only after Jellyfin accepts the playback start.
     for (const auto& value : m_watchlistEntries) {
       const auto entry = value.toMap();
@@ -1435,6 +1469,17 @@ void FamilyApiClient::reportPlaybackProgress(qlonglong positionMilliseconds, boo
   request("POST", QStringLiteral("Sessions/Playing/Progress"), {},
           QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
           [](const QVariant&, const QString&) {});
+  const auto party = m_coWatchPlayback;
+  if (!party || party->abandoned) return;
+  const QByteArray body = QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact);
+  for (const auto& value : party->targets) {
+    const auto target = value.toMap();
+    const QString userId = target.value(QStringLiteral("userId")).toString();
+    if (!party->startedUserIds.contains(userId)) continue;
+    requestAs("POST", QStringLiteral("Sessions/Playing/Progress"), {}, body,
+              target.value(QStringLiteral("token")).toString(), userId,
+              [](const QVariant&, const QString&, int) {});
+  }
 }
 
 void FamilyApiClient::reportPlaybackStopped(qlonglong positionMilliseconds)
@@ -1447,6 +1492,16 @@ void FamilyApiClient::reportPlaybackStopped(qlonglong positionMilliseconds)
 void FamilyApiClient::sendPlaybackStopped(qlonglong positionMilliseconds)
 {
   if (m_playingItemId.isEmpty()) return;
+  const auto party = m_coWatchPlayback;
+  if (party && !party->abandoned) {
+    party->stopMilliseconds = positionMilliseconds;
+    for (const auto& value : party->targets) {
+      const auto target = value.toMap();
+      if (party->startedUserIds.contains(target.value(QStringLiteral("userId")).toString()))
+        sendCoWatchStop(party, target, positionMilliseconds);
+    }
+    party->startedUserIds.clear();
+  }
   const QVariantMap report{
     { QStringLiteral("ItemId"), m_playingItemId },
     { QStringLiteral("PositionTicks"), positionMilliseconds * 10000 },
@@ -1462,5 +1517,24 @@ void FamilyApiClient::sendPlaybackStopped(qlonglong positionMilliseconds)
     refreshWatchlist();
   });
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
+  m_coWatchPlayback.reset();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
+}
+
+void FamilyApiClient::sendCoWatchStop(const std::shared_ptr<CoWatchPlaybackState>& state,
+                                      const QVariantMap& target, qlonglong positionMilliseconds)
+{
+  if (!state || state->abandoned) return;
+  const QVariantMap report{
+    { QStringLiteral("ItemId"), state->itemId },
+    { QStringLiteral("PositionTicks"), positionMilliseconds * 10000 },
+    { QStringLiteral("PlaySessionId"), state->playSessionId },
+    { QStringLiteral("MediaSourceId"), state->mediaSourceId },
+    { QStringLiteral("Failed"), false }
+  };
+  requestAs("POST", QStringLiteral("Sessions/Playing/Stopped"), {},
+            QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
+            target.value(QStringLiteral("token")).toString(),
+            target.value(QStringLiteral("userId")).toString(),
+            [](const QVariant&, const QString&, int) {});
 }

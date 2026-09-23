@@ -6,9 +6,11 @@
 #include <QNetworkAccessManager>
 #include <QSettings>
 #include <QStringList>
+#include <QSet>
 #include <QVariantList>
 #include <QVariantMap>
 #include <functional>
+#include <memory>
 
 // Native Windows data source. It deliberately does not use the server web client.
 class FamilyApiClient final : public QObject
@@ -156,6 +158,15 @@ signals:
   void errorOccurred(const QString& message);
 
 private:
+  struct CoWatchPlaybackState {
+    QString playSessionId;
+    QString itemId;
+    QString mediaSourceId;
+    QVariantList targets;
+    QSet<QString> startedUserIds;
+    qlonglong stopMilliseconds = -1;
+    bool abandoned = false;
+  };
   using ReplyHandler = std::function<void(const QVariant&, const QString&)>;
   using StatusHandler = std::function<void(const QVariant&, const QString&, int)>;
   void request(const QByteArray& method, const QString& path, const QVariantMap& query,
@@ -175,6 +186,8 @@ private:
   void writeHouseholdVote(quint64 session, const QString& itemId, bool voted,
                           const QString& operationId, qlonglong expected, int retries);
   void sendPlaybackStopped(qlonglong positionMilliseconds);
+  void sendCoWatchStop(const std::shared_ptr<CoWatchPlaybackState>& state,
+                       const QVariantMap& target, qlonglong positionMilliseconds);
   void addPlayableIdsToPlaylist(const QString& playlistId, const QStringList& ids);
   void activateSession(const QString& token, const QString& userId, const QString& userName);
   void loadCoWatchParty();
@@ -232,4 +245,5 @@ private:
   QString m_mediaSourceId;
   bool m_playbackStartConfirmed = false;
   qlonglong m_pendingStopMilliseconds = -1;
+  std::shared_ptr<CoWatchPlaybackState> m_coWatchPlayback;
 };
