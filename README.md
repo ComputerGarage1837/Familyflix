@@ -17,12 +17,12 @@ guide, playback controls and skip prompts, themes, settings, buffers, update
 prompts, and remote/keyboard navigation. It must also preserve user settings
 between updates. A successful compile or a website wrapper is not sufficient.
 
-The Qt/libmpv desktop base supplies native Windows playback. The current
-Qt WebEngine screen is a temporary scaffold, not the planned Windows UI.
-Windows screens and their behavior must be implemented in native Qt Quick/QML,
-following the Android TV app's rules directly. Do not substitute the Family
-Flix browser implementation for Android TV parity. Do not publish this port as
-complete until the native screens and behavior are implemented and tested.
+The Qt/libmpv desktop base supplies native Windows playback. The entry point
+loads `nativeview.qml`, a Qt Quick interface that calls Jellyfin APIs directly.
+The inherited Qt WebEngine files are not the Family Flix interface. Windows
+screens must follow the Android TV app's rules directly; do not substitute the
+Family Flix browser implementation. Do not publish this port as complete until
+the native screens and behavior are implemented and tested.
 
 # Jellyfin Desktop
 

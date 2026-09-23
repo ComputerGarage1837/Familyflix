@@ -803,6 +803,20 @@ void FamilyApiClient::resolveFirstUnwatchedEpisode(const QString& seriesId)
   });
 }
 
+void FamilyApiClient::resolvePlayableItem(const QString& itemId)
+{
+  if (!signedIn() || itemId.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, itemId), {}, {},
+          [this, session, itemId](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("This pick is not available for your profile.")); return; }
+    const auto item = data.toMap();
+    if (item.value(QStringLiteral("Id")).toString() != itemId) return;
+    emit playableItemReady(itemId, item);
+  });
+}
+
 void FamilyApiClient::authenticateParticipant(const QString& userId, const QString& password)
 {
   if (!signedIn() || userId.isEmpty() || userId == m_userId) return;

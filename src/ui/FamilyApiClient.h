@@ -121,6 +121,7 @@ public:
   Q_INVOKABLE void refreshFamilyNightCandidates();
   Q_INVOKABLE int familyNightRequiredAge(const QString& rating) const;
   Q_INVOKABLE void resolveFirstUnwatchedEpisode(const QString& seriesId);
+  Q_INVOKABLE void resolvePlayableItem(const QString& itemId);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
@@ -166,6 +167,7 @@ signals:
   void coWatchPresetsChanged();
   void familyNightChanged();
   void firstUnwatchedEpisodeReady(const QString& seriesId, const QVariantMap& episode);
+  void playableItemReady(const QString& itemId, const QVariantMap& item);
   void homeChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();

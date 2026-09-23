@@ -22,6 +22,7 @@ Window {
     property int familyNightAge: -1
     property string familyNightGenre: "Any"
     property var familyNightPick: ({})
+    property string pendingFamilyNightId: ""
     onFamilyNightMatchesChanged: if (page === "familyNight") Qt.callLater(pickFamilyNight)
     property var familyNightGenres: {
         const genres = ["Any"]
@@ -330,6 +331,12 @@ Window {
         function onFirstUnwatchedEpisodeReady(seriesId, episode) {
             if (window.page === "familyNight" && window.familyNightPick.Id === seriesId)
                 window.playItem(episode, "familyNight")
+        }
+        function onPlayableItemReady(itemId, item) {
+            if (window.page !== "familyNight" || window.pendingFamilyNightId !== itemId
+                || window.familyNightPick.Id !== itemId) return
+            window.pendingFamilyNightId = ""
+            window.playItem(item, "familyNight")
         }
         function onLiveTvChanged() {
             if (window.page !== "liveTv") return
@@ -1061,7 +1068,10 @@ Window {
                     onClicked: {
                         if (window.familyNightPick.Type === "Series")
                             familyApi.resolveFirstUnwatchedEpisode(window.familyNightPick.Id)
-                        else window.playItem(window.familyNightPick, "familyNight")
+                        else {
+                            window.pendingFamilyNightId = window.familyNightPick.Id
+                            familyApi.resolvePlayableItem(window.pendingFamilyNightId)
+                        }
                     }
                 }
                 NativeAction { width: 180; text: "See details"; visible: !!window.familyNightPick.Id; onClicked: window.showItem(window.familyNightPick, "familyNight") }
