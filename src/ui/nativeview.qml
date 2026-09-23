@@ -89,14 +89,26 @@ Window {
     function cycleBackground() {
         const choices = []
         for (const row of familyApi.libraryRows) {
-            for (const item of (row.Items || [])) if (item.Id) choices.push(item.Id)
+            for (const item of (row.Items || [])) if (item.Id) choices.push(safeArtworkId(item))
         }
-        for (const item of familyApi.continueItems) if (item.Id) choices.push(item.Id)
-        for (const item of familyApi.deckItems) if (item.Id) choices.push(item.Id)
-        if (!choices.length) return
-        const alternatives = choices.filter(function(id) { return id !== backgroundRandomId })
-        const pool = alternatives.length ? alternatives : choices
+        for (const item of familyApi.continueItems) if (item.Id) choices.push(safeArtworkId(item))
+        for (const item of familyApi.deckItems) if (item.Id) choices.push(safeArtworkId(item))
+        const valid = choices.filter(function(id) { return !!id })
+        if (!valid.length) return
+        const alternatives = valid.filter(function(id) { return id !== backgroundRandomId })
+        const pool = alternatives.length ? alternatives : valid
         backgroundRandomId = pool[Math.floor(Math.random() * pool.length)]
+    }
+
+    function safeTitle(item) {
+        if (familyApi.kidsSpoilerHidden(item))
+            return item.IndexNumber ? "Episode " + item.IndexNumber : "Episode"
+        return item.Name || ""
+    }
+
+    function safeArtworkId(item) {
+        if (familyApi.kidsSpoilerHidden(item)) return item.SeriesId || ""
+        return item.Id || ""
     }
 
     function showItem(item, returnPage) {
@@ -141,6 +153,11 @@ Window {
 
     function playItem(item, returnPage) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
+        if (!familyApi.kidsPlaybackAllowed()) {
+            notice = "Playback is paused for bedtime until 7:00 AM."
+            noticeTimer.restart()
+            return
+        }
         const stream = familyApi.streamUrl(item.Id)
         if (!stream) return
         const resume = Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
@@ -175,6 +192,11 @@ Window {
 
     function selectLiveChannel(channel) {
         if (!channel.Id) return
+        if (!familyApi.kidsPlaybackAllowed()) {
+            notice = "Playback is paused for bedtime until 7:00 AM."
+            noticeTimer.restart()
+            return
+        }
         if (livePreviewActive && livePreviewChannel.Id === channel.Id) {
             page = "player"
             return
@@ -222,6 +244,10 @@ Window {
             page = "profile"
         } else if (page === "coWatchPresets") {
             page = "profile"
+        } else if (page === "kidsSettings") {
+            page = "profile"
+        } else if (page === "parentPin") {
+            page = "home"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -406,6 +432,17 @@ Window {
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
     Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
     Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
+    Timer {
+        interval: 60000; repeat: true
+        running: window.page === "player" && familyApi.kidsModeEnabled
+        onTriggered: if (!familyApi.kidsPlaybackAllowed()) {
+            if (!window.playerIsLive) familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            components.player.stop()
+            window.page = window.playerIsLive ? "liveTv" : window.playbackReturnPage
+            window.notice = "Bedtime reached. Playback stopped until 7:00 AM."
+            noticeTimer.restart()
+        }
+    }
     Timer { interval: 60000; repeat: true; running: window.page !== "player"; onTriggered: window.cycleBackground() }
 
     // The desktop shell and cards are Qt Quick controls, not the Jellyfin web client.
@@ -413,8 +450,8 @@ Window {
         id: pageBackdrop
         anchors.fill: parent
         property string artworkId: page === "detail"
-            ? (familyApi.selectedItem.Id || focusedItem.Id || "")
-            : (page === "home" && focusedItem.Id ? focusedItem.Id : backgroundRandomId)
+            ? window.safeArtworkId(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
+            : (page === "home" && focusedItem.Id ? window.safeArtworkId(focusedItem) : backgroundRandomId)
         property bool backdropFailed: false
         onArtworkIdChanged: backdropFailed = false
         source: page === "player" ? "" : familyApi.imageUrl(artworkId, backdropFailed ? "Thumb" : "Backdrop")
@@ -505,6 +542,7 @@ Window {
                 visible: page === "profile" && !chosenUser
                 NativeAction { text: "Back to Home"; onClicked: page = "home" }
                 NativeAction { text: "Sign out"; onClicked: familyApi.signOut() }
+                NativeAction { text: "Kids Mode"; onClicked: page = "kidsSettings" }
             }
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -580,6 +618,86 @@ Window {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "parentPin"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 560)
+            spacing: 16
+            Text { text: "Parent PIN"; color: familyApi.themeText; font.pixelSize: 32; font.bold: true }
+            Text { text: "Enter the PIN to change profiles or Kids Mode settings."; color: familyApi.themeText; font.pixelSize: 17 }
+            TextField {
+                id: parentPinInput
+                width: parent.width; height: 54
+                echoMode: TextInput.Password
+                inputMethodHints: Qt.ImhDigitsOnly
+                placeholderText: "4–8 digit PIN"
+                onAccepted: {
+                    if (familyApi.verifyKidsPin(text)) {
+                        clear()
+                        familyApi.refreshPublicUsers()
+                        page = "profile"
+                    } else { window.notice = "Incorrect parent PIN"; noticeTimer.restart(); clear() }
+                }
+            }
+            Row {
+                spacing: 12
+                NativeAction { text: "Cancel"; onClicked: window.goBack() }
+                NativeAction {
+                    text: "Continue"
+                    onClicked: {
+                        if (familyApi.verifyKidsPin(parentPinInput.text)) {
+                            parentPinInput.clear()
+                            familyApi.refreshPublicUsers()
+                            page = "profile"
+                        } else { window.notice = "Incorrect parent PIN"; noticeTimer.restart(); parentPinInput.clear() }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "kidsSettings"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 700)
+            spacing: 12
+            Text { text: "Kids Mode · " + familyApi.userName; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
+            Text { text: "These settings stay with this Windows profile between updates."; color: familyApi.themeText; font.pixelSize: 17 }
+            NativeAction { width: parent.width; text: "Kids Mode: " + (familyApi.kidsModeEnabled ? "On" : "Off"); onClicked: familyApi.setKidsModeEnabled(!familyApi.kidsModeEnabled) }
+            NativeAction { width: parent.width; text: "Hide unwatched episode spoilers: " + (familyApi.kidsHideSpoilers ? "On" : "Off"); onClicked: familyApi.setKidsHideSpoilers(!familyApi.kidsHideSpoilers) }
+            NativeAction { width: parent.width; text: "Episodes before automatic next stops: " + (familyApi.kidsEpisodeLimit || "Unlimited"); onClicked: familyApi.cycleKidsEpisodeLimit() }
+            NativeAction {
+                width: parent.width
+                text: "Bedtime: " + (familyApi.kidsBedtimeStart < 0 ? "Off" : (familyApi.kidsBedtimeStart / 60) + ":00–7:00")
+                onClicked: familyApi.cycleKidsBedtime()
+            }
+            TextField {
+                id: newKidsPin
+                width: parent.width; height: 52
+                echoMode: TextInput.Password
+                inputMethodHints: Qt.ImhDigitsOnly
+                placeholderText: familyApi.kidsHasPin ? "New 4–8 digit PIN" : "Set a 4–8 digit parent PIN"
+            }
+            Row {
+                spacing: 12
+                NativeAction {
+                    text: "Save PIN"
+                    onClicked: {
+                        if (familyApi.setKidsPin(newKidsPin.text)) { newKidsPin.clear(); window.notice = "Parent PIN saved" }
+                        else window.notice = "PIN must be 4–8 digits"
+                        noticeTimer.restart()
+                    }
+                }
+                NativeAction { text: "Clear PIN"; visible: familyApi.kidsHasPin; onClicked: { familyApi.setKidsPin(""); newKidsPin.clear() } }
+                NativeAction { text: "Back"; onClicked: window.goBack() }
             }
         }
     }
@@ -740,8 +858,14 @@ Window {
             onClicked: {
                 chosenUser = ""
                 password.clear()
-                familyApi.refreshPublicUsers()
-                page = "profile"
+                if (familyApi.kidsModeEnabled && familyApi.kidsHasPin) {
+                    parentPinInput.clear()
+                    page = "parentPin"
+                    parentPinInput.forceActiveFocus()
+                } else {
+                    familyApi.refreshPublicUsers()
+                    page = "profile"
+                }
             }
         }
         Text {
@@ -814,14 +938,16 @@ Window {
                                         Image {
                                             anchors.fill: parent
                                             anchors.margins: 3
-                                            source: familyApi.imageUrl(card.modelData.Id || "", "Backdrop")
+                                            source: familyApi.imageUrl(window.safeArtworkId(card.modelData), "Backdrop")
                                             fillMode: Image.PreserveAspectCrop
                                         }
                                         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
                                         Text {
                                             anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                                             anchors.margins: 8
-                                            text: card.modelData.SeriesName || card.modelData.Name || ""
+                                            text: familyApi.kidsSpoilerHidden(card.modelData)
+                                                ? (card.modelData.SeriesName || "Show") + " · " + window.safeTitle(card.modelData)
+                                                : (card.modelData.SeriesName || card.modelData.Name || "")
                                             color: "white"; font.pixelSize: 15; elide: Text.ElideRight
                                         }
                                         MouseArea { anchors.fill: parent; onClicked: { card.forceActiveFocus(); window.showItem(card.modelData) } }
@@ -1466,7 +1592,7 @@ Window {
             anchors.margins: 44
             spacing: 14
             Text {
-                text: familyApi.selectedItem.Name || focusedItem.Name || ""
+                text: window.safeTitle(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
                 color: "white"
                 font.pixelSize: 42
                 font.bold: true
@@ -1492,7 +1618,7 @@ Window {
             }
             Text {
                 width: Math.min(parent.width, 950)
-                text: familyApi.selectedItem.Overview || ""
+                text: familyApi.kidsSpoilerHidden(familyApi.selectedItem) ? "" : (familyApi.selectedItem.Overview || "")
                 color: "#e4edf6"
                 font.pixelSize: 18
                 wrapMode: Text.WordWrap
@@ -1658,7 +1784,9 @@ Window {
                         NativeAction {
                             width: parent.width
                             height: 65
-                            text: "Episode " + (modelData.IndexNumber || "") + "  ·  " + (modelData.Name || "")
+                            text: familyApi.kidsSpoilerHidden(modelData)
+                                ? window.safeTitle(modelData)
+                                : "Episode " + (modelData.IndexNumber || "") + "  ·  " + (modelData.Name || "")
                             onClicked: window.showItem(modelData, "season")
                         }
                     }

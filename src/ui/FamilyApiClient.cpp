@@ -1,6 +1,7 @@
 #include "FamilyApiClient.h"
 
 #include <QJsonDocument>
+#include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMetaType>
@@ -8,11 +9,13 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QRandomGenerator>
 #include <QSet>
 #include <QStringList>
 #include <QUrlQuery>
 #include <QUuid>
 #include <QUrl>
+#include <QTime>
 
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
@@ -141,7 +144,7 @@ FamilyApiClient::FamilyApiClient(QObject* parent)
   if (!m_userId.isEmpty())
     m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                    QStringLiteral("Ocean")).toString();
-  if (!m_userId.isEmpty()) loadCoWatchParty();
+  if (!m_userId.isEmpty()) { loadCoWatchParty(); loadKidsSettings(); }
 }
 
 QColor FamilyApiClient::themeScreen() const { return QColor(QLatin1String(paletteFor(m_themeName).screen)); }
@@ -555,6 +558,108 @@ void FamilyApiClient::setCombinedGroupDeckEnabled(bool enabled)
   m_settings.setValue(QStringLiteral("users/%1/combinedGroupDeck").arg(m_userId), enabled);
   emit coWatchChanged();
   refreshHome();
+}
+
+void FamilyApiClient::loadKidsSettings()
+{
+  const QString key = QStringLiteral("users/%1/kids/").arg(m_userId);
+  m_kidsEnabled = m_settings.value(key + QStringLiteral("enabled"), false).toBool();
+  m_kidsHideSpoilers = m_settings.value(key + QStringLiteral("hideSpoilers"), true).toBool();
+  m_kidsEpisodeLimit = m_settings.value(key + QStringLiteral("episodeLimit"), 0).toInt();
+  m_kidsBedtimeStart = m_settings.value(key + QStringLiteral("bedtimeStart"), -1).toInt();
+  m_kidsPinSalt = m_settings.value(key + QStringLiteral("pinSalt")).toByteArray();
+  m_kidsPinHash = m_settings.value(key + QStringLiteral("pinHash")).toByteArray();
+  emit kidsSettingsChanged();
+}
+
+void FamilyApiClient::saveKidsSettings()
+{
+  if (m_userId.isEmpty()) return;
+  const QString key = QStringLiteral("users/%1/kids/").arg(m_userId);
+  m_settings.setValue(key + QStringLiteral("enabled"), m_kidsEnabled);
+  m_settings.setValue(key + QStringLiteral("hideSpoilers"), m_kidsHideSpoilers);
+  m_settings.setValue(key + QStringLiteral("episodeLimit"), m_kidsEpisodeLimit);
+  m_settings.setValue(key + QStringLiteral("bedtimeStart"), m_kidsBedtimeStart);
+  m_settings.setValue(key + QStringLiteral("pinSalt"), m_kidsPinSalt);
+  m_settings.setValue(key + QStringLiteral("pinHash"), m_kidsPinHash);
+  emit kidsSettingsChanged();
+}
+
+void FamilyApiClient::setKidsModeEnabled(bool enabled)
+{
+  if (!signedIn() || m_kidsEnabled == enabled) return;
+  m_kidsEnabled = enabled;
+  saveKidsSettings();
+}
+
+void FamilyApiClient::setKidsHideSpoilers(bool hidden)
+{
+  if (!signedIn() || m_kidsHideSpoilers == hidden) return;
+  m_kidsHideSpoilers = hidden;
+  saveKidsSettings();
+}
+
+void FamilyApiClient::cycleKidsEpisodeLimit()
+{
+  if (!signedIn()) return;
+  const QList<int> options{ 0, 1, 2, 3, 5 };
+  const int current = qMax(0, options.indexOf(m_kidsEpisodeLimit));
+  m_kidsEpisodeLimit = options[(current + 1) % options.size()];
+  saveKidsSettings();
+}
+
+void FamilyApiClient::cycleKidsBedtime()
+{
+  if (!signedIn()) return;
+  const QList<int> options{ -1, 20 * 60, 21 * 60, 22 * 60 };
+  const int current = qMax(0, options.indexOf(m_kidsBedtimeStart));
+  m_kidsBedtimeStart = options[(current + 1) % options.size()];
+  saveKidsSettings();
+}
+
+bool FamilyApiClient::setKidsPin(const QString& pin)
+{
+  if (!signedIn() || (!pin.isEmpty() && !QRegularExpression(
+        QStringLiteral("^[0-9]{4,8}$")).match(pin).hasMatch())) return false;
+  if (pin.isEmpty()) { m_kidsPinSalt.clear(); m_kidsPinHash.clear(); }
+  else {
+    QByteArray salt;
+    for (int i = 0; i < 4; ++i) {
+      const quint32 random = QRandomGenerator::system()->generate();
+      salt.append(reinterpret_cast<const char*>(&random), sizeof(random));
+    }
+    m_kidsPinSalt = salt.toHex();
+    QByteArray value = m_kidsPinSalt + ':' + pin.toUtf8();
+    for (int i = 0; i < 2000; ++i)
+      value = QCryptographicHash::hash(value, QCryptographicHash::Sha256);
+    m_kidsPinHash = value.toHex();
+  }
+  saveKidsSettings();
+  return true;
+}
+
+bool FamilyApiClient::verifyKidsPin(const QString& pin) const
+{
+  if (!kidsHasPin()) return true;
+  QByteArray value = m_kidsPinSalt + ':' + pin.toUtf8();
+  for (int i = 0; i < 2000; ++i)
+    value = QCryptographicHash::hash(value, QCryptographicHash::Sha256);
+  return value.toHex() == m_kidsPinHash;
+}
+
+bool FamilyApiClient::kidsPlaybackAllowed() const
+{
+  if (!m_kidsEnabled || m_kidsBedtimeStart < 0) return true;
+  const auto now = QTime::currentTime();
+  const int minute = now.hour() * 60 + now.minute();
+  return !(minute >= m_kidsBedtimeStart || minute < 7 * 60);
+}
+
+bool FamilyApiClient::kidsSpoilerHidden(const QVariantMap& item) const
+{
+  return m_kidsEnabled && m_kidsHideSpoilers
+    && item.value(QStringLiteral("Type")).toString() == QStringLiteral("Episode")
+    && !item.value(QStringLiteral("UserData")).toMap().value(QStringLiteral("Played")).toBool();
 }
 
 void FamilyApiClient::stopWatchingTogether()
@@ -1002,6 +1107,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_userId = userId;
   m_userName = userName;
   loadCoWatchParty();
+  loadKidsSettings();
   m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                  QStringLiteral("Ocean")).toString();
   m_settings.setValue(QStringLiteral("token"), m_token);
@@ -1039,6 +1145,8 @@ void FamilyApiClient::signOut()
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
   m_coWatchUserIds.clear(); m_homeFeedOwnerId.clear(); m_homeFeedUserId.clear(); m_homeFeedToken.clear();
+  m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0; m_kidsBedtimeStart = -1;
+  m_kidsPinSalt.clear(); m_kidsPinHash.clear();
   m_themeName = QStringLiteral("Ocean");
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear();
   m_recentDeckActivity.clear();
@@ -1057,6 +1165,7 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("userName"));
   emit sessionChanged();
   emit coWatchChanged();
+  emit kidsSettingsChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit themeChanged();

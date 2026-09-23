@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QByteArray>
 #include <QDateTime>
 #include <QColor>
 #include <QNetworkAccessManager>
@@ -25,6 +26,11 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QString homeFeedOwnerId READ homeFeedOwnerId NOTIFY coWatchChanged)
   Q_PROPERTY(bool combinedGroupDeckEnabled READ combinedGroupDeckEnabled NOTIFY coWatchChanged)
   Q_PROPERTY(QVariantList groupDeckItems READ groupDeckItems NOTIFY homeChanged)
+  Q_PROPERTY(bool kidsModeEnabled READ kidsModeEnabled NOTIFY kidsSettingsChanged)
+  Q_PROPERTY(bool kidsHideSpoilers READ kidsHideSpoilers NOTIFY kidsSettingsChanged)
+  Q_PROPERTY(int kidsEpisodeLimit READ kidsEpisodeLimit NOTIFY kidsSettingsChanged)
+  Q_PROPERTY(int kidsBedtimeStart READ kidsBedtimeStart NOTIFY kidsSettingsChanged)
+  Q_PROPERTY(bool kidsHasPin READ kidsHasPin NOTIFY kidsSettingsChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
   Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
@@ -71,6 +77,11 @@ public:
   QString homeFeedOwnerId() const { return m_homeFeedOwnerId; }
   bool combinedGroupDeckEnabled() const { return m_combinedGroupDeckEnabled; }
   QVariantList groupDeckItems() const { return m_groupDeckItems; }
+  bool kidsModeEnabled() const { return m_kidsEnabled; }
+  bool kidsHideSpoilers() const { return m_kidsHideSpoilers; }
+  int kidsEpisodeLimit() const { return m_kidsEpisodeLimit; }
+  int kidsBedtimeStart() const { return m_kidsBedtimeStart; }
+  bool kidsHasPin() const { return !m_kidsPinSalt.isEmpty() && !m_kidsPinHash.isEmpty(); }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
   bool familyNightLoading() const { return m_familyNightLoading; }
@@ -113,6 +124,14 @@ public:
   Q_INVOKABLE bool setCoWatchProfile(const QString& userId, bool selected);
   Q_INVOKABLE void setHomeFeedOwner(const QString& userId);
   Q_INVOKABLE void setCombinedGroupDeckEnabled(bool enabled);
+  Q_INVOKABLE void setKidsModeEnabled(bool enabled);
+  Q_INVOKABLE void setKidsHideSpoilers(bool hidden);
+  Q_INVOKABLE void cycleKidsEpisodeLimit();
+  Q_INVOKABLE void cycleKidsBedtime();
+  Q_INVOKABLE bool setKidsPin(const QString& pin);
+  Q_INVOKABLE bool verifyKidsPin(const QString& pin) const;
+  Q_INVOKABLE bool kidsPlaybackAllowed() const;
+  Q_INVOKABLE bool kidsSpoilerHidden(const QVariantMap& item) const;
   Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void refreshCoWatchPresets();
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
@@ -164,6 +183,7 @@ signals:
   void sessionChanged();
   void publicUsersChanged();
   void coWatchChanged();
+  void kidsSettingsChanged();
   void coWatchPresetsChanged();
   void familyNightChanged();
   void firstUnwatchedEpisodeReady(const QString& seriesId, const QVariantMap& episode);
@@ -219,6 +239,8 @@ private:
   void reconcileCoWatchParty();
   void mutateCoWatchPresets(const std::function<QVariantList(const QVariantList&)>& transform);
   void refreshGroupDeck(quint64 session, quint64 homeRevision);
+  void loadKidsSettings();
+  void saveKidsSettings();
 
   QNetworkAccessManager m_network;
   QSettings m_settings;
@@ -231,6 +253,12 @@ private:
   bool m_combinedGroupDeckEnabled = true;
   QVariantList m_groupDeckItems;
   quint64 m_groupDeckRevision = 0;
+  bool m_kidsEnabled = false;
+  bool m_kidsHideSpoilers = true;
+  int m_kidsEpisodeLimit = 0;
+  int m_kidsBedtimeStart = -1;
+  QByteArray m_kidsPinSalt;
+  QByteArray m_kidsPinHash;
   QString m_homeFeedUserId;
   QString m_homeFeedToken;
   QVariantList m_coWatchPresets;
