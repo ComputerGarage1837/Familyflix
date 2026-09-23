@@ -2530,6 +2530,7 @@ void FamilyApiClient::writeWatchlistMembership(quint64 session, bool present,
       m_watchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
       m_watchlistEntries = document.value(QStringLiteral("entries")).toList();
       emit watchlistChanged();
+      refreshWatchlist();
     });
 }
 
@@ -2561,6 +2562,7 @@ void FamilyApiClient::writeHouseholdMembership(quint64 session, bool present,
       m_householdWatchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
       m_householdWatchlistEntries = document.value(QStringLiteral("entries")).toList();
       emit watchlistChanged();
+      refreshHouseholdWatchlist();
     });
 }
 
