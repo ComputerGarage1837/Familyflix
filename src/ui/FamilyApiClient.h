@@ -55,6 +55,10 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList libraryItems READ libraryItems NOTIFY libraryBrowseChanged)
   Q_PROPERTY(bool libraryHasMore READ libraryHasMore NOTIFY libraryBrowseChanged)
   Q_PROPERTY(bool libraryLoading READ libraryLoading NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(bool libraryPreferencesReady READ libraryPreferencesReady NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(QString librarySortLabel READ librarySortLabel NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(bool libraryFavoritesOnly READ libraryFavoritesOnly NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(bool libraryUnwatchedOnly READ libraryUnwatchedOnly NOTIFY libraryBrowseChanged)
   Q_PROPERTY(QVariantMap selectedItem READ selectedItem NOTIFY selectedItemChanged)
   Q_PROPERTY(QVariantList selectedCast READ selectedCast NOTIFY selectedCastChanged)
   Q_PROPERTY(QVariantMap selectedIssueSummary READ selectedIssueSummary NOTIFY selectedIssueSummaryChanged)
@@ -129,6 +133,10 @@ public:
   QVariantList libraryItems() const { return m_libraryItems; }
   bool libraryHasMore() const { return m_libraryHasMore; }
   bool libraryLoading() const { return m_libraryLoading; }
+  bool libraryPreferencesReady() const { return m_libraryPrefsReady; }
+  QString librarySortLabel() const;
+  bool libraryFavoritesOnly() const { return m_libraryFavoritesOnly; }
+  bool libraryUnwatchedOnly() const { return m_libraryUnwatchedOnly; }
   QVariantMap selectedItem() const { return m_selectedItem; }
   QVariantList selectedCast() const { return m_selectedCast; }
   QVariantMap selectedIssueSummary() const { return m_selectedIssueSummary; }
@@ -197,6 +205,9 @@ public:
   Q_INVOKABLE void loadMoreSearch();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
   Q_INVOKABLE void loadMoreLibrary();
+  Q_INVOKABLE void cycleLibrarySort();
+  Q_INVOKABLE void toggleLibraryFavoritesOnly();
+  Q_INVOKABLE void toggleLibraryUnwatchedOnly();
   Q_INVOKABLE bool libraryVisibleInRail(const QString& libraryId) const;
   Q_INVOKABLE void setLibraryVisibleInRail(const QString& libraryId, bool visible);
   Q_INVOKABLE void moveLibrary(const QString& libraryId, int offset);
@@ -319,6 +330,9 @@ private:
   void applyLibraryMenuPreferences(const QVariantMap& customPrefs);
   void changeLibraryMenuPreference(const QString& key, const QString& value);
   void flushLibraryMenuPreferences();
+  void reloadLibrary();
+  void queueLibraryPreferenceChanges(const QVariantMap& changes);
+  void flushLibraryPreferenceChanges();
   void refreshProfileSettings();
   void applyProfileSettings(const QVariantMap& values);
   void changeProfileSetting(const QString& key, const QString& value);
@@ -387,6 +401,13 @@ private:
   QVariantList m_libraryItems;
   bool m_libraryHasMore = false;
   bool m_libraryLoading = false;
+  bool m_libraryPrefsReady = false;
+  QString m_librarySortBy = QStringLiteral("SortName");
+  QString m_librarySortOrder = QStringLiteral("Ascending");
+  bool m_libraryFavoritesOnly = false;
+  bool m_libraryUnwatchedOnly = false;
+  QVariantList m_libraryPrefQueue;
+  bool m_libraryPrefWriteActive = false;
   quint64 m_libraryBrowseRevision = 0;
   QVariantMap m_selectedItem;
   QVariantList m_selectedCast;

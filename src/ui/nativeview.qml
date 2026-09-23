@@ -1448,6 +1448,8 @@ Window {
             }
             onActiveFocusChanged: if (activeFocus && currentIndex >= 0 && currentIndex < familyApi.searchResults.length)
                 window.focusedItem = familyApi.searchResults[currentIndex]
+            onCountChanged: if (activeFocus && currentIndex >= 0 && currentIndex < familyApi.searchResults.length)
+                window.focusedItem = familyApi.searchResults[currentIndex]
             Keys.onReturnPressed: if (currentIndex >= 0) window.showItem(familyApi.searchResults[currentIndex], "search")
             Keys.onEnterPressed: if (currentIndex >= 0) window.showItem(familyApi.searchResults[currentIndex], "search")
             Keys.onUpPressed: function(event) {
@@ -1534,11 +1536,37 @@ Window {
             text: familyApi.libraryLoading ? "Loading…" : (familyApi.libraryItems.length + " items")
             color: familyApi.themeText; font.pixelSize: 17
         }
+        Row {
+            x: 28; y: 88
+            spacing: 12
+            NativeAction {
+                id: librarySortButton
+                width: 255
+                text: "Sort: " + familyApi.librarySortLabel
+                enabled: familyApi.libraryPreferencesReady
+                downAction: function() { libraryItemsGrid.forceActiveFocus() }
+                onClicked: familyApi.cycleLibrarySort()
+            }
+            NativeAction {
+                width: 180
+                text: "Unwatched: " + (familyApi.libraryUnwatchedOnly ? "On" : "Off")
+                enabled: familyApi.libraryPreferencesReady
+                downAction: function() { libraryItemsGrid.forceActiveFocus() }
+                onClicked: familyApi.toggleLibraryUnwatchedOnly()
+            }
+            NativeAction {
+                width: 175
+                text: "Favourites: " + (familyApi.libraryFavoritesOnly ? "On" : "Off")
+                enabled: familyApi.libraryPreferencesReady
+                downAction: function() { libraryItemsGrid.forceActiveFocus() }
+                onClicked: familyApi.toggleLibraryFavoritesOnly()
+            }
+        }
         GridView {
             id: libraryItemsGrid
-            x: 25; y: 100
+            x: 25; y: 160
             width: parent.width - 50
-            height: parent.height - 120
+            height: parent.height - 180
             cellWidth: 245; cellHeight: 180
             model: familyApi.libraryItems
             focus: visible
@@ -1551,8 +1579,16 @@ Window {
             }
             onActiveFocusChanged: if (activeFocus && currentIndex >= 0 && currentIndex < familyApi.libraryItems.length)
                 window.focusedItem = familyApi.libraryItems[currentIndex]
+            onCountChanged: if (activeFocus && currentIndex >= 0 && currentIndex < familyApi.libraryItems.length)
+                window.focusedItem = familyApi.libraryItems[currentIndex]
             Keys.onReturnPressed: if (currentIndex >= 0) window.showItem(familyApi.libraryItems[currentIndex], "libraryBrowse")
             Keys.onEnterPressed: if (currentIndex >= 0) window.showItem(familyApi.libraryItems[currentIndex], "libraryBrowse")
+            Keys.onUpPressed: function(event) {
+                if (libraryItemsGrid.currentIndex < Math.max(1, Math.floor(libraryItemsGrid.width / libraryItemsGrid.cellWidth))) {
+                    librarySortButton.forceActiveFocus()
+                    event.accepted = true
+                }
+            }
             Keys.onEscapePressed: page = "allLibraries"
             delegate: Rectangle {
                 required property var modelData

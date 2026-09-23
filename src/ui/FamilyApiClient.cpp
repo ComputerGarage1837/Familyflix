@@ -280,6 +280,38 @@ QStringList decodeHomeRows(const QString& encoded)
   }
   return rows;
 }
+
+QString apiSortFromPreference(const QString& encoded)
+{
+  static const QHash<QString, QString> values{
+    { QStringLiteral("SORT_NAME"), QStringLiteral("SortName") },
+    { QStringLiteral("DATE_CREATED"), QStringLiteral("DateCreated") },
+    { QStringLiteral("PREMIERE_DATE"), QStringLiteral("PremiereDate") },
+    { QStringLiteral("OFFICIAL_RATING"), QStringLiteral("OfficialRating") },
+    { QStringLiteral("COMMUNITY_RATING"), QStringLiteral("CommunityRating") },
+    { QStringLiteral("CRITIC_RATING"), QStringLiteral("CriticRating") },
+    { QStringLiteral("DATE_PLAYED"), QStringLiteral("DatePlayed") },
+    { QStringLiteral("SERIES_DATE_PLAYED"), QStringLiteral("SeriesDatePlayed") },
+    { QStringLiteral("RUNTIME"), QStringLiteral("Runtime") }
+  };
+  return values.value(encoded.toUpper(), encoded);
+}
+
+QString preferenceSortFromApi(const QString& api)
+{
+  static const QHash<QString, QString> values{
+    { QStringLiteral("SortName"), QStringLiteral("SORT_NAME") },
+    { QStringLiteral("DateCreated"), QStringLiteral("DATE_CREATED") },
+    { QStringLiteral("PremiereDate"), QStringLiteral("PREMIERE_DATE") },
+    { QStringLiteral("OfficialRating"), QStringLiteral("OFFICIAL_RATING") },
+    { QStringLiteral("CommunityRating"), QStringLiteral("COMMUNITY_RATING") },
+    { QStringLiteral("CriticRating"), QStringLiteral("CRITIC_RATING") },
+    { QStringLiteral("DatePlayed"), QStringLiteral("DATE_PLAYED") },
+    { QStringLiteral("SeriesDatePlayed"), QStringLiteral("SERIES_DATE_PLAYED") },
+    { QStringLiteral("Runtime"), QStringLiteral("RUNTIME") }
+  };
+  return values.value(api, QStringLiteral("SORT_NAME"));
+}
 }
 
 FamilyApiClient::FamilyApiClient(QObject* parent)
@@ -1880,6 +1912,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_libraryMenuWriteActive = false;
   m_libraryMenuPrefsValues.clear();
   m_libraryMenuPending.clear();
+  m_libraryPrefQueue.clear(); m_libraryPrefWriteActive = false; m_libraryPrefsReady = false;
   m_homeRowOrder.clear();
   m_hiddenHomeRows.clear();
   m_skipBackMs = 10000;
@@ -1965,6 +1998,7 @@ void FamilyApiClient::signOut()
   m_libraryMenuWriteActive = false;
   m_libraryMenuPrefsValues.clear();
   m_libraryMenuPending.clear();
+  m_libraryPrefQueue.clear(); m_libraryPrefWriteActive = false; m_libraryPrefsReady = false;
   m_homeRowOrder.clear();
   m_hiddenHomeRows.clear();
   m_skipBackMs = 10000;
@@ -2319,6 +2353,126 @@ void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
   }
 }
 
+QString FamilyApiClient::librarySortLabel() const
+{
+  const QStringList keys{ QStringLiteral("SortName"), QStringLiteral("DateCreated"),
+    QStringLiteral("PremiereDate"), QStringLiteral("OfficialRating"),
+    QStringLiteral("CommunityRating"), QStringLiteral("CriticRating"),
+    QStringLiteral("DatePlayed"), QStringLiteral("SeriesDatePlayed"), QStringLiteral("Runtime") };
+  const QStringList labels{ QStringLiteral("Name"), QStringLiteral("Date added"),
+    QStringLiteral("Premiere date"), QStringLiteral("Age rating"),
+    QStringLiteral("Community rating"), QStringLiteral("Critic rating"),
+    QStringLiteral("Last played"), QStringLiteral("Last played"), QStringLiteral("Runtime") };
+  const int index = keys.indexOf(m_librarySortBy);
+  return index >= 0 ? labels[index] : QStringLiteral("Name");
+}
+
+void FamilyApiClient::reloadLibrary()
+{
+  ++m_libraryBrowseRevision;
+  m_libraryItems.clear();
+  m_libraryHasMore = true;
+  m_libraryLoading = false;
+  emit libraryBrowseChanged();
+  loadMoreLibrary();
+}
+
+void FamilyApiClient::queueLibraryPreferenceChanges(const QVariantMap& changes)
+{
+  const QString id = m_selectedLibrary.value(QStringLiteral("Id")).toString();
+  if (id.isEmpty() || changes.isEmpty()) return;
+  m_libraryPrefQueue.append(QVariantMap{ { QStringLiteral("id"), id },
+    { QStringLiteral("changes"), changes } });
+  flushLibraryPreferenceChanges();
+}
+
+void FamilyApiClient::flushLibraryPreferenceChanges()
+{
+  if (!signedIn() || m_libraryPrefWriteActive || m_libraryPrefQueue.isEmpty()) return;
+  const QVariantMap job = m_libraryPrefQueue.takeFirst().toMap();
+  const QString id = job.value(QStringLiteral("id")).toString();
+  const QVariantMap changes = job.value(QStringLiteral("changes")).toMap();
+  const QString path = QStringLiteral("DisplayPreferences/%1").arg(id);
+  const QVariantMap query{ { QStringLiteral("client"), QStringLiteral("jellyfin-androidtv") } };
+  const quint64 session = m_sessionRevision;
+  m_libraryPrefWriteActive = true;
+  request("GET", path, query, {}, [this, session, job, changes, path, query]
+          (const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) {
+      m_libraryPrefWriteActive = false;
+      m_libraryPrefQueue.prepend(job);
+      emit errorOccurred(QStringLiteral("Library choices could not be synced."));
+      return;
+    }
+    QVariantMap document = data.toMap();
+    QVariantMap custom = document.value(QStringLiteral("CustomPrefs")).toMap();
+    for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+      custom.insert(it.key(), it.value());
+    document.insert(QStringLiteral("CustomPrefs"), custom);
+    request("POST", path, query,
+            QJsonDocument(QJsonObject::fromVariantMap(document)).toJson(QJsonDocument::Compact),
+            [this, session, job](const QVariant&, const QString& writeError) {
+      if (session != m_sessionRevision) return;
+      m_libraryPrefWriteActive = false;
+      if (!writeError.isEmpty()) {
+        m_libraryPrefQueue.prepend(job);
+        emit errorOccurred(QStringLiteral("Library choice could not be saved."));
+        return;
+      }
+      flushLibraryPreferenceChanges();
+    });
+  });
+}
+
+void FamilyApiClient::cycleLibrarySort()
+{
+  if (!m_libraryPrefsReady) return;
+  const QStringList keys{ QStringLiteral("SortName"), QStringLiteral("DateCreated"),
+    QStringLiteral("PremiereDate"), QStringLiteral("OfficialRating"),
+    QStringLiteral("CommunityRating"), QStringLiteral("CriticRating"),
+    QStringLiteral("DatePlayed"), QStringLiteral("Runtime") };
+  const int current = m_librarySortBy == QStringLiteral("SeriesDatePlayed")
+    ? keys.indexOf(QStringLiteral("DatePlayed")) : keys.indexOf(m_librarySortBy);
+  const int next = (current + 1) % keys.size();
+  m_librarySortBy = keys[next];
+  if (m_librarySortBy == QStringLiteral("DatePlayed")
+      && m_selectedLibrary.value(QStringLiteral("CollectionType")).toString() == QStringLiteral("tvshows"))
+    m_librarySortBy = QStringLiteral("SeriesDatePlayed");
+  m_librarySortOrder = next == 0 || next == 3 || next == 7
+    ? QStringLiteral("Ascending") : QStringLiteral("Descending");
+  const QString cache = QStringLiteral("users/%1/libraries/%2/").arg(m_userId,
+    m_selectedLibrary.value(QStringLiteral("Id")).toString());
+  m_settings.setValue(cache + QStringLiteral("sortBy"), m_librarySortBy);
+  m_settings.setValue(cache + QStringLiteral("sortOrder"), m_librarySortOrder);
+  queueLibraryPreferenceChanges(QVariantMap{
+    { QStringLiteral("SortBy"), preferenceSortFromApi(m_librarySortBy) },
+    { QStringLiteral("SortOrder"), m_librarySortOrder.toUpper() } });
+  reloadLibrary();
+}
+
+void FamilyApiClient::toggleLibraryFavoritesOnly()
+{
+  if (!m_libraryPrefsReady) return;
+  m_libraryFavoritesOnly = !m_libraryFavoritesOnly;
+  m_settings.setValue(QStringLiteral("users/%1/libraries/%2/favoritesOnly").arg(m_userId,
+    m_selectedLibrary.value(QStringLiteral("Id")).toString()), m_libraryFavoritesOnly);
+  queueLibraryPreferenceChanges(QVariantMap{
+    { QStringLiteral("FilterFavoritesOnly"), m_libraryFavoritesOnly ? QStringLiteral("true") : QStringLiteral("false") } });
+  reloadLibrary();
+}
+
+void FamilyApiClient::toggleLibraryUnwatchedOnly()
+{
+  if (!m_libraryPrefsReady) return;
+  m_libraryUnwatchedOnly = !m_libraryUnwatchedOnly;
+  m_settings.setValue(QStringLiteral("users/%1/libraries/%2/unwatchedOnly").arg(m_userId,
+    m_selectedLibrary.value(QStringLiteral("Id")).toString()), m_libraryUnwatchedOnly);
+  queueLibraryPreferenceChanges(QVariantMap{
+    { QStringLiteral("FilterUnwatchedOnly"), m_libraryUnwatchedOnly ? QStringLiteral("true") : QStringLiteral("false") } });
+  reloadLibrary();
+}
+
 void FamilyApiClient::openLibrary(const QVariantMap& library)
 {
   if (!signedIn() || library.value(QStringLiteral("Id")).toString().isEmpty()) return;
@@ -2327,8 +2481,48 @@ void FamilyApiClient::openLibrary(const QVariantMap& library)
   m_libraryItems.clear();
   m_libraryHasMore = true;
   m_libraryLoading = false;
+  m_libraryPrefsReady = true;
+  const QString cache = QStringLiteral("users/%1/libraries/%2/").arg(m_userId,
+    library.value(QStringLiteral("Id")).toString());
+  m_librarySortBy = m_settings.value(cache + QStringLiteral("sortBy"),
+    QStringLiteral("SortName")).toString();
+  m_librarySortOrder = m_settings.value(cache + QStringLiteral("sortOrder"),
+    QStringLiteral("Ascending")).toString();
+  m_libraryFavoritesOnly = m_settings.value(cache + QStringLiteral("favoritesOnly"), false).toBool();
+  m_libraryUnwatchedOnly = m_settings.value(cache + QStringLiteral("unwatchedOnly"), false).toBool();
   emit libraryBrowseChanged();
   loadMoreLibrary();
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = m_libraryBrowseRevision;
+  const QString path = QStringLiteral("DisplayPreferences/%1").arg(library.value(QStringLiteral("Id")).toString());
+  request("GET", path, { { QStringLiteral("client"), QStringLiteral("jellyfin-androidtv") } }, {},
+          [this, session, revision, cache](const QVariant& response, const QString& error) {
+    if (session != m_sessionRevision || revision != m_libraryBrowseRevision) return;
+    if (!error.isEmpty()) return;
+    const QVariantMap custom = response.toMap().value(QStringLiteral("CustomPrefs")).toMap();
+    const QString sort = apiSortFromPreference(custom.value(QStringLiteral("SortBy")).toString());
+    const QStringList allowed{ QStringLiteral("SortName"), QStringLiteral("DateCreated"),
+      QStringLiteral("PremiereDate"), QStringLiteral("OfficialRating"),
+      QStringLiteral("CommunityRating"), QStringLiteral("CriticRating"),
+      QStringLiteral("DatePlayed"), QStringLiteral("SeriesDatePlayed"), QStringLiteral("Runtime") };
+    const QString sortBy = allowed.contains(sort) ? sort : QStringLiteral("SortName");
+    const QString sortOrder = custom.value(QStringLiteral("SortOrder")).toString().compare(
+      QStringLiteral("Descending"), Qt::CaseInsensitive) == 0
+      ? QStringLiteral("Descending") : QStringLiteral("Ascending");
+    const bool favorites = custom.value(QStringLiteral("FilterFavoritesOnly")).toString() == QStringLiteral("true");
+    const bool unwatched = custom.value(QStringLiteral("FilterUnwatchedOnly")).toString() == QStringLiteral("true");
+    const bool changed = m_librarySortBy != sortBy || m_librarySortOrder != sortOrder
+      || m_libraryFavoritesOnly != favorites || m_libraryUnwatchedOnly != unwatched;
+    m_librarySortBy = sortBy;
+    m_librarySortOrder = sortOrder;
+    m_libraryFavoritesOnly = favorites;
+    m_libraryUnwatchedOnly = unwatched;
+    m_settings.setValue(cache + QStringLiteral("sortBy"), sortBy);
+    m_settings.setValue(cache + QStringLiteral("sortOrder"), sortOrder);
+    m_settings.setValue(cache + QStringLiteral("favoritesOnly"), favorites);
+    m_settings.setValue(cache + QStringLiteral("unwatchedOnly"), unwatched);
+    if (changed) reloadLibrary();
+  });
 }
 
 void FamilyApiClient::loadMoreLibrary()
@@ -2345,15 +2539,17 @@ void FamilyApiClient::loadMoreLibrary()
   const quint64 revision = m_libraryBrowseRevision;
   m_libraryLoading = true;
   emit libraryBrowseChanged();
-  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
-          { { QStringLiteral("ParentId"), parentId },
-            { QStringLiteral("Recursive"), true },
-            { QStringLiteral("IncludeItemTypes"), types },
-            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
-            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
-            { QStringLiteral("StartIndex"), offset },
-            { QStringLiteral("Limit"), 60 },
-            { QStringLiteral("EnableUserData"), true } }, {},
+  QVariantMap query{ { QStringLiteral("ParentId"), parentId },
+    { QStringLiteral("Recursive"), true },
+    { QStringLiteral("IncludeItemTypes"), types },
+    { QStringLiteral("SortBy"), m_librarySortBy },
+    { QStringLiteral("SortOrder"), m_librarySortOrder },
+    { QStringLiteral("StartIndex"), offset },
+    { QStringLiteral("Limit"), 60 },
+    { QStringLiteral("EnableUserData"), true } };
+  if (m_libraryFavoritesOnly) query.insert(QStringLiteral("IsFavorite"), true);
+  if (m_libraryUnwatchedOnly) query.insert(QStringLiteral("IsPlayed"), false);
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId), query, {},
           [this, session, revision](const QVariant& data, const QString& error) {
     if (session != m_sessionRevision || revision != m_libraryBrowseRevision) return;
     m_libraryLoading = false;
@@ -2558,6 +2754,7 @@ void FamilyApiClient::setPlayed(const QVariantMap& item, bool played)
     if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Watch status did not save.")); return; }
     if (m_selectedItem.value(QStringLiteral("Id")).toString() == itemId) openItem(itemId);
     refreshHome();
+    if (m_libraryUnwatchedOnly && !m_selectedLibrary.isEmpty()) reloadLibrary();
     refreshWatchlist();
     refreshHouseholdWatchlist();
   });
@@ -2575,6 +2772,7 @@ void FamilyApiClient::setFavorite(const QVariantMap& item, bool favorite)
     if (session != m_sessionRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Favourite status did not save.")); return; }
     if (m_selectedItem.value(QStringLiteral("Id")).toString() == itemId) openItem(itemId);
+    if (m_libraryFavoritesOnly && !m_selectedLibrary.isEmpty()) reloadLibrary();
     if (!m_searchQuery.isEmpty()) search(m_searchQuery);
   });
 }
