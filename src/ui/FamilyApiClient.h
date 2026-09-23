@@ -67,6 +67,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QString activeSeriesIntroSkipMode READ activeSeriesIntroSkipMode NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(bool activeSeriesPreferencesReady READ activeSeriesPreferencesReady NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(bool activeSeriesPreferencesBusy READ activeSeriesPreferencesBusy NOTIFY seriesPlaybackPreferencesChanged)
+  Q_PROPERTY(QVariantMap activeSeriesPlaybackValues READ activeSeriesPlaybackValues NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
   Q_PROPERTY(QColor themeScreen READ themeScreen NOTIFY themeChanged)
   Q_PROPERTY(QColor themeSurface READ themeSurface NOTIFY themeChanged)
@@ -130,6 +131,7 @@ public:
   QString activeSeriesIntroSkipMode() const { return m_activeSeriesIntroSkipMode; }
   bool activeSeriesPreferencesReady() const { return m_activeSeriesPreferencesReady; }
   bool activeSeriesPreferencesBusy() const { return m_activeSeriesPreferencesWriteActive; }
+  QVariantMap activeSeriesPlaybackValues() const { return m_activeSeriesValues; }
   QString themeName() const { return m_themeName; }
   QColor themeScreen() const;
   QColor themeSurface() const;

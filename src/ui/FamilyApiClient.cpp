@@ -344,13 +344,21 @@ void FamilyApiClient::refreshSeriesPlaybackPreferences(const QString& seriesId)
 void FamilyApiClient::setActiveSeriesPlaybackPreference(const QString& key, const QString& value)
 {
   static const QHash<QString, QStringList> allowed{
+    { QStringLiteral("audioMode"), { QStringLiteral("SERVER_DEFAULT"), QStringLiteral("PREFER_LANGUAGE"),
+      QStringLiteral("REMEMBER_LAST_SELECTION") } },
+    { QStringLiteral("subtitleMode"), { QStringLiteral("SERVER_DEFAULT"), QStringLiteral("OFF"),
+      QStringLiteral("FORCED_ONLY"), QStringLiteral("FULL") } },
     { QStringLiteral("introSkipMode"), { QStringLiteral("APP_DEFAULT"), QStringLiteral("ASK"),
       QStringLiteral("AUTO_SKIP"), QStringLiteral("DO_NOT_SKIP") } },
     { QStringLiteral("autoplayMode"), { QStringLiteral("APP_DEFAULT"), QStringLiteral("PLAY_NEXT"),
       QStringLiteral("STOP_AFTER_EPISODE") } }
   };
+  static const QRegularExpression validLanguage(QStringLiteral("^[A-Za-z0-9_-]{0,32}$"));
+  const bool languageKey = key == QStringLiteral("preferredAudioLanguage")
+    || key == QStringLiteral("preferredSubtitleLanguage");
   if (!signedIn() || !m_activeSeriesPreferencesReady || m_activeSeriesPreferencesWriteActive
-      || !allowed.value(key).contains(value) || m_activeSeriesId.isEmpty()) return;
+      || !(languageKey ? validLanguage.match(value).hasMatch() : allowed.value(key).contains(value))
+      || m_activeSeriesId.isEmpty()) return;
   m_activeSeriesPreferencesWriteActive = true;
   emit seriesPlaybackPreferencesChanged();
   const quint64 session = m_sessionRevision;

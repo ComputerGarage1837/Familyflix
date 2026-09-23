@@ -71,6 +71,10 @@ Window {
     property bool playerPaused: false
     property bool trackMenuVisible: false
     property var availableTracks: []
+    property bool seriesTracksApplied: false
+    property int seriesTrackAttempts: 0
+    property bool explicitAudioSelection: false
+    property bool explicitSubtitleSelection: false
     property bool sidebarExpanded: true
     property int lastHomeRow: 0
     property int lastHomeCard: 0
@@ -301,6 +305,10 @@ Window {
             playerIsLive = false
             activeSkipSegment = ({})
             lastSkipSegmentKey = ""
+            seriesTracksApplied = false
+            seriesTrackAttempts = 0
+            explicitAudioSelection = false
+            explicitSubtitleSelection = false
             familyApi.refreshSeriesPlaybackPreferences(item.Type === "Episode" ? (item.SeriesId || "") : "")
             familyApi.refreshMediaSegments(item.Id)
             page = "player"
@@ -423,6 +431,40 @@ Window {
         }
     }
 
+    function applySeriesTracks() {
+        if (page !== "player" || playingItem.Type !== "Episode"
+            || !familyApi.activeSeriesPreferencesReady || seriesTracksApplied) return
+        const tracks = components.player.getPlaybackTracks()
+        if (!tracks.length) {
+            seriesTrackAttempts++
+            return
+        }
+        const prefs = familyApi.activeSeriesPlaybackValues
+        if (!explicitAudioSelection && prefs.audioMode !== "SERVER_DEFAULT"
+            && prefs.preferredAudioLanguage) {
+            const audio = tracks.find(function(track) {
+                return track.type === "audio"
+                    && String(track.lang || "").toLowerCase() === String(prefs.preferredAudioLanguage).toLowerCase()
+            })
+            if (audio) components.player.setAudioStream(Number(audio.id))
+        }
+        if (!explicitSubtitleSelection && prefs.subtitleMode !== "SERVER_DEFAULT") {
+            const language = String(prefs.preferredSubtitleLanguage || "").toLowerCase()
+            const matches = tracks.filter(function(track) {
+                return track.type === "sub" && (!language || String(track.lang || "").toLowerCase() === language)
+            })
+            if (prefs.subtitleMode === "OFF") components.player.setSubtitleStream(-1)
+            else if (prefs.subtitleMode === "FORCED_ONLY") {
+                const forced = matches.find(function(track) { return track.forced === true })
+                components.player.setSubtitleStream(forced ? Number(forced.id) : -1)
+            } else if (prefs.subtitleMode === "FULL") {
+                const full = matches.find(function(track) { return track.forced !== true }) || matches[0]
+                components.player.setSubtitleStream(full ? Number(full.id) : -1)
+            }
+        }
+        seriesTracksApplied = true
+    }
+
     onPageChanged: {
         if (page === "player") {
             playerControlsVisible = false
@@ -498,6 +540,13 @@ Window {
             window.notice = message
             noticeTimer.restart()
         }
+        function onSeriesPlaybackPreferencesChanged() {
+            if (window.page === "player" && window.playingItem.Type === "Episode") {
+                window.seriesTracksApplied = false
+                window.seriesTrackAttempts = 0
+                Qt.callLater(window.applySeriesTracks)
+            }
+        }
         function onIssueReportFinished(success, message) {
             window.issueReportPending = false
             window.notice = message
@@ -560,6 +609,7 @@ Window {
             if (window.page === "player" && !window.playerIsLive) {
                 window.playerPaused = false
                 familyApi.reportPlaybackStart(window.playingItem, components.player.getPosition() * 1000)
+                Qt.callLater(window.applySeriesTracks)
             }
         }
         function onPaused() {
@@ -636,6 +686,12 @@ Window {
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
     Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
+    Timer {
+        interval: 500; repeat: true
+        running: window.page === "player" && window.playingItem.Type === "Episode"
+            && !window.seriesTracksApplied && window.seriesTrackAttempts < 10
+        onTriggered: window.applySeriesTracks()
+    }
     Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
     Timer {
         interval: 1000; repeat: true; running: window.sleepDeadlineMs > 0
@@ -2210,6 +2266,40 @@ Window {
                     familyApi.setActiveSeriesPlaybackPreference("autoplayMode", modes[(current + 1) % modes.length])
                 }
             }
+            NativeAction {
+                width: 450
+                enabled: familyApi.activeSeriesPreferencesReady && !familyApi.activeSeriesPreferencesBusy
+                text: "Audio: " + ({ SERVER_DEFAULT: "Server default", PREFER_LANGUAGE: "Preferred language",
+                    REMEMBER_LAST_SELECTION: "Remember last choice" })[familyApi.activeSeriesPlaybackValues.audioMode]
+                onClicked: {
+                    const modes = ["SERVER_DEFAULT", "PREFER_LANGUAGE", "REMEMBER_LAST_SELECTION"]
+                    const current = modes.indexOf(familyApi.activeSeriesPlaybackValues.audioMode)
+                    familyApi.setActiveSeriesPlaybackPreference("audioMode", modes[(current + 1) % modes.length])
+                }
+            }
+            Text {
+                color: familyApi.themeText; font.pixelSize: 16
+                text: "Preferred audio language: " + (familyApi.activeSeriesPlaybackValues.preferredAudioLanguage || "not set")
+            }
+            NativeAction {
+                width: 450
+                enabled: familyApi.activeSeriesPreferencesReady && !familyApi.activeSeriesPreferencesBusy
+                text: "Subtitles: " + ({ SERVER_DEFAULT: "Server default", OFF: "Off",
+                    FORCED_ONLY: "Forced only", FULL: "Full" })[familyApi.activeSeriesPlaybackValues.subtitleMode]
+                onClicked: {
+                    const modes = ["SERVER_DEFAULT", "OFF", "FORCED_ONLY", "FULL"]
+                    const current = modes.indexOf(familyApi.activeSeriesPlaybackValues.subtitleMode)
+                    familyApi.setActiveSeriesPlaybackPreference("subtitleMode", modes[(current + 1) % modes.length])
+                }
+            }
+            Text {
+                color: familyApi.themeText; font.pixelSize: 16
+                text: "Preferred subtitle language: " + (familyApi.activeSeriesPlaybackValues.preferredSubtitleLanguage || "any")
+            }
+            Text {
+                width: parent.width; color: familyApi.themeText; font.pixelSize: 15; wrapMode: Text.WordWrap
+                text: "To set a language, choose an audio or subtitle track during playback, then use its series-language button."
+            }
         }
     }
 
@@ -2480,13 +2570,27 @@ Window {
                                 height: 45
                                 text: (modelData.selected ? "✓  " : "") + (modelData.title || modelData.lang || "Audio track") + " · " + modelData.id
                                 onClicked: {
+                                    window.explicitAudioSelection = true
                                     components.player.setAudioStream(Number(modelData.id))
                                     window.availableTracks = components.player.getPlaybackTracks()
                                 }
                             }
                         }
+                        NativeAction {
+                            width: parent.width; height: 45
+                            visible: window.playingItem.Type === "Episode"
+                            enabled: familyApi.activeSeriesPreferencesReady && !familyApi.activeSeriesPreferencesBusy
+                            text: "Use selected audio language for this show"
+                            onClicked: {
+                                const selected = window.availableTracks.find(function(track) {
+                                    return track.type === "audio" && track.selected && track.lang
+                                })
+                                if (selected) familyApi.setActiveSeriesPlaybackPreference(
+                                    "preferredAudioLanguage", String(selected.lang).toLowerCase())
+                            }
+                        }
                         Text { text: "Subtitles"; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
-                        NativeAction { width: parent.width; height: 45; text: "Off"; onClicked: { components.player.setSubtitleStream(-1); window.availableTracks = components.player.getPlaybackTracks() } }
+                        NativeAction { width: parent.width; height: 45; text: "Off"; onClicked: { window.explicitSubtitleSelection = true; components.player.setSubtitleStream(-1); window.availableTracks = components.player.getPlaybackTracks() } }
                         Repeater {
                             model: window.availableTracks.filter(function(track) { return track.type === "sub" })
                             NativeAction {
@@ -2494,9 +2598,23 @@ Window {
                                 height: 45
                                 text: (modelData.selected ? "✓  " : "") + (modelData.title || modelData.lang || "Subtitle track") + " · " + modelData.id
                                 onClicked: {
+                                    window.explicitSubtitleSelection = true
                                     components.player.setSubtitleStream(Number(modelData.id))
                                     window.availableTracks = components.player.getPlaybackTracks()
                                 }
+                            }
+                        }
+                        NativeAction {
+                            width: parent.width; height: 45
+                            visible: window.playingItem.Type === "Episode"
+                            enabled: familyApi.activeSeriesPreferencesReady && !familyApi.activeSeriesPreferencesBusy
+                            text: "Use selected subtitle language for this show"
+                            onClicked: {
+                                const selected = window.availableTracks.find(function(track) {
+                                    return track.type === "sub" && track.selected && track.lang
+                                })
+                                if (selected) familyApi.setActiveSeriesPlaybackPreference(
+                                    "preferredSubtitleLanguage", String(selected.lang).toLowerCase())
                             }
                         }
                     }
