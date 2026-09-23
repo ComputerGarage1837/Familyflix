@@ -44,6 +44,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool libraryHasMore READ libraryHasMore NOTIFY libraryBrowseChanged)
   Q_PROPERTY(bool libraryLoading READ libraryLoading NOTIFY libraryBrowseChanged)
   Q_PROPERTY(QVariantMap selectedItem READ selectedItem NOTIFY selectedItemChanged)
+  Q_PROPERTY(QVariantList selectedCast READ selectedCast NOTIFY selectedCastChanged)
   Q_PROPERTY(QVariantMap selectedIssueSummary READ selectedIssueSummary NOTIFY selectedIssueSummaryChanged)
   Q_PROPERTY(QVariantList watchlistEntries READ watchlistEntries NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList householdWatchlistEntries READ householdWatchlistEntries NOTIFY watchlistChanged)
@@ -96,6 +97,7 @@ public:
   bool libraryHasMore() const { return m_libraryHasMore; }
   bool libraryLoading() const { return m_libraryLoading; }
   QVariantMap selectedItem() const { return m_selectedItem; }
+  QVariantList selectedCast() const { return m_selectedCast; }
   QVariantMap selectedIssueSummary() const { return m_selectedIssueSummary; }
   QVariantList watchlistEntries() const { return m_watchlistEntries; }
   QVariantList householdWatchlistEntries() const { return m_householdWatchlistEntries; }
@@ -196,6 +198,7 @@ signals:
   void homeChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
+  void selectedCastChanged();
   void selectedIssueSummaryChanged();
   void watchlistChanged();
   void seriesChanged();
@@ -290,6 +293,7 @@ private:
   bool m_libraryLoading = false;
   quint64 m_libraryBrowseRevision = 0;
   QVariantMap m_selectedItem;
+  QVariantList m_selectedCast;
   QVariantMap m_selectedIssueSummary;
   QVariantList m_watchlistEntries;
   QVariantList m_householdWatchlistEntries;

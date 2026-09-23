@@ -111,6 +111,24 @@ bool laterFamilyVersion(const QList<int>& candidate, const QList<int>& current)
   return false;
 }
 
+QVariantList peopleOfType(const QVariantMap& item, const QString& type)
+{
+  QVariantList result;
+  QSet<QString> seen;
+  for (const auto& value : item.value(QStringLiteral("People")).toList()) {
+    const auto person = value.toMap();
+    if (person.value(QStringLiteral("Type")).toString().compare(type, Qt::CaseInsensitive) != 0) continue;
+    const QString key = person.value(QStringLiteral("Id")).toString().isEmpty()
+      ? person.value(QStringLiteral("Name")).toString().toLower()
+      : person.value(QStringLiteral("Id")).toString();
+    if (key.isEmpty() || seen.contains(key)) continue;
+    seen.insert(key);
+    result.append(person);
+    if (result.size() == 7) break;
+  }
+  return result;
+}
+
 int channelBand(const QVariantMap& channel)
 {
   bool ok = false;
@@ -1191,7 +1209,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear(); m_recentDeckActivity.clear();
-  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
+  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_playlists.clear(); m_playlistItems.clear();
   m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
@@ -1209,7 +1227,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("userId"), m_userId);
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
-  emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged();
+  emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
@@ -1246,7 +1264,7 @@ void FamilyApiClient::signOut()
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear();
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
-  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
+  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
@@ -1267,6 +1285,7 @@ void FamilyApiClient::signOut()
   emit homeChanged();
   emit libraryBrowseChanged();
   emit selectedItemChanged();
+  emit selectedCastChanged();
   emit selectedIssueSummaryChanged();
   emit mediaSegmentsChanged();
   emit watchlistChanged();
@@ -1769,8 +1788,10 @@ void FamilyApiClient::openItem(const QString& itemId)
   const quint64 revision = m_sessionRevision;
   const quint64 itemRevision = ++m_itemRevision;
   m_selectedItem.clear();
+  m_selectedCast.clear();
   m_selectedIssueSummary.clear();
   emit selectedItemChanged();
+  emit selectedCastChanged();
   emit selectedIssueSummaryChanged();
   request("GET", QStringLiteral("FamilyFlix/Issues/Summaries"),
           { { QStringLiteral("ids"), itemId } }, {},
@@ -1786,6 +1807,31 @@ void FamilyApiClient::openItem(const QString& itemId)
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_selectedItem = data.toMap();
     emit selectedItemChanged();
+    const QString kind = m_selectedItem.value(QStringLiteral("Type")).toString();
+    m_selectedCast = peopleOfType(m_selectedItem,
+      kind == QStringLiteral("Episode") ? QStringLiteral("GuestStar") : QStringLiteral("Actor"));
+    emit selectedCastChanged();
+    if (kind == QStringLiteral("Episode") && m_selectedCast.isEmpty()) {
+      const QString seasonId = m_selectedItem.value(QStringLiteral("SeasonId")).toString();
+      const QString seriesId = m_selectedItem.value(QStringLiteral("SeriesId")).toString();
+      const auto loadSeries = [this, revision, itemRevision, seriesId] {
+        if (seriesId.isEmpty()) return;
+        request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, seriesId), {}, {},
+                [this, revision, itemRevision](const QVariant& series, const QString& seriesError) {
+          if (revision != m_sessionRevision || itemRevision != m_itemRevision || !seriesError.isEmpty()) return;
+          m_selectedCast = peopleOfType(series.toMap(), QStringLiteral("Actor"));
+          emit selectedCastChanged();
+        });
+      };
+      if (seasonId.isEmpty()) loadSeries();
+      else request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, seasonId), {}, {},
+                   [this, revision, itemRevision, loadSeries](const QVariant& season, const QString& seasonError) {
+        if (revision != m_sessionRevision || itemRevision != m_itemRevision) return;
+        if (seasonError.isEmpty()) m_selectedCast = peopleOfType(season.toMap(), QStringLiteral("Actor"));
+        if (m_selectedCast.isEmpty()) loadSeries();
+        else emit selectedCastChanged();
+      });
+    }
     if (m_selectedItem.value(QStringLiteral("Type")).toString() != QStringLiteral("Series")) return;
     m_seasons.clear(); m_episodes.clear();
     emit seriesChanged();

@@ -1729,8 +1729,57 @@ Window {
                 color: "#e4edf6"
                 font.pixelSize: 18
                 wrapMode: Text.WordWrap
-                maximumLineCount: 5
+                maximumLineCount: 3
                 elide: Text.ElideRight
+            }
+            Column {
+                width: parent.width
+                spacing: 6
+                visible: familyApi.selectedCast.length > 0
+                Text {
+                    text: familyApi.selectedItem.Type === "Episode"
+                        && (familyApi.selectedItem.People || []).some(function(person) { return person.Type === "GuestStar" })
+                        ? "Guest stars" : "Cast"
+                    color: familyApi.themeText; font.pixelSize: 20; font.bold: true
+                }
+                Flickable {
+                    width: parent.width
+                    height: 94
+                    contentWidth: castRow.width
+                    contentHeight: height
+                    clip: true
+                    Row {
+                        id: castRow
+                        spacing: 12
+                        Repeater {
+                            model: familyApi.selectedCast
+                            Column {
+                                width: 112
+                                spacing: 3
+                                Image {
+                                    width: 44; height: 44
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    source: familyApi.imageUrl(modelData.Id || "", "Primary")
+                                    fillMode: Image.PreserveAspectCrop
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: modelData.Name || ""
+                                    color: familyApi.themeText; font.pixelSize: 14
+                                    horizontalAlignment: Text.AlignHCenter
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: modelData.Role || ""
+                                    color: "#cad7e3"; font.pixelSize: 12
+                                    horizontalAlignment: Text.AlignHCenter
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Row {
                 spacing: 8
