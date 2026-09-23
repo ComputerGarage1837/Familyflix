@@ -69,6 +69,9 @@ Window {
     property string notice: ""
     property bool playerControlsVisible: false
     property bool playerPaused: false
+    property real playbackSpeed: 1.0
+    property real playerPositionSeconds: 0
+    property real playerDurationSeconds: 0
     property bool trackMenuVisible: false
     property var availableTracks: []
     property bool seriesTracksApplied: false
@@ -249,6 +252,27 @@ Window {
         else searchInput.text += key === "Space" ? " " : key
     }
 
+    function playbackTime(seconds) {
+        const safe = Math.max(0, Math.floor(Number(seconds) || 0))
+        const hours = Math.floor(safe / 3600)
+        const minutes = Math.floor((safe % 3600) / 60)
+        const remainder = safe % 60
+        return hours > 0
+            ? hours + ":" + String(minutes).padStart(2, "0") + ":" + String(remainder).padStart(2, "0")
+            : minutes + ":" + String(remainder).padStart(2, "0")
+    }
+
+    function focusPlayerSeek() {
+        if (playbackSeek.visible && playbackSeek.enabled) playbackSeek.forceActiveFocus()
+        else playerPanel.forceActiveFocus()
+    }
+
+    function playerControlsHaveFocus() {
+        if (playbackSeek.activeFocus) return true
+        for (const item of playerControlsRow.children) if (item.activeFocus) return true
+        return false
+    }
+
     function showSeason(season) {
         if (familyApi.selectedItem.Type !== "Series") return
         selectedSeries = familyApi.selectedItem
@@ -308,6 +332,8 @@ Window {
             livePreviewActive = false
             page = playerIsLive ? "liveTv" : playbackReturnPage
             playerIsLive = false
+            playerPositionSeconds = resume / 1000
+            playerDurationSeconds = Number(item.RunTimeTicks || 0) / 10000000
             components.player.stop()
         }
         notice = "Sleep timer ended playback"
@@ -356,6 +382,7 @@ Window {
         const resume = startOver ? 0 : Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
+        components.player.setPlaybackRate(Math.round(playbackSpeed * 1000))
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
             if (!automatic && playbackQueueIndex < 0) kidsQueuedEpisodes = 0
             if (item.Type === "Episode") kidsQueuedEpisodes++
@@ -405,6 +432,7 @@ Window {
         if (!stream) return
         const metadata = { type: "video", metadata: channel,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
+        components.player.setPlaybackRate(1000)
         if (components.player.load(stream, { autoplay: true }, metadata, 1, -1)) {
             playerIsLive = true
             livePreviewChannel = channel
@@ -611,6 +639,7 @@ Window {
             window.autoNextPending = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
+            window.playbackSpeed = 1.0
             window.sleepDeadlineMs = 0
             window.chosenUser = ""
             password.clear()
@@ -697,6 +726,12 @@ Window {
                 Qt.callLater(window.applySeriesTracks)
             }
         }
+        function onPositionChanged(positionMs) {
+            if (window.page === "player") window.playerPositionSeconds = Number(positionMs) / 1000
+        }
+        function onUpdateDuration(milliseconds) {
+            if (window.page === "player") window.playerDurationSeconds = Number(milliseconds) / 1000
+        }
         function onPaused() {
             if (window.page === "player" && !window.playerIsLive) {
                 window.playerPaused = true
@@ -772,7 +807,14 @@ Window {
         onTriggered: if (!window.playerIsLive) familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, false)
     }
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
-    Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
+    Timer {
+        id: controlsTimer
+        interval: 6000
+        onTriggered: {
+            if (window.playerControlsHaveFocus()) restart()
+            else window.playerControlsVisible = false
+        }
+    }
     Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
     Timer {
         interval: 500; repeat: true
@@ -1444,11 +1486,17 @@ Window {
                 familyApi.search(text)
                 if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
             }
-            Keys.onDownPressed: {
+            Keys.onDownPressed: function(event) {
                 if (window.searchKeyboardOpen) searchKeyRepeater.itemAt(0).forceActiveFocus()
                 else if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+                event.accepted = true
             }
-            Keys.onRightPressed: if (cursorPosition === text.length) searchKeyboardButton.forceActiveFocus()
+            Keys.onRightPressed: function(event) {
+                if (cursorPosition === text.length) {
+                    searchKeyboardButton.forceActiveFocus()
+                    event.accepted = true
+                }
+            }
         }
         NativeAction {
             id: searchKeyboardButton
@@ -2886,6 +2934,13 @@ Window {
                 const delta = event.key === Qt.Key_Left ? -familyApi.skipBackMs : familyApi.skipForwardMs
                 components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 + delta))
                 event.accepted = true
+            } else if (event.key === Qt.Key_Down) {
+                playerPauseButton.forceActiveFocus()
+                event.accepted = true
+            } else if (event.key === Qt.Key_Up) {
+                if (skipPromptButton.visible) skipPromptButton.forceActiveFocus()
+                else window.focusPlayerSeek()
+                event.accepted = true
             }
         }
         MouseArea {
@@ -2893,14 +2948,16 @@ Window {
             onClicked: { window.playerControlsVisible = true; controlsTimer.restart(); playerPanel.forceActiveFocus() }
         }
         NativeAction {
+            id: skipPromptButton
             anchors.right: parent.right
             anchors.rightMargin: 28
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: window.playerControlsVisible ? 120 : 32
+            anchors.bottomMargin: window.playerControlsVisible ? 165 : 32
             width: 190
             height: 54
             visible: !!window.activeSkipSegment.Key
             text: "Skip " + (window.activeSkipSegment.Type || "segment")
+            downAction: function() { playerPauseButton.forceActiveFocus() }
             onClicked: {
                 components.player.seekTo(window.activeSkipSegment.End)
                 window.activeSkipSegment = ({})
@@ -2911,15 +2968,77 @@ Window {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 106
+            height: 150
             color: "#df08121d"
             visible: window.playerControlsVisible
-            Row {
-                anchors.centerIn: parent
-                spacing: 14
-                NativeAction { text: "Back"; onClicked: window.goBack() }
+            Column {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 10
+                Row {
+                    width: parent.width
+                    height: 42
+                    spacing: 10
+                    Text {
+                        width: 80; height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
+                        text: window.playerIsLive ? "LIVE" : window.playbackTime(window.playerPositionSeconds)
+                        color: "white"; font.pixelSize: 17
+                    }
+                    Slider {
+                        id: playbackSeek
+                        width: parent.width - 180
+                        height: parent.height
+                        visible: !window.playerIsLive
+                        enabled: window.playerDurationSeconds > 0
+                        activeFocusOnTab: true
+                        from: 0
+                        to: Math.max(1, window.playerDurationSeconds)
+                        value: window.playerPositionSeconds
+                        stepSize: 10
+                        onMoved: {
+                            window.playerPositionSeconds = value
+                            components.player.seekTo(Math.round(value * 1000))
+                            controlsTimer.restart()
+                        }
+                        Keys.onDownPressed: playerPauseButton.forceActiveFocus()
+                        background: Rectangle {
+                            x: playbackSeek.leftPadding
+                            y: playbackSeek.topPadding + playbackSeek.availableHeight / 2 - height / 2
+                            width: playbackSeek.availableWidth; height: 7; radius: 4
+                            color: familyApi.themeAccentSecondary
+                            Rectangle {
+                                width: parent.width * playbackSeek.visualPosition
+                                height: parent.height; radius: parent.radius
+                                color: familyApi.themeAccent
+                            }
+                        }
+                        handle: Rectangle {
+                            x: playbackSeek.leftPadding + playbackSeek.visualPosition * (playbackSeek.availableWidth - width)
+                            y: playbackSeek.topPadding + playbackSeek.availableHeight / 2 - height / 2
+                            width: 20; height: 20; radius: 10
+                            color: playbackSeek.activeFocus ? familyApi.themeOnAccent : familyApi.themeAccent
+                            border.color: familyApi.themeAccentSecondary
+                        }
+                    }
+                    Text {
+                        width: 80; height: parent.height
+                        verticalAlignment: Text.AlignVCenter
+                        text: window.playerIsLive ? "" : window.playbackTime(window.playerDurationSeconds)
+                        color: "white"; font.pixelSize: 17
+                    }
+                }
+                Row {
+                id: playerControlsRow
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 10
+                NativeAction { width: 120; text: "Back"; upAction: function() { window.focusPlayerSeek() }; onClicked: window.goBack() }
                 NativeAction {
+                    id: playerPauseButton
+                    width: 120
                     text: window.playerPaused ? "Play" : "Pause"
+                    upAction: function() { window.focusPlayerSeek() }
                     onClicked: {
                         if (window.playerPaused) components.player.play()
                         else components.player.pause()
@@ -2927,11 +3046,25 @@ Window {
                         controlsTimer.restart()
                     }
                 }
-                NativeAction { text: "−" + (familyApi.skipBackMs / 1000) + " sec"; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - familyApi.skipBackMs)); controlsTimer.restart() } }
-                NativeAction { text: "+" + (familyApi.skipForwardMs / 1000) + " sec"; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + familyApi.skipForwardMs); controlsTimer.restart() } }
+                NativeAction { width: 120; text: "−" + (familyApi.skipBackMs / 1000) + " sec"; upAction: function() { window.focusPlayerSeek() }; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - familyApi.skipBackMs)); controlsTimer.restart() } }
+                NativeAction { width: 120; text: "+" + (familyApi.skipForwardMs / 1000) + " sec"; upAction: function() { window.focusPlayerSeek() }; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + familyApi.skipForwardMs); controlsTimer.restart() } }
+                NativeAction {
+                    width: 125
+                    visible: !window.playerIsLive
+                    text: "Speed " + window.playbackSpeed + "×"
+                    upAction: function() { window.focusPlayerSeek() }
+                    onClicked: {
+                        const speeds = [0.75, 1.0, 1.25, 1.5, 2.0]
+                        const current = speeds.indexOf(window.playbackSpeed)
+                        window.playbackSpeed = speeds[(current + 1) % speeds.length]
+                        components.player.setPlaybackRate(Math.round(window.playbackSpeed * 1000))
+                        controlsTimer.restart()
+                    }
+                }
                 NativeAction {
                     text: "Audio / Subs"
                     width: 145
+                    upAction: function() { window.focusPlayerSeek() }
                     onClicked: {
                         window.availableTracks = components.player.getPlaybackTracks()
                         window.trackMenuVisible = true
@@ -2947,6 +3080,7 @@ Window {
                     font.pixelSize: 18
                     anchors.verticalCenter: parent.verticalCenter
                     Timer { interval: 30000; running: window.page === "player"; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "h:mm AP") }
+                }
                 }
             }
         }
