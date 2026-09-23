@@ -21,6 +21,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList libraryRows READ libraryRows NOTIFY homeChanged)
   Q_PROPERTY(QVariantMap selectedItem READ selectedItem NOTIFY selectedItemChanged)
   Q_PROPERTY(QVariantList watchlistEntries READ watchlistEntries NOTIFY watchlistChanged)
+  Q_PROPERTY(QVariantList householdWatchlistEntries READ householdWatchlistEntries NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList seasons READ seasons NOTIFY seriesChanged)
   Q_PROPERTY(QVariantList episodes READ episodes NOTIFY seriesChanged)
 
@@ -37,6 +38,7 @@ public:
   QVariantList libraryRows() const { return m_libraryRows; }
   QVariantMap selectedItem() const { return m_selectedItem; }
   QVariantList watchlistEntries() const { return m_watchlistEntries; }
+  QVariantList householdWatchlistEntries() const { return m_householdWatchlistEntries; }
   QVariantList seasons() const { return m_seasons; }
   QVariantList episodes() const { return m_episodes; }
 
@@ -52,8 +54,12 @@ public:
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE void refreshWatchlist();
+  Q_INVOKABLE void refreshHouseholdWatchlist();
   Q_INVOKABLE bool isWatchlisted(const QString& itemId) const;
+  Q_INVOKABLE bool isHouseholdWatchlisted(const QString& itemId) const;
   Q_INVOKABLE void toggleWatchlist(const QVariantMap& item);
+  Q_INVOKABLE void toggleHouseholdWatchlist(const QVariantMap& item);
+  Q_INVOKABLE void voteHouseholdWatchlistItem(const QString& itemId, bool voted);
   Q_INVOKABLE void reportPlaybackStart(const QVariantMap& item, qlonglong positionMilliseconds);
   Q_INVOKABLE void reportPlaybackProgress(qlonglong positionMilliseconds, bool paused);
   Q_INVOKABLE void reportPlaybackStopped(qlonglong positionMilliseconds);
@@ -78,6 +84,10 @@ private:
   static QVariantList untouchedDeck(const QVariantList& response);
   void writeWatchlistMembership(quint64 session, bool present, const QVariantMap& entry,
                                 const QString& operationId, qlonglong expected, int retries);
+  void writeHouseholdMembership(quint64 session, bool present, const QVariantMap& entry,
+                                const QString& operationId, qlonglong expected, int retries);
+  void writeHouseholdVote(quint64 session, const QString& itemId, bool voted,
+                          const QString& operationId, qlonglong expected, int retries);
   void sendPlaybackStopped(qlonglong positionMilliseconds);
 
   QNetworkAccessManager m_network;
@@ -93,9 +103,11 @@ private:
   QVariantList m_libraryRows;
   QVariantMap m_selectedItem;
   QVariantList m_watchlistEntries;
+  QVariantList m_householdWatchlistEntries;
   QVariantList m_seasons;
   QVariantList m_episodes;
   qlonglong m_watchlistRevision = 0;
+  qlonglong m_householdWatchlistRevision = 0;
   quint64 m_sessionRevision = 0;
   quint64 m_homeRevision = 0;
   quint64 m_itemRevision = 0;

@@ -25,6 +25,7 @@ Window {
     property bool sidebarExpanded: true
     property int lastHomeRow: 0
     property int lastHomeCard: 0
+    property string watchlistMode: "personal"
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
@@ -51,10 +52,18 @@ Window {
 
     function watchlistOfType(type) {
         const result = []
-        for (const entry of familyApi.watchlistEntries) {
+        const entries = watchlistMode === "household" ? familyApi.householdWatchlistEntries : familyApi.watchlistEntries
+        for (const entry of entries) {
             if (entry.itemType === type) result.push(entry)
         }
         return result
+    }
+
+    function householdEntry(itemId) {
+        for (const entry of familyApi.householdWatchlistEntries) {
+            if (entry.itemId === itemId) return entry
+        }
+        return null
     }
 
     function playSelected() {
@@ -113,7 +122,11 @@ Window {
     }
 
     Component.onCompleted: {
-        if (familyApi.signedIn) familyApi.refreshHome()
+        if (familyApi.signedIn) {
+            familyApi.refreshHome()
+            familyApi.refreshWatchlist()
+            familyApi.refreshHouseholdWatchlist()
+        }
         else familyApi.refreshPublicUsers()
     }
     Shortcut { sequence: "Esc"; onActivated: window.goBack() }
@@ -306,7 +319,7 @@ Window {
                     }
                 }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: notice = "Library browser is being ported" }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); page = "watchlist" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: notice = "Playlist screen is being ported" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: notice = "TV guide is being ported" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onClicked: page = "settings" }
@@ -437,6 +450,8 @@ Window {
                 spacing: 20
                 NativeAction { text: "← Home"; onClicked: page = "home" }
                 Text { text: "Watchlist"; color: "white"; font.pixelSize: 33; font.bold: true }
+                NativeAction { text: "My List"; selected: watchlistMode === "personal"; onClicked: watchlistMode = "personal" }
+                NativeAction { text: "Family List"; selected: watchlistMode === "household"; onClicked: watchlistMode = "household" }
             }
             Text { text: "Movies"; color: "white"; font.pixelSize: 24; font.bold: true }
             Flickable {
@@ -452,7 +467,7 @@ Window {
                         NativeAction {
                             width: 225
                             height: 160
-                            text: modelData.title || "Movie"
+                            text: (modelData.title || "Movie") + (watchlistMode === "household" ? "  ·  " + (modelData.voteCount || 0) + " votes" : "")
                             onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
                         }
                     }
@@ -472,7 +487,7 @@ Window {
                         NativeAction {
                             width: 225
                             height: 160
-                            text: modelData.title || "Show"
+                            text: (modelData.title || "Show") + (watchlistMode === "household" ? "  ·  " + (modelData.voteCount || 0) + " votes" : "")
                             onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
                         }
                     }
@@ -568,6 +583,25 @@ Window {
                     width: 215
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                     onClicked: familyApi.toggleWatchlist(familyApi.selectedItem)
+                }
+                NativeAction {
+                    text: familyApi.isHouseholdWatchlisted(familyApi.selectedItem.Id || "")
+                        ? "Remove from Family List" : "Add to Family List"
+                    width: 210
+                    visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
+                    onClicked: familyApi.toggleHouseholdWatchlist(familyApi.selectedItem)
+                }
+                NativeAction {
+                    width: 110
+                    text: {
+                        const entry = window.householdEntry(familyApi.selectedItem.Id || "")
+                        return entry && entry.currentUserVoted ? "Unvote" : "Vote"
+                    }
+                    visible: familyApi.isHouseholdWatchlisted(familyApi.selectedItem.Id || "")
+                    onClicked: {
+                        const entry = window.householdEntry(familyApi.selectedItem.Id || "")
+                        if (entry) familyApi.voteHouseholdWatchlistItem(entry.itemId, !entry.currentUserVoted)
+                    }
                 }
             }
             Flickable {

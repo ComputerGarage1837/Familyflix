@@ -196,6 +196,7 @@ void FamilyApiClient::signIn(const QString& userName, const QString& password)
     emit sessionChanged();
     refreshHome();
     refreshWatchlist();
+    refreshHouseholdWatchlist();
   });
 }
 
@@ -211,6 +212,7 @@ void FamilyApiClient::signOut()
   m_libraryRows.clear(); m_selectedItem.clear();
   m_seasons.clear(); m_episodes.clear();
   m_watchlistEntries.clear(); m_watchlistRevision = 0;
+  m_householdWatchlistEntries.clear(); m_householdWatchlistRevision = 0;
   m_settings.remove(QStringLiteral("token"));
   m_settings.remove(QStringLiteral("userId"));
   m_settings.remove(QStringLiteral("userName"));
@@ -326,6 +328,21 @@ void FamilyApiClient::refreshWatchlist()
   });
 }
 
+void FamilyApiClient::refreshHouseholdWatchlist()
+{
+  if (!signedIn()) return;
+  const quint64 revision = m_sessionRevision;
+  request("GET", QStringLiteral("FamilyFlix/Watchlists/household"), {}, {},
+          [this, revision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Family watchlist could not load.")); return; }
+    const auto document = data.toMap();
+    m_householdWatchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
+    m_householdWatchlistEntries = document.value(QStringLiteral("entries")).toList();
+    emit watchlistChanged();
+  });
+}
+
 bool FamilyApiClient::isWatchlisted(const QString& itemId) const
 {
   for (const auto& value : m_watchlistEntries) {
@@ -335,6 +352,43 @@ bool FamilyApiClient::isWatchlisted(const QString& itemId) const
       return true;
   }
   return false;
+}
+
+bool FamilyApiClient::isHouseholdWatchlisted(const QString& itemId) const
+{
+  for (const auto& value : m_householdWatchlistEntries) {
+    const auto entry = value.toMap();
+    if (entry.value(QStringLiteral("itemId")).toString().compare(itemId, Qt::CaseInsensitive) == 0)
+      return true;
+  }
+  return false;
+}
+
+void FamilyApiClient::toggleHouseholdWatchlist(const QVariantMap& item)
+{
+  if (!signedIn()) return;
+  const QString itemId = item.value(QStringLiteral("Id")).toString();
+  const QString type = item.value(QStringLiteral("Type")).toString().toLower();
+  if (itemId.isEmpty() || (type != QStringLiteral("movie") && type != QStringLiteral("series"))) return;
+  const auto userData = item.value(QStringLiteral("UserData")).toMap();
+  const QVariantMap entry{
+    { QStringLiteral("itemId"), itemId }, { QStringLiteral("itemType"), type },
+    { QStringLiteral("seriesId"), type == QStringLiteral("series") ? itemId : QString() },
+    { QStringLiteral("providerIds"), item.value(QStringLiteral("ProviderIds")) },
+    { QStringLiteral("title"), item.value(QStringLiteral("Name")) },
+    { QStringLiteral("playbackPositionTicksAtAdd"), userData.value(QStringLiteral("PlaybackPositionTicks"), 0) },
+    { QStringLiteral("playedAtAdd"), userData.value(QStringLiteral("Played"), false) },
+    { QStringLiteral("lastPlayedDateAtAdd"), userData.value(QStringLiteral("LastPlayedDate")) }
+  };
+  writeHouseholdMembership(m_sessionRevision, !isHouseholdWatchlisted(itemId), entry,
+    QUuid::createUuid().toString(QUuid::WithoutBraces), m_householdWatchlistRevision, 0);
+}
+
+void FamilyApiClient::voteHouseholdWatchlistItem(const QString& itemId, bool voted)
+{
+  if (!signedIn() || itemId.isEmpty()) return;
+  writeHouseholdVote(m_sessionRevision, itemId, voted,
+    QUuid::createUuid().toString(QUuid::WithoutBraces), m_householdWatchlistRevision, 0);
 }
 
 void FamilyApiClient::toggleWatchlist(const QVariantMap& item)
@@ -386,6 +440,66 @@ void FamilyApiClient::writeWatchlistMembership(quint64 session, bool present,
       const auto document = data.toMap();
       m_watchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
       m_watchlistEntries = document.value(QStringLiteral("entries")).toList();
+      emit watchlistChanged();
+    });
+}
+
+void FamilyApiClient::writeHouseholdMembership(quint64 session, bool present,
+                                               const QVariantMap& entry, const QString& operationId,
+                                               qlonglong expected, int retries)
+{
+  const QVariantMap command{
+    { QStringLiteral("expectedRevision"), expected },
+    { QStringLiteral("present"), present },
+    { QStringLiteral("entry"), entry },
+    { QStringLiteral("operationId"), operationId }
+  };
+  requestWithStatus("PUT", QStringLiteral("FamilyFlix/Watchlists/household/Membership"), {},
+    QJsonDocument(QJsonObject::fromVariantMap(command)).toJson(QJsonDocument::Compact),
+    [this, session, present, entry, operationId, retries](const QVariant& data, const QString& error, int status) {
+      if (session != m_sessionRevision) return;
+      if (status == 409 && retries == 0) {
+        const auto current = data.toMap().value(QStringLiteral("current")).toMap();
+        writeHouseholdMembership(session, present, entry, operationId,
+                                 current.value(QStringLiteral("revision")).toLongLong(), 1);
+        return;
+      }
+      if (!error.isEmpty() || status < 200 || status >= 300) {
+        emit errorOccurred(QStringLiteral("Family watchlist change did not save."));
+        return;
+      }
+      const auto document = data.toMap();
+      m_householdWatchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
+      m_householdWatchlistEntries = document.value(QStringLiteral("entries")).toList();
+      emit watchlistChanged();
+    });
+}
+
+void FamilyApiClient::writeHouseholdVote(quint64 session, const QString& itemId, bool voted,
+                                         const QString& operationId, qlonglong expected, int retries)
+{
+  const QVariantMap command{
+    { QStringLiteral("expectedRevision"), expected },
+    { QStringLiteral("voted"), voted },
+    { QStringLiteral("operationId"), operationId }
+  };
+  requestWithStatus("PUT", QStringLiteral("FamilyFlix/Watchlists/household/Items/%1/Votes/Me").arg(itemId), {},
+    QJsonDocument(QJsonObject::fromVariantMap(command)).toJson(QJsonDocument::Compact),
+    [this, session, itemId, voted, operationId, retries](const QVariant& data, const QString& error, int status) {
+      if (session != m_sessionRevision) return;
+      if (status == 409 && retries == 0) {
+        const auto current = data.toMap().value(QStringLiteral("current")).toMap();
+        writeHouseholdVote(session, itemId, voted, operationId,
+                           current.value(QStringLiteral("revision")).toLongLong(), 1);
+        return;
+      }
+      if (!error.isEmpty() || status < 200 || status >= 300) {
+        emit errorOccurred(QStringLiteral("Family vote did not save."));
+        return;
+      }
+      const auto document = data.toMap();
+      m_householdWatchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
+      m_householdWatchlistEntries = document.value(QStringLiteral("entries")).toList();
       emit watchlistChanged();
     });
 }
