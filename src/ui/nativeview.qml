@@ -402,11 +402,9 @@ Window {
             window.playbackQueue = []
             window.playbackQueueIndex = -1
             window.sleepDeadlineMs = 0
+            window.chosenUser = ""
+            password.clear()
             window.page = familyApi.signedIn ? "home" : "login"
-            if (!familyApi.signedIn) {
-                window.chosenUser = ""
-                password.clear()
-            }
         }
         function onErrorOccurred(message) {
             window.notice = message
