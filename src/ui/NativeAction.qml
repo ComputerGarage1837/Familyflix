@@ -5,6 +5,10 @@ FocusScope {
     property string text: ""
     property color accent: "#ffd36a"
     property bool selected: false
+    property var upAction: null
+    property var downAction: null
+    property var leftAction: null
+    property var rightAction: null
     signal clicked()
     width: 160
     height: 48
@@ -12,7 +16,10 @@ FocusScope {
 
     function moveAmongSiblings(direction) {
         if (!parent) return
-        const actions = parent.children.filter(item => item && item.clicked !== undefined && item.visible)
+        const actions = []
+        for (let item of parent.children) {
+            if (item && item.clicked !== undefined && item.visible) actions.push(item)
+        }
         const index = actions.indexOf(action)
         const next = actions[index + direction]
         if (next) next.forceActiveFocus()
@@ -21,10 +28,10 @@ FocusScope {
     Keys.onReturnPressed: clicked()
     Keys.onEnterPressed: clicked()
     Keys.onSpacePressed: clicked()
-    Keys.onUpPressed: moveAmongSiblings(-1)
-    Keys.onDownPressed: moveAmongSiblings(1)
-    Keys.onLeftPressed: moveAmongSiblings(-1)
-    Keys.onRightPressed: moveAmongSiblings(1)
+    Keys.onUpPressed: upAction ? upAction() : moveAmongSiblings(-1)
+    Keys.onDownPressed: downAction ? downAction() : moveAmongSiblings(1)
+    Keys.onLeftPressed: leftAction ? leftAction() : moveAmongSiblings(-1)
+    Keys.onRightPressed: rightAction ? rightAction() : moveAmongSiblings(1)
 
     Rectangle {
         anchors.fill: parent

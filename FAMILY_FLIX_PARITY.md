@@ -7,13 +7,13 @@ check against the same Jellyfin server and user profiles before release.
 | Area | Windows source today | Required check or work |
 | --- | --- | --- |
 | Fixed server URL and visible-user sign in | Native API client and visible-user sign-in screen coded | Verify passwordless/password accounts, profile switch and persisted sign-in |
-| Native playback, audio and subtitle tracks, resume | Jellyfin Desktop libmpv integration | Play representative x265 movies, older TV audio, subtitles, resume and seek |
+| Native playback, audio and subtitle tracks, resume | Native libmpv launch, basic audio selection, resume and session reporting coded | Test representative x265 movies, older TV audio, subtitles, resume, seek and watched-status sync; build full controls |
 | Home libraries, preferred order, hidden libraries, Continue Watching and Deck | Native Qt home loads libraries, Continue Watching and untouched Deck candidates | Add preferred/hidden-library settings, focus restoration and Android active-older-season Deck correction |
-| Personal and family Watchlists | Not yet ported to native UI | Use the existing Family Flix server API and verify cross-device sync |
+| Personal and family Watchlists | Native personal Watchlist read, display and membership changes coded | Test cross-device sync and playback auto-removal; port family list and voting |
 | Mixed movie/show/episode playlists | Not yet ported to native UI | Port Android playlist controls and verify mixed playback order |
 | Profile switch and Watch Together | Native sign-in exists; Watching Together not yet ported | Port Android presets, selected home feed, participant reporting and exit flow |
 | Family Night and household voting | Not yet ported to native UI | Port Android picker and voting behavior |
-| Backdrops, themes and detail actions | First native detail/backdrop view coded | Port all Android actions, themes and remote focus rules |
+| Backdrops, themes and detail actions | Native details, backdrop and show/season/episode navigation coded | Port all Android actions, themes and remote focus rules |
 | Intro, recap, preview and outro prompts | Not yet ported to native playback | Port Android Ask/Auto/Off and per-series choices |
 | Live TV guide, preview, categories and time shifting | Native player available; guide not yet ported | Port Android two-hour guide, preview/fullscreen and buffer controls |
 | Movie/show and Live TV one-hour buffers | Separate up-to-one-hour native settings with memory-first and temporary-disk fallback | Test long VOD and live playback, storage cap and seek behavior; actual hour depends on bitrate and stream seekability |

@@ -17,6 +17,8 @@ Window {
     property string page: familyApi.signedIn ? "home" : "login"
     property string chosenUser: ""
     property var focusedItem: ({})
+    property var selectedSeries: ({})
+    property string detailReturnPage: "home"
     property string notice: ""
     property var homeRows: {
         let rows = []
@@ -28,10 +30,26 @@ Window {
         return rows
     }
 
-    function showItem(item) {
+    function showItem(item, returnPage) {
         focusedItem = item
+        detailReturnPage = returnPage || "home"
         familyApi.openItem(item.Id || "")
         page = "detail"
+    }
+
+    function showSeason(season) {
+        if (familyApi.selectedItem.Type !== "Series") return
+        selectedSeries = familyApi.selectedItem
+        familyApi.openSeason(season.Id || "")
+        page = "season"
+    }
+
+    function watchlistOfType(type) {
+        const result = []
+        for (const entry of familyApi.watchlistEntries) {
+            if (entry.itemType === type) result.push(entry)
+        }
+        return result
     }
 
     function playSelected() {
@@ -42,17 +60,21 @@ Window {
         const resume = Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
-        if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata)) {
+        if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
             page = "player"
         }
     }
 
     function goBack() {
         if (page === "player") {
+            familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             components.player.stop()
             page = "detail"
         } else if (page === "detail") {
-            page = "home"
+            page = detailReturnPage
+        } else if (page === "season") {
+            familyApi.openItem(selectedSeries.Id || "")
+            page = "detail"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -97,6 +119,39 @@ Window {
             window.notice = message
             noticeTimer.restart()
         }
+    }
+    Connections {
+        target: components.player
+        function onPlaying() {
+            if (window.page === "player")
+                familyApi.reportPlaybackStart(familyApi.selectedItem, components.player.getPosition() * 1000)
+        }
+        function onPaused() {
+            if (window.page === "player")
+                familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, true)
+        }
+        function onFinished() {
+            if (window.page !== "player") return
+            familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.page = "detail"
+        }
+        function onCanceled() {
+            if (window.page !== "player") return
+            familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.page = "detail"
+        }
+        function onError(message) {
+            if (window.page !== "player") return
+            familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.notice = message
+            window.page = "detail"
+        }
+    }
+    Timer {
+        interval: 10000
+        repeat: true
+        running: window.page === "player"
+        onTriggered: familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, false)
     }
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
 
@@ -195,17 +250,26 @@ Window {
                 anchors.margins: 16
                 spacing: 8
                 Text { text: "Family Flix"; color: "white"; font.pixelSize: 27; font.bold: true; height: 60 }
-                NativeAction { id: homeButton; width: parent.width; text: "Home"; selected: true; onClicked: homeScroll.contentY = 0 }
+                NativeAction {
+                    id: homeButton
+                    width: parent.width
+                    text: "Home"
+                    selected: true
+                    upAction: function() { profileButton.forceActiveFocus() }
+                    rightAction: function() { window.focusCard(0, 0) }
+                    onClicked: homeScroll.contentY = 0
+                }
                 Repeater {
                     model: familyApi.libraries
                     NativeAction {
                         width: 188
                         text: modelData.Name || "Library"
+                        rightAction: function() { window.focusCard(0, 0) }
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
                 NativeAction { width: parent.width; text: "All Libraries"; onClicked: notice = "Library browser is being ported" }
-                NativeAction { width: parent.width; text: "Watchlist"; onClicked: notice = "Watchlist screen is being ported" }
+                NativeAction { width: parent.width; text: "Watchlist"; onClicked: { familyApi.refreshWatchlist(); page = "watchlist" } }
                 NativeAction { width: parent.width; text: "Playlists"; onClicked: notice = "Playlist screen is being ported" }
                 NativeAction { width: parent.width; text: "Live TV"; onClicked: notice = "TV guide is being ported" }
                 NativeAction { width: parent.width; text: "Settings"; onClicked: notice = "Settings screen is being ported" }
@@ -221,11 +285,13 @@ Window {
             Timer { interval: 30000; running: true; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP") }
         }
         NativeAction {
+            id: profileButton
             width: 170
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 16
             text: familyApi.userName
+            downAction: function() { homeButton.forceActiveFocus() }
             onClicked: familyApi.signOut()
         }
         Flickable {
@@ -314,6 +380,61 @@ Window {
 
     Item {
         anchors.fill: parent
+        visible: page === "watchlist"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+            spacing: 24
+            Row {
+                spacing: 20
+                NativeAction { text: "← Home"; onClicked: page = "home" }
+                Text { text: "Watchlist"; color: "white"; font.pixelSize: 33; font.bold: true }
+            }
+            Text { text: "Movies"; color: "white"; font.pixelSize: 24; font.bold: true }
+            Flickable {
+                width: parent.width
+                height: 190
+                contentWidth: movieRow.width
+                clip: true
+                Row {
+                    id: movieRow
+                    spacing: 12
+                    Repeater {
+                        model: window.watchlistOfType("movie")
+                        NativeAction {
+                            width: 225
+                            height: 160
+                            text: modelData.title || "Movie"
+                            onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
+                        }
+                    }
+                }
+            }
+            Text { text: "Shows"; color: "white"; font.pixelSize: 24; font.bold: true }
+            Flickable {
+                width: parent.width
+                height: 190
+                contentWidth: showRow.width
+                clip: true
+                Row {
+                    id: showRow
+                    spacing: 12
+                    Repeater {
+                        model: window.watchlistOfType("series")
+                        NativeAction {
+                            width: 225
+                            height: 160
+                            text: modelData.title || "Show"
+                            onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
         visible: page === "detail"
         Column {
             anchors.left: parent.left
@@ -343,6 +464,64 @@ Window {
                     text: "Play"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
                     onClicked: window.playSelected()
+                }
+                NativeAction {
+                    text: familyApi.isWatchlisted(familyApi.selectedItem.Id || "")
+                        ? "Remove from Watchlist" : "Add to Watchlist"
+                    width: 215
+                    visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
+                    onClicked: familyApi.toggleWatchlist(familyApi.selectedItem)
+                }
+            }
+            Flickable {
+                width: parent.width
+                height: familyApi.selectedItem.Type === "Series" ? 90 : 0
+                visible: height > 0
+                contentWidth: seasonRow.width
+                clip: true
+                Row {
+                    id: seasonRow
+                    spacing: 9
+                    Repeater {
+                        model: familyApi.seasons
+                        NativeAction {
+                            width: 175
+                            text: modelData.Name || "Season"
+                            onClicked: window.showSeason(modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "season"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 35
+            spacing: 18
+            Row {
+                spacing: 15
+                NativeAction { text: "← Show"; onClicked: window.goBack() }
+                Text { text: selectedSeries.Name || "Episodes"; color: "white"; font.pixelSize: 30; font.bold: true }
+            }
+            ScrollView {
+                width: parent.width
+                height: parent.height - 100
+                Column {
+                    width: Math.max(800, window.width - 90)
+                    spacing: 8
+                    Repeater {
+                        model: familyApi.episodes
+                        NativeAction {
+                            width: parent.width
+                            height: 65
+                            text: "Episode " + (modelData.IndexNumber || "") + "  ·  " + (modelData.Name || "")
+                            onClicked: window.showItem(modelData, "season")
+                        }
+                    }
                 }
             }
         }
