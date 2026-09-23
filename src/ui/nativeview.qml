@@ -160,6 +160,8 @@ Window {
             page = "detail"
         } else if (page === "watchTogether") {
             page = "profile"
+        } else if (page === "coWatchPresets") {
+            page = "profile"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -437,6 +439,65 @@ Window {
                     visible: familyApi.watchingTogether
                     text: "Stop Watching Together"
                     onClicked: { familyApi.stopWatchingTogether(); page = "home" }
+                }
+                NativeAction {
+                    width: 170
+                    text: "Party presets"
+                    onClicked: { familyApi.refreshCoWatchPresets(); page = "coWatchPresets" }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "coWatchPresets"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 800)
+            spacing: 17
+            Row {
+                spacing: 12
+                NativeAction { width: 120; text: "← Profiles"; onClicked: window.goBack() }
+                Text { text: "Watching Together presets"; color: familyApi.themeText; font.pixelSize: 29; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
+            }
+            Text { text: "Presets are saved to your Jellyfin profile and shared with the Android app."; color: familyApi.themeText; font.pixelSize: 17; wrapMode: Text.WordWrap; width: parent.width }
+            Row {
+                spacing: 12
+                TextField { id: coWatchPresetName; width: 400; height: 48; placeholderText: "Name this party"; font.pixelSize: 18 }
+                NativeAction {
+                    width: 175
+                    text: "Save current party"
+                    visible: familyApi.watchingTogether
+                    onClicked: familyApi.saveCoWatchPreset(coWatchPresetName.text)
+                }
+            }
+            Text { text: familyApi.coWatchPresets.length ? "Choose a preset to start watching together:" : "No presets saved yet."; color: familyApi.themeText; font.pixelSize: 19 }
+            ScrollView {
+                width: parent.width
+                height: Math.min(470, window.height - 300)
+                Column {
+                    width: Math.min(window.width - 100, 800)
+                    spacing: 9
+                    Repeater {
+                        model: familyApi.coWatchPresets
+                        Row {
+                            required property var modelData
+                            spacing: 12
+                            NativeAction {
+                                width: 560
+                                height: 57
+                                text: modelData.name || "Party"
+                                onClicked: if (familyApi.activateCoWatchPreset(modelData.id)) page = "home"
+                            }
+                            NativeAction {
+                                width: 100
+                                height: 57
+                                text: "Delete"
+                                onClicked: familyApi.deleteCoWatchPreset(modelData.id)
+                            }
+                        }
+                    }
                 }
             }
         }

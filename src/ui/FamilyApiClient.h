@@ -23,6 +23,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool watchingTogether READ watchingTogether NOTIFY coWatchChanged)
   Q_PROPERTY(QString coWatchLabel READ coWatchLabel NOTIFY coWatchChanged)
   Q_PROPERTY(QString homeFeedOwnerId READ homeFeedOwnerId NOTIFY coWatchChanged)
+  Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList libraries READ libraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList railLibraries READ railLibraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
@@ -64,6 +65,7 @@ public:
   bool watchingTogether() const { return !m_coWatchUserIds.isEmpty(); }
   QString coWatchLabel() const;
   QString homeFeedOwnerId() const { return m_homeFeedOwnerId; }
+  QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList libraries() const { return m_libraries; }
   QVariantList railLibraries() const;
   QVariantList continueItems() const { return m_continueItems; }
@@ -103,6 +105,10 @@ public:
   Q_INVOKABLE bool setCoWatchProfile(const QString& userId, bool selected);
   Q_INVOKABLE void setHomeFeedOwner(const QString& userId);
   Q_INVOKABLE void stopWatchingTogether();
+  Q_INVOKABLE void refreshCoWatchPresets();
+  Q_INVOKABLE void saveCoWatchPreset(const QString& name);
+  Q_INVOKABLE bool activateCoWatchPreset(const QString& presetId);
+  Q_INVOKABLE void deleteCoWatchPreset(const QString& presetId);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
@@ -144,6 +150,7 @@ signals:
   void sessionChanged();
   void publicUsersChanged();
   void coWatchChanged();
+  void coWatchPresetsChanged();
   void homeChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
@@ -193,6 +200,7 @@ private:
   void loadCoWatchParty();
   void saveCoWatchParty();
   void reconcileCoWatchParty();
+  void mutateCoWatchPresets(const std::function<QVariantList(const QVariantList&)>& transform);
 
   QNetworkAccessManager m_network;
   QSettings m_settings;
@@ -204,6 +212,9 @@ private:
   QString m_homeFeedOwnerId;
   QString m_homeFeedUserId;
   QString m_homeFeedToken;
+  QVariantList m_coWatchPresets;
+  quint64 m_coWatchPresetRevision = 0;
+  bool m_coWatchPresetMutationBusy = false;
   QVariantList m_publicUsers;
   QVariantList m_libraries;
   QVariantList m_continueItems;

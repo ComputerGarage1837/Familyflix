@@ -71,6 +71,35 @@ int channelBand(const QVariantMap& channel)
   if (!ok) return -1;
   return int(number / (number >= 600000.0 ? 100000.0 : 1000.0));
 }
+
+bool decodeCoWatchPresets(const QVariantMap& preferences, QVariantList& presets)
+{
+  const QString raw = preferences.value(QStringLiteral("CustomPrefs")).toMap()
+    .value(QStringLiteral("presetsV1")).toString();
+  if (raw.isEmpty()) { presets.clear(); return true; }
+  QJsonParseError parseError;
+  const auto parsed = QJsonDocument::fromJson(raw.toUtf8(), &parseError);
+  if (parseError.error != QJsonParseError::NoError || !parsed.isObject()) return false;
+  const auto document = parsed.object().toVariantMap();
+  if (document.value(QStringLiteral("version"), 1).toInt() != 1) return false;
+  presets.clear();
+  for (const auto& value : document.value(QStringLiteral("presets")).toList()) {
+    const auto preset = value.toMap();
+    if (QUuid(preset.value(QStringLiteral("id")).toString()).isNull()
+        || preset.value(QStringLiteral("name")).toString().trimmed().isEmpty()
+        || preset.value(QStringLiteral("participantUserIds")).toStringList().isEmpty()) continue;
+    presets.append(preset);
+  }
+  return true;
+}
+
+QString encodeCoWatchPresets(const QVariantList& presets)
+{
+  return QString::fromUtf8(QJsonDocument(QJsonObject{
+    { QStringLiteral("version"), 1 },
+    { QStringLiteral("presets"), QJsonArray::fromVariantList(presets) }
+  }).toJson(QJsonDocument::Compact));
+}
 }
 
 FamilyApiClient::FamilyApiClient(QObject* parent)
@@ -505,6 +534,131 @@ void FamilyApiClient::stopWatchingTogether()
   refreshHome();
 }
 
+void FamilyApiClient::refreshCoWatchPresets()
+{
+  if (!signedIn() || m_coWatchPresetMutationBusy) return;
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = ++m_coWatchPresetRevision;
+  request("GET", QStringLiteral("DisplayPreferences/familyflix-cowatch-presets"),
+          { { QStringLiteral("client"), QStringLiteral("familyflix-androidtv") } }, {},
+          [this, session, revision](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || revision != m_coWatchPresetRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Watch Together presets could not load.")); return; }
+    QVariantList presets;
+    if (!decodeCoWatchPresets(data.toMap(), presets)) {
+      emit errorOccurred(QStringLiteral("Watch Together presets use an unsupported format."));
+      return;
+    }
+    m_coWatchPresets = presets;
+    emit coWatchPresetsChanged();
+  });
+}
+
+void FamilyApiClient::mutateCoWatchPresets(const std::function<QVariantList(const QVariantList&)>& transform)
+{
+  if (!signedIn() || m_coWatchPresetMutationBusy) return;
+  m_coWatchPresetMutationBusy = true;
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = ++m_coWatchPresetRevision;
+  const QVariantMap query{ { QStringLiteral("client"), QStringLiteral("familyflix-androidtv") } };
+  const QString path = QStringLiteral("DisplayPreferences/familyflix-cowatch-presets");
+  request("GET", path, query, {},
+          [this, session, revision, transform, query, path](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || revision != m_coWatchPresetRevision) return;
+    QVariantList current;
+    if (!error.isEmpty() || !decodeCoWatchPresets(data.toMap(), current)) {
+      m_coWatchPresetMutationBusy = false;
+      emit errorOccurred(QStringLiteral("Presets could not be safely updated. Try again later."));
+      return;
+    }
+    auto document = data.toMap();
+    auto custom = document.value(QStringLiteral("CustomPrefs")).toMap();
+    const QVariantList updated = transform(current);
+    custom.insert(QStringLiteral("presetsV1"), encodeCoWatchPresets(updated));
+    document.insert(QStringLiteral("CustomPrefs"), custom);
+    request("POST", path, query,
+            QJsonDocument(QJsonObject::fromVariantMap(document)).toJson(QJsonDocument::Compact),
+            [this, session, revision, updated](const QVariant&, const QString& writeError) {
+      if (session != m_sessionRevision || revision != m_coWatchPresetRevision) return;
+      m_coWatchPresetMutationBusy = false;
+      if (!writeError.isEmpty()) {
+        emit errorOccurred(QStringLiteral("Preset change could not be saved."));
+        return;
+      }
+      m_coWatchPresets = updated;
+      emit coWatchPresetsChanged();
+    });
+  });
+}
+
+void FamilyApiClient::saveCoWatchPreset(const QString& name)
+{
+  const QString safeName = name.trimmed().left(40);
+  if (!watchingTogether() || safeName.isEmpty()) return;
+  const QStringList participants = m_coWatchUserIds;
+  const QString owner = m_homeFeedOwnerId;
+  mutateCoWatchPresets([safeName, participants, owner](const QVariantList& current) {
+    QVariantList updated;
+    for (const auto& value : current) {
+      if (value.toMap().value(QStringLiteral("name")).toString().compare(safeName, Qt::CaseInsensitive) != 0)
+        updated.append(value);
+    }
+    updated.append(QVariantMap{
+      { QStringLiteral("id"), QUuid::createUuid().toString(QUuid::WithoutBraces) },
+      { QStringLiteral("name"), safeName },
+      { QStringLiteral("participantUserIds"), participants },
+      { QStringLiteral("homeFeedOwnerUserId"), owner },
+      { QStringLiteral("combinedGroupDeckEnabled"), true }
+    });
+    while (updated.size() > 20) updated.removeFirst();
+    return updated;
+  });
+}
+
+bool FamilyApiClient::activateCoWatchPreset(const QString& presetId)
+{
+  if (!signedIn()) return false;
+  QVariantMap chosen;
+  for (const auto& value : m_coWatchPresets) {
+    if (value.toMap().value(QStringLiteral("id")).toString() == presetId) {
+      chosen = value.toMap(); break;
+    }
+  }
+  if (chosen.isEmpty()) return false;
+  const QStringList requested = chosen.value(QStringLiteral("participantUserIds")).toStringList();
+  QStringList selected;
+  for (const auto& id : requested) {
+    if (id != m_userId && hasSavedProfile(id)) selected.append(id);
+  }
+  selected.removeDuplicates();
+  if (selected.isEmpty()) {
+    emit errorOccurred(QStringLiteral("Sign in a visible preset participant first."));
+    return false;
+  }
+  if (m_coWatchPlayback) m_coWatchPlayback->abandoned = true;
+  m_coWatchUserIds = selected;
+  const QString owner = chosen.value(QStringLiteral("homeFeedOwnerUserId")).toString();
+  m_homeFeedOwnerId = owner == m_userId || selected.contains(owner) ? owner : m_userId;
+  saveCoWatchParty();
+  refreshHome();
+  if (selected.size() < requested.size())
+    emit errorOccurred(QStringLiteral("Some preset profiles need to sign in again."));
+  return true;
+}
+
+void FamilyApiClient::deleteCoWatchPreset(const QString& presetId)
+{
+  if (QUuid(presetId).isNull()) return;
+  mutateCoWatchPresets([presetId](const QVariantList& current) {
+    QVariantList updated;
+    for (const auto& value : current) {
+      if (value.toMap().value(QStringLiteral("id")).toString() != presetId)
+        updated.append(value);
+    }
+    return updated;
+  });
+}
+
 void FamilyApiClient::authenticateParticipant(const QString& userId, const QString& password)
 {
   if (!signedIn() || userId.isEmpty() || userId == m_userId) return;
@@ -609,6 +763,9 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   ++m_itemRevision;
   ++m_tvGuideRevision;
   ++m_mediaSegmentsRevision;
+  ++m_coWatchPresetRevision;
+  m_coWatchPresetMutationBusy = false;
+  m_coWatchPresets.clear();
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_recentDeckActivity.clear();
@@ -630,6 +787,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
   emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged();
+  emit coWatchPresetsChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
   emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
   refreshHome();
@@ -648,6 +806,9 @@ void FamilyApiClient::signOut()
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
   ++m_mediaSegmentsRevision;
+  ++m_coWatchPresetRevision;
+  m_coWatchPresetMutationBusy = false;
+  m_coWatchPresets.clear();
   m_settings.remove(QStringLiteral("profiles/%1/token").arg(m_userId));
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
@@ -671,6 +832,7 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("userName"));
   emit sessionChanged();
   emit coWatchChanged();
+  emit coWatchPresetsChanged();
   emit themeChanged();
   emit homeChanged();
   emit libraryBrowseChanged();
