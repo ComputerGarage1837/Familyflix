@@ -1,6 +1,7 @@
 #include "FamilyApiClient.h"
 
 #include <QJsonDocument>
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -86,6 +87,26 @@ bool watchlistEntryMatchesItem(const QVariantMap& entry, const QVariantMap& item
           && wanted.value().toString().compare(found.value().toString(), Qt::CaseInsensitive) == 0)
         return true;
     }
+  }
+  return false;
+}
+
+QList<int> familyVersionParts(const QString& version)
+{
+  static const QRegularExpression pattern(
+    QStringLiteral("(?:^|[^0-9])(\\d+)\\.(\\d+)\\.(\\d+)-family\\.(\\d+)"),
+    QRegularExpression::CaseInsensitiveOption);
+  const auto match = pattern.match(version);
+  if (!match.hasMatch()) return {};
+  return { match.captured(1).toInt(), match.captured(2).toInt(),
+           match.captured(3).toInt(), match.captured(4).toInt() };
+}
+
+bool laterFamilyVersion(const QList<int>& candidate, const QList<int>& current)
+{
+  if (candidate.size() != 4 || current.size() != 4) return false;
+  for (int i = 0; i < 4; ++i) {
+    if (candidate[i] != current[i]) return candidate[i] > current[i];
   }
   return false;
 }
@@ -229,7 +250,7 @@ void FamilyApiClient::reportIssue(const QString& itemId, const QString& category
     { QStringLiteral("category"), category },
     { QStringLiteral("note"), note.trimmed() },
     { QStringLiteral("deviceName"), QStringLiteral("Family Flix Windows") },
-    { QStringLiteral("appVersion"), QStringLiteral("0.1") }
+    { QStringLiteral("appVersion"), QCoreApplication::applicationVersion() }
   };
   request("POST", QStringLiteral("FamilyFlix/Issues/Reports"), {},
           QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
@@ -669,6 +690,71 @@ QString FamilyApiClient::temporaryStorageGiB() const
   const qint64 bytes = QStorageInfo(QDir::tempPath()).bytesAvailable();
   if (bytes < 0) return QStringLiteral("unavailable");
   return QStringLiteral("%1 GiB").arg(bytes / (1024.0 * 1024 * 1024), 0, 'f', 1);
+}
+
+void FamilyApiClient::checkWindowsUpdate(bool manual)
+{
+  if (m_windowsUpdateCheckActive) return;
+  m_windowsUpdateCheckActive = true;
+  QNetworkRequest request(QUrl(QStringLiteral(
+    "https://api.github.com/repos/ComputerGarage1837/Familyflix/releases?per_page=40")));
+  request.setRawHeader("User-Agent", "FamilyFlixWindows");
+  request.setRawHeader("Accept", "application/vnd.github+json");
+  auto* reply = m_network.get(request); // Never send a Jellyfin token to GitHub.
+  connect(reply, &QNetworkReply::finished, this, [this, reply, manual] {
+    m_windowsUpdateCheckActive = false;
+    const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QByteArray body = reply->readAll();
+    const QString error = reply->error() == QNetworkReply::NoError ? QString() : reply->errorString();
+    reply->deleteLater();
+    if (!error.isEmpty() || status < 200 || status >= 300) {
+      if (manual) emit errorOccurred(QStringLiteral("Could not check Windows updates right now."));
+      return;
+    }
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(body, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isArray()) {
+      if (manual) emit errorOccurred(QStringLiteral("The Windows update feed was unreadable."));
+      return;
+    }
+    const auto current = familyVersionParts(QCoreApplication::applicationVersion());
+    QVariantMap best;
+    QList<int> bestVersion = current;
+    for (const auto& value : document.array()) {
+      const auto release = value.toObject().toVariantMap();
+      if (release.value(QStringLiteral("draft")).toBool()) continue;
+      const QString tag = release.value(QStringLiteral("tag_name")).toString();
+      const auto version = familyVersionParts(tag);
+      if (!laterFamilyVersion(version, bestVersion)) continue;
+      for (const auto& assetValue : release.value(QStringLiteral("assets")).toList()) {
+        const auto asset = assetValue.toMap();
+        const QString name = asset.value(QStringLiteral("name")).toString();
+        const QString download = asset.value(QStringLiteral("browser_download_url")).toString();
+        if (!name.contains(QStringLiteral("windows"), Qt::CaseInsensitive)
+            || !name.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)
+            || !download.startsWith(QStringLiteral("https://github.com/"))) continue;
+        bestVersion = version;
+        best = { { QStringLiteral("tag"), tag },
+                 { QStringLiteral("name"), release.value(QStringLiteral("name"), tag) },
+                 { QStringLiteral("downloadUrl"), download },
+                 { QStringLiteral("releaseUrl"), release.value(QStringLiteral("html_url")) } };
+        break;
+      }
+    }
+    if (!manual && best.value(QStringLiteral("tag")).toString() == m_settings.value(
+          QStringLiteral("windows/dismissedUpdateTag")).toString()) return;
+    m_windowsUpdate = best;
+    emit windowsUpdateChanged();
+    if (manual && best.isEmpty()) emit errorOccurred(QStringLiteral("No newer Windows release is available."));
+  });
+}
+
+void FamilyApiClient::dismissWindowsUpdate()
+{
+  const QString tag = m_windowsUpdate.value(QStringLiteral("tag")).toString();
+  if (!tag.isEmpty()) m_settings.setValue(QStringLiteral("windows/dismissedUpdateTag"), tag);
+  m_windowsUpdate.clear();
+  emit windowsUpdateChanged();
 }
 
 void FamilyApiClient::stopWatchingTogether()

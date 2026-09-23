@@ -453,6 +453,7 @@ Window {
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
     Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
     Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
+    Timer { interval: 20000; running: true; repeat: false; onTriggered: familyApi.checkWindowsUpdate(false) }
     Timer {
         interval: 60000; repeat: true
         running: window.page === "player" && familyApi.kidsModeEnabled
@@ -1267,6 +1268,7 @@ Window {
             Text { text: "Colour theme"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
             NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
             NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
+            NativeAction { text: "Check Windows updates"; width: 325; onClicked: familyApi.checkWindowsUpdate(true) }
             Flickable {
                 width: parent.width
                 height: 80
@@ -2044,6 +2046,53 @@ Window {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: updatePrompt
+        anchors.fill: parent
+        z: 50
+        visible: !!familyApi.windowsUpdate.downloadUrl && page !== "player"
+        color: "#dd020810"
+        onVisibleChanged: if (visible) updateDownloadButton.forceActiveFocus()
+        MouseArea { anchors.fill: parent }
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 650)
+            height: 245
+            radius: 12
+            color: familyApi.themeSurface
+            border.color: familyApi.themeAccent
+            Column {
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 16
+                Text { text: "Family Flix Windows update"; color: familyApi.themeText; font.pixelSize: 28; font.bold: true }
+                Text {
+                    width: parent.width
+                    text: "A newer Windows version is available: " + (familyApi.windowsUpdate.tag || "")
+                    color: familyApi.themeText; font.pixelSize: 19; wrapMode: Text.WordWrap
+                }
+                Text {
+                    width: parent.width
+                    text: "The installer opens in your browser. Run it after downloading; your Family Flix settings remain in your Windows profile."
+                    color: familyApi.themeText; font.pixelSize: 16; wrapMode: Text.WordWrap
+                }
+                Row {
+                    spacing: 12
+                    NativeAction {
+                        id: updateDownloadButton
+                        width: 245
+                        text: "Open installer download"
+                        onClicked: {
+                            Qt.openUrlExternally(familyApi.windowsUpdate.downloadUrl)
+                            familyApi.dismissWindowsUpdate()
+                        }
+                    }
+                    NativeAction { width: 150; text: "Not now"; onClicked: familyApi.dismissWindowsUpdate() }
                 }
             }
         }

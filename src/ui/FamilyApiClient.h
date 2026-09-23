@@ -64,6 +64,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QColor themeText READ themeText NOTIFY themeChanged)
   Q_PROPERTY(QColor themeOnAccent READ themeOnAccent NOTIFY themeChanged)
   Q_PROPERTY(QVariantList themeOptions READ themeOptions CONSTANT)
+  Q_PROPERTY(QVariantMap windowsUpdate READ windowsUpdate NOTIFY windowsUpdateChanged)
 
 public:
   explicit FamilyApiClient(QObject* parent = nullptr);
@@ -115,6 +116,7 @@ public:
   QColor themeText() const;
   QColor themeOnAccent() const;
   QVariantList themeOptions() const;
+  QVariantMap windowsUpdate() const { return m_windowsUpdate; }
 
   Q_INVOKABLE void refreshPublicUsers();
   Q_INVOKABLE void signIn(const QString& userName, const QString& password);
@@ -168,6 +170,8 @@ public:
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE QString temporaryStorageGiB() const;
+  Q_INVOKABLE void checkWindowsUpdate(bool manual = false);
+  Q_INVOKABLE void dismissWindowsUpdate();
   Q_INVOKABLE void refreshWatchlist();
   Q_INVOKABLE void refreshHouseholdWatchlist();
   Q_INVOKABLE bool isWatchlisted(const QString& itemId) const;
@@ -200,6 +204,7 @@ signals:
   void mediaSegmentsChanged();
   void issueReportFinished(bool success, const QString& message);
   void themeChanged();
+  void windowsUpdateChanged();
   void errorOccurred(const QString& message);
 
 private:
@@ -266,6 +271,8 @@ private:
   quint64 m_coWatchPresetRevision = 0;
   bool m_coWatchPresetMutationBusy = false;
   QVariantList m_familyNightCandidates;
+  QVariantMap m_windowsUpdate;
+  bool m_windowsUpdateCheckActive = false;
   bool m_familyNightLoading = false;
   quint64 m_familyNightRevision = 0;
   QVariantList m_publicUsers;
