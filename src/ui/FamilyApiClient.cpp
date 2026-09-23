@@ -206,6 +206,32 @@ bool decodeProfileSettings(const QVariantMap& preferences, QVariantMap& document
     && document.value(QStringLiteral("revision")).toLongLong() >= 0
     && document.value(QStringLiteral("values")).canConvert<QVariantMap>();
 }
+
+QVariantMap seriesPreferenceDefaults()
+{
+  return {
+    { QStringLiteral("audioMode"), QStringLiteral("SERVER_DEFAULT") },
+    { QStringLiteral("preferredAudioLanguage"), QString() },
+    { QStringLiteral("subtitleMode"), QStringLiteral("SERVER_DEFAULT") },
+    { QStringLiteral("preferredSubtitleLanguage"), QString() },
+    { QStringLiteral("introSkipMode"), QStringLiteral("APP_DEFAULT") },
+    { QStringLiteral("autoplayMode"), QStringLiteral("APP_DEFAULT") }
+  };
+}
+
+bool decodeSeriesPreferenceDocument(const QVariantMap& preferences, QVariantMap& document)
+{
+  const QString raw = preferences.value(QStringLiteral("CustomPrefs")).toMap()
+    .value(QStringLiteral("familyFlixSeriesPlaybackV1")).toString();
+  if (raw.isEmpty()) { document.clear(); return true; }
+  QJsonParseError error;
+  const auto parsed = QJsonDocument::fromJson(raw.toUtf8(), &error);
+  if (error.error != QJsonParseError::NoError || !parsed.isObject()) return false;
+  document = parsed.object().toVariantMap();
+  return document.value(QStringLiteral("version")).toInt() == 1
+    && document.value(QStringLiteral("revision")).toLongLong() >= 0
+    && document.value(QStringLiteral("values")).canConvert<QVariantMap>();
+}
 }
 
 FamilyApiClient::FamilyApiClient(QObject* parent)
@@ -282,6 +308,9 @@ void FamilyApiClient::refreshSeriesPlaybackPreferences(const QString& seriesId)
   m_activeSeriesId = seriesId;
   m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
   m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
+  m_activeSeriesValues = seriesPreferenceDefaults();
+  m_activeSeriesPreferencesReady = false;
+  m_activeSeriesPreferencesWriteActive = false;
   emit seriesPlaybackPreferencesChanged();
   emit mediaSegmentsChanged();
   static const QRegularExpression validId(QStringLiteral("^[0-9a-fA-F]{32}$"));
@@ -291,15 +320,14 @@ void FamilyApiClient::refreshSeriesPlaybackPreferences(const QString& seriesId)
           [this, session, revision, seriesId](const QVariant& data, const QString& error) {
     if (session != m_sessionRevision || revision != m_seriesPlaybackPreferencesRevision
         || m_activeSeriesId != seriesId || !error.isEmpty()) return;
-    const QString raw = data.toMap().value(QStringLiteral("CustomPrefs")).toMap()
-      .value(QStringLiteral("familyFlixSeriesPlaybackV1")).toString();
-    if (raw.isEmpty()) return;
-    QJsonParseError parseError;
-    const auto parsed = QJsonDocument::fromJson(raw.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !parsed.isObject()) return;
-    const auto document = parsed.object().toVariantMap();
-    if (document.value(QStringLiteral("version")).toInt() != 1) return;
-    const auto values = document.value(QStringLiteral("values")).toMap();
+    QVariantMap document;
+    if (!decodeSeriesPreferenceDocument(data.toMap(), document)) return;
+    QVariantMap values = seriesPreferenceDefaults();
+    const QVariantMap remoteValues = document.value(QStringLiteral("values")).toMap();
+    for (auto it = remoteValues.cbegin(); it != remoteValues.cend(); ++it)
+      values.insert(it.key(), it.value());
+    m_activeSeriesValues = values;
+    m_activeSeriesPreferencesReady = true;
     const QString intro = values.value(QStringLiteral("introSkipMode")).toString();
     if (QStringList{ QStringLiteral("APP_DEFAULT"), QStringLiteral("ASK"),
                      QStringLiteral("AUTO_SKIP"), QStringLiteral("DO_NOT_SKIP") }.contains(intro))
@@ -310,6 +338,96 @@ void FamilyApiClient::refreshSeriesPlaybackPreferences(const QString& seriesId)
       m_activeSeriesAutoplayMode = autoplay;
     emit seriesPlaybackPreferencesChanged();
     emit mediaSegmentsChanged();
+  });
+}
+
+void FamilyApiClient::setActiveSeriesPlaybackPreference(const QString& key, const QString& value)
+{
+  static const QHash<QString, QStringList> allowed{
+    { QStringLiteral("introSkipMode"), { QStringLiteral("APP_DEFAULT"), QStringLiteral("ASK"),
+      QStringLiteral("AUTO_SKIP"), QStringLiteral("DO_NOT_SKIP") } },
+    { QStringLiteral("autoplayMode"), { QStringLiteral("APP_DEFAULT"), QStringLiteral("PLAY_NEXT"),
+      QStringLiteral("STOP_AFTER_EPISODE") } }
+  };
+  if (!signedIn() || !m_activeSeriesPreferencesReady || m_activeSeriesPreferencesWriteActive
+      || !allowed.value(key).contains(value) || m_activeSeriesId.isEmpty()) return;
+  m_activeSeriesPreferencesWriteActive = true;
+  emit seriesPlaybackPreferencesChanged();
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = m_seriesPlaybackPreferencesRevision;
+  const QString seriesId = m_activeSeriesId;
+  const QVariant oldValue = m_activeSeriesValues.value(key);
+  const QString path = QStringLiteral("DisplayPreferences/familyflix-series-playback-v1-%1").arg(seriesId);
+  const QVariantMap query{ { QStringLiteral("client"), QStringLiteral("familyflix") } };
+  request("GET", path, query, {}, [this, session, revision, seriesId, key, value, oldValue, path, query]
+          (const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || revision != m_seriesPlaybackPreferencesRevision
+        || m_activeSeriesId != seriesId) return;
+    QVariantMap document;
+    if (!error.isEmpty() || !decodeSeriesPreferenceDocument(data.toMap(), document)) {
+      m_activeSeriesPreferencesWriteActive = false;
+      emit seriesPlaybackPreferencesChanged();
+      emit errorOccurred(QStringLiteral("Series preferences could not be read safely."));
+      return;
+    }
+    QVariantMap values = seriesPreferenceDefaults();
+    const QVariantMap remoteValues = document.value(QStringLiteral("values")).toMap();
+    for (auto it = remoteValues.cbegin(); it != remoteValues.cend(); ++it)
+      values.insert(it.key(), it.value());
+    if (values.value(key) != oldValue) {
+      m_activeSeriesPreferencesWriteActive = false;
+      refreshSeriesPlaybackPreferences(seriesId);
+      emit errorOccurred(QStringLiteral("A newer series choice from another device was kept."));
+      return;
+    }
+    values.insert(key, value);
+    const qlonglong nextRevision = document.isEmpty() ? 1
+      : document.value(QStringLiteral("revision")).toLongLong() + 1;
+    document.insert(QStringLiteral("version"), 1);
+    document.insert(QStringLiteral("revision"), nextRevision);
+    document.insert(QStringLiteral("updatedAtEpochMillis"), QDateTime::currentMSecsSinceEpoch());
+    document.insert(QStringLiteral("writerDeviceId"), m_deviceId);
+    document.insert(QStringLiteral("values"), values);
+    QVariantMap preferences = data.toMap();
+    QVariantMap custom = preferences.value(QStringLiteral("CustomPrefs")).toMap();
+    custom.insert(QStringLiteral("familyFlixSeriesPlaybackV1"), QString::fromUtf8(
+      QJsonDocument(QJsonObject::fromVariantMap(document)).toJson(QJsonDocument::Compact)));
+    preferences.insert(QStringLiteral("CustomPrefs"), custom);
+    request("POST", path, query,
+            QJsonDocument(QJsonObject::fromVariantMap(preferences)).toJson(QJsonDocument::Compact),
+            [this, session, revision, seriesId, key, value, path, query, nextRevision]
+            (const QVariant&, const QString& writeError) {
+      if (session != m_sessionRevision || revision != m_seriesPlaybackPreferencesRevision
+          || m_activeSeriesId != seriesId) return;
+      if (!writeError.isEmpty()) {
+        m_activeSeriesPreferencesWriteActive = false;
+        emit seriesPlaybackPreferencesChanged();
+        emit errorOccurred(QStringLiteral("Series preference could not be saved."));
+        return;
+      }
+      request("GET", path, query, {},
+              [this, session, revision, seriesId, key, value, nextRevision]
+              (const QVariant& verified, const QString& verifyError) {
+        if (session != m_sessionRevision || revision != m_seriesPlaybackPreferencesRevision
+            || m_activeSeriesId != seriesId) return;
+        m_activeSeriesPreferencesWriteActive = false;
+        QVariantMap verifiedDocument;
+        if (!verifyError.isEmpty() || !decodeSeriesPreferenceDocument(verified.toMap(), verifiedDocument)
+            || verifiedDocument.value(QStringLiteral("revision")).toLongLong() != nextRevision
+            || verifiedDocument.value(QStringLiteral("writerDeviceId")).toString() != m_deviceId
+            || verifiedDocument.value(QStringLiteral("values")).toMap().value(key).toString() != value) {
+          emit seriesPlaybackPreferencesChanged();
+          refreshSeriesPlaybackPreferences(seriesId);
+          emit errorOccurred(QStringLiteral("Series choice changed elsewhere; the latest saved choice was kept."));
+          return;
+        }
+        m_activeSeriesValues = verifiedDocument.value(QStringLiteral("values")).toMap();
+        m_activeSeriesIntroSkipMode = m_activeSeriesValues.value(QStringLiteral("introSkipMode")).toString();
+        m_activeSeriesAutoplayMode = m_activeSeriesValues.value(QStringLiteral("autoplayMode")).toString();
+        emit seriesPlaybackPreferencesChanged();
+        emit mediaSegmentsChanged();
+      });
+    });
   });
 }
 
@@ -1521,6 +1639,9 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_activeSeriesId.clear();
   m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
   m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
+  m_activeSeriesValues.clear();
+  m_activeSeriesPreferencesReady = false;
+  m_activeSeriesPreferencesWriteActive = false;
   ++m_coWatchPresetRevision;
   ++m_familyNightRevision;
   m_coWatchPresetMutationBusy = false;
@@ -1586,6 +1707,9 @@ void FamilyApiClient::signOut()
   m_activeSeriesId.clear();
   m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
   m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
+  m_activeSeriesValues.clear();
+  m_activeSeriesPreferencesReady = false;
+  m_activeSeriesPreferencesWriteActive = false;
   ++m_coWatchPresetRevision;
   ++m_familyNightRevision;
   m_coWatchPresetMutationBusy = false;

@@ -4,6 +4,7 @@ FocusScope {
     id: action
     property string text: ""
     property color accent: familyApi.themeAccent
+    property int fontSize: 16
     property bool selected: false
     property var upAction: null
     property var downAction: null
@@ -57,7 +58,7 @@ FocusScope {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         color: action.activeFocus ? familyApi.themeOnAccent : familyApi.themeText
-        font.pixelSize: 16
+        font.pixelSize: action.fontSize
         font.bold: action.activeFocus
         elide: Text.ElideRight
         text: action.text

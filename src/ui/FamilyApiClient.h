@@ -64,6 +64,9 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList tvPrograms READ tvPrograms NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList mediaSegments READ mediaSegments NOTIFY mediaSegmentsChanged)
   Q_PROPERTY(QString activeSeriesAutoplayMode READ activeSeriesAutoplayMode NOTIFY seriesPlaybackPreferencesChanged)
+  Q_PROPERTY(QString activeSeriesIntroSkipMode READ activeSeriesIntroSkipMode NOTIFY seriesPlaybackPreferencesChanged)
+  Q_PROPERTY(bool activeSeriesPreferencesReady READ activeSeriesPreferencesReady NOTIFY seriesPlaybackPreferencesChanged)
+  Q_PROPERTY(bool activeSeriesPreferencesBusy READ activeSeriesPreferencesBusy NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
   Q_PROPERTY(QColor themeScreen READ themeScreen NOTIFY themeChanged)
   Q_PROPERTY(QColor themeSurface READ themeSurface NOTIFY themeChanged)
@@ -124,6 +127,9 @@ public:
   QVariantList tvPrograms() const { return m_tvPrograms; }
   QVariantList mediaSegments() const { return m_mediaSegments; }
   QString activeSeriesAutoplayMode() const { return m_activeSeriesAutoplayMode; }
+  QString activeSeriesIntroSkipMode() const { return m_activeSeriesIntroSkipMode; }
+  bool activeSeriesPreferencesReady() const { return m_activeSeriesPreferencesReady; }
+  bool activeSeriesPreferencesBusy() const { return m_activeSeriesPreferencesWriteActive; }
   QString themeName() const { return m_themeName; }
   QColor themeScreen() const;
   QColor themeSurface() const;
@@ -186,6 +192,7 @@ public:
   Q_INVOKABLE void refreshTvGuide(int band, const QDateTime& startUtc);
   Q_INVOKABLE void refreshMediaSegments(const QString& itemId);
   Q_INVOKABLE void refreshSeriesPlaybackPreferences(const QString& seriesId);
+  Q_INVOKABLE void setActiveSeriesPlaybackPreference(const QString& key, const QString& value);
   Q_INVOKABLE QString mediaSegmentAction(const QString& type) const;
   Q_INVOKABLE void setMediaSegmentAction(const QString& type, const QString& action);
   Q_INVOKABLE void reportIssue(const QString& itemId, const QString& category, const QString& note);
@@ -353,6 +360,9 @@ private:
   QString m_activeSeriesId;
   QString m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
   QString m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
+  QVariantMap m_activeSeriesValues;
+  bool m_activeSeriesPreferencesReady = false;
+  bool m_activeSeriesPreferencesWriteActive = false;
   quint64 m_seriesPlaybackPreferencesRevision = 0;
   quint64 m_mediaSegmentsRevision = 0;
   quint64 m_tvGuideRevision = 0;

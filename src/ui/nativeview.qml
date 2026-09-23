@@ -187,6 +187,8 @@ Window {
     function showItem(item, returnPage) {
         focusedItem = item
         detailReturnPage = returnPage || "home"
+        familyApi.refreshSeriesPlaybackPreferences(item.Type === "Series" ? (item.Id || "")
+            : item.Type === "Episode" ? (item.SeriesId || "") : "")
         familyApi.openItem(item.Id || "")
         page = "detail"
     }
@@ -374,6 +376,8 @@ Window {
             page = "home"
         } else if (page === "skipSettings") {
             page = "settings"
+        } else if (page === "seriesOptions") {
+            page = "detail"
         } else if (page === "bufferSettings") {
             page = "settings"
         } else if (page === "issueReport") {
@@ -430,6 +434,8 @@ Window {
             Qt.callLater(function() { librariesGrid.forceActiveFocus() })
         } else if (page === "libraryBrowse") {
             Qt.callLater(function() { libraryItemsGrid.forceActiveFocus() })
+        } else if (page === "seriesOptions") {
+            Qt.callLater(function() { seriesOptionsBack.forceActiveFocus() })
         }
     }
 
@@ -2069,9 +2075,9 @@ Window {
             }
             Row {
                 spacing: 8
-                NativeAction { width: 68; text: "Back"; onClicked: window.goBack() }
+                NativeAction { width: 55; text: "Back"; onClicked: window.goBack() }
                 NativeAction {
-                    width: 68
+                    width: 55
                     text: "Play"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
                     onClicked: window.playSelected()
@@ -2079,19 +2085,19 @@ Window {
                 NativeAction {
                     text: familyApi.isWatchlisted(familyApi.selectedItem.Id || "")
                         ? "− Watchlist" : "+ Watchlist"
-                    width: 132
+                    width: 105
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                     onClicked: familyApi.toggleWatchlist(familyApi.selectedItem)
                 }
                 NativeAction {
                     text: familyApi.isHouseholdWatchlisted(familyApi.selectedItem.Id || "")
                         ? "− Family List" : "+ Family List"
-                    width: 135
+                    width: 110
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                     onClicked: familyApi.toggleHouseholdWatchlist(familyApi.selectedItem)
                 }
                 NativeAction {
-                    width: 74
+                    width: 64
                     text: {
                         const entry = window.householdEntry(familyApi.selectedItem.Id || "")
                         return entry && entry.currentUserVoted ? "Unvote" : "Vote"
@@ -2103,7 +2109,7 @@ Window {
                     }
                 }
                 NativeAction {
-                    width: 130
+                    width: 105
                     text: "+ Playlist"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                           || familyApi.selectedItem.Type === "Episode"
@@ -2114,13 +2120,25 @@ Window {
                     }
                 }
                 NativeAction {
-                    width: 82
+                    width: 115
+                    fontSize: 14
+                    text: "Series options"
+                    visible: familyApi.selectedItem.Type === "Series" || familyApi.selectedItem.Type === "Episode"
+                    onClicked: {
+                        familyApi.refreshSeriesPlaybackPreferences(
+                            familyApi.selectedItem.Type === "Series" ? familyApi.selectedItem.Id : familyApi.selectedItem.SeriesId)
+                        page = "seriesOptions"
+                    }
+                }
+                NativeAction {
+                    width: 72
                     text: "Report"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
                     onClicked: { window.issueCategory = "noAudio"; window.issueReportPending = false; page = "issueReport" }
                 }
                 NativeAction {
-                    width: 124
+                    width: 112
+                    fontSize: 14
                     text: familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.Played
                         ? "Mark unwatched" : "Mark watched"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
@@ -2146,6 +2164,50 @@ Window {
                             onClicked: window.showSeason(modelData)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "seriesOptions"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 760)
+            spacing: 18
+            NativeAction { id: seriesOptionsBack; text: "← Show"; onClicked: page = "detail" }
+            Text { text: "Series playback options"; color: familyApi.themeText; font.pixelSize: 30; font.bold: true }
+            Text {
+                width: parent.width
+                text: "Shared with Family Flix on Android and the web for this profile and show."
+                color: familyApi.themeText; font.pixelSize: 17; wrapMode: Text.WordWrap
+            }
+            Text {
+                text: familyApi.activeSeriesPreferencesBusy ? "Saving…"
+                    : familyApi.activeSeriesPreferencesReady ? "" : "Loading this show's choices…"
+                color: familyApi.themeText; font.pixelSize: 17
+            }
+            NativeAction {
+                width: 450
+                enabled: familyApi.activeSeriesPreferencesReady && !familyApi.activeSeriesPreferencesBusy
+                text: "Intro: " + ({ APP_DEFAULT: "App default", ASK: "Ask to skip",
+                    AUTO_SKIP: "Auto skip", DO_NOT_SKIP: "Do not skip" })[familyApi.activeSeriesIntroSkipMode]
+                onClicked: {
+                    const modes = ["APP_DEFAULT", "ASK", "AUTO_SKIP", "DO_NOT_SKIP"]
+                    const current = modes.indexOf(familyApi.activeSeriesIntroSkipMode)
+                    familyApi.setActiveSeriesPlaybackPreference("introSkipMode", modes[(current + 1) % modes.length])
+                }
+            }
+            NativeAction {
+                width: 450
+                enabled: familyApi.activeSeriesPreferencesReady && !familyApi.activeSeriesPreferencesBusy
+                text: "After episode: " + ({ APP_DEFAULT: "App default", PLAY_NEXT: "Play next",
+                    STOP_AFTER_EPISODE: "Stop" })[familyApi.activeSeriesAutoplayMode]
+                onClicked: {
+                    const modes = ["APP_DEFAULT", "PLAY_NEXT", "STOP_AFTER_EPISODE"]
+                    const current = modes.indexOf(familyApi.activeSeriesAutoplayMode)
+                    familyApi.setActiveSeriesPlaybackPreference("autoplayMode", modes[(current + 1) % modes.length])
                 }
             }
         }
