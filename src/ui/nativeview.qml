@@ -63,6 +63,8 @@ Window {
     property bool sidebarExpanded: true
     property int lastHomeRow: 0
     property int lastHomeCard: 0
+    property string lastHomeItemId: ""
+    property bool homeCardFocused: false
     property string watchlistMode: "personal"
     property var playlistTarget: ({})
     property int tvCategoryBand: 1
@@ -223,7 +225,7 @@ Window {
             page = playbackReturnPage
         } else if (page === "detail") {
             page = detailReturnPage
-            if (page === "home") Qt.callLater(function() { window.focusCard(lastHomeRow, lastHomeCard) })
+            if (page === "home") Qt.callLater(window.focusHomeItem)
         } else if (page === "season") {
             familyApi.openItem(selectedSeries.Id || "")
             page = "detail"
@@ -313,6 +315,19 @@ Window {
         card.forceActiveFocus()
     }
 
+    function focusHomeItem() {
+        for (let rowIndex = 0; rowIndex < homeRows.length; ++rowIndex) {
+            const list = homeRows[rowIndex].items || []
+            for (let cardIndex = 0; cardIndex < list.length; ++cardIndex) {
+                if (list[cardIndex].Id === lastHomeItemId) {
+                    focusCard(rowIndex, cardIndex)
+                    return
+                }
+            }
+        }
+        focusCard(lastHomeRow, lastHomeCard)
+    }
+
     Component.onCompleted: {
         if (familyApi.signedIn) {
             familyApi.refreshHome()
@@ -377,6 +392,8 @@ Window {
         }
         function onHomeChanged() {
             if (!window.backgroundRandomId) Qt.callLater(window.cycleBackground)
+            if (window.page === "home" && window.homeCardFocused)
+                Qt.callLater(window.focusHomeItem)
         }
     }
     Connections {
@@ -810,7 +827,7 @@ Window {
                     text: window.sidebarExpanded ? "Home" : "☰"
                     selected: true
                     focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.sidebarExpanded = true; window.focusedItem = ({}) }
+                    onActiveFocusChanged: if (activeFocus) { window.sidebarExpanded = true; window.focusedItem = ({}); window.homeCardFocused = false }
                     upAction: function() { profileButton.forceActiveFocus() }
                     rightAction: function() { window.focusCard(0, 0) }
                     onClicked: homeScroll.contentY = 0
@@ -822,17 +839,17 @@ Window {
                         visible: window.sidebarExpanded
                         text: modelData.Name || "Library"
                         focusScroll: sidebarScroll
-                        onActiveFocusChanged: if (activeFocus) window.focusedItem = ({})
+                        onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
                         rightAction: function() { window.focusCard(0, 0) }
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: page = "allLibraries" }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: window.openLiveTv() }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: page = "settings" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: page = "allLibraries" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: window.openLiveTv() }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: page = "settings" }
               }
             }
         }
@@ -853,7 +870,7 @@ Window {
             anchors.right: parent.right
             anchors.margins: 16
             text: familyApi.watchingTogether ? familyApi.coWatchLabel : familyApi.userName
-            onActiveFocusChanged: if (activeFocus) window.focusedItem = ({})
+            onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
             downAction: function() { homeButton.forceActiveFocus() }
             onClicked: {
                 chosenUser = ""
@@ -932,6 +949,8 @@ Window {
                                         onActiveFocusChanged: if (activeFocus) {
                                             window.lastHomeRow = section.index
                                             window.lastHomeCard = card.index
+                                            window.lastHomeItemId = card.modelData.Id || ""
+                                            window.homeCardFocused = true
                                             window.sidebarExpanded = false
                                             window.focusedItem = card.modelData
                                         }
