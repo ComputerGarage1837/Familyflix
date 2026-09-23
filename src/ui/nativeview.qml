@@ -82,6 +82,8 @@ Window {
     property bool homeCardFocused: false
     property bool contextOpen: false
     property var contextItem: ({})
+    property bool searchKeyboardOpen: false
+    property bool searchSymbols: false
     property string watchlistMode: "personal"
     property var playlistTarget: ({})
     property string selectedPlaylistName: ""
@@ -229,6 +231,22 @@ Window {
     function closeContext() {
         contextOpen = false
         if (page === "home") Qt.callLater(window.focusHomeItem)
+    }
+
+    function typeSearchKey(key) {
+        if (key === "123" || key === "ABC") {
+            searchSymbols = key === "123"
+            Qt.callLater(function() { searchKeyRepeater.itemAt(0).forceActiveFocus() })
+        } else if (key === "Done") {
+            searchKeyboardOpen = false
+            searchDelay.stop()
+            familyApi.search(searchInput.text)
+            Qt.callLater(function() {
+                if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+                else searchInput.forceActiveFocus()
+            })
+        } else if (key === "Back") searchInput.text = searchInput.text.slice(0, -1)
+        else searchInput.text += key === "Space" ? " " : key
     }
 
     function showSeason(season) {
@@ -529,6 +547,10 @@ Window {
                 if (first) first.forceActiveFocus()
             })
         } else if (page === "search") {
+            if (!searchInput.text && !familyApi.searchResults.length) {
+                searchKeyboardOpen = true
+                searchSymbols = false
+            }
             Qt.callLater(function() {
                 if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
                 else searchInput.forceActiveFocus()
@@ -583,6 +605,9 @@ Window {
         target: familyApi
         function onSessionChanged() {
             window.issueReportPending = false
+            searchInput.clear()
+            window.searchKeyboardOpen = false
+            window.searchSymbols = false
             window.autoNextPending = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
@@ -1419,7 +1444,26 @@ Window {
                 familyApi.search(text)
                 if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
             }
-            Keys.onDownPressed: if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+            Keys.onDownPressed: {
+                if (window.searchKeyboardOpen) searchKeyRepeater.itemAt(0).forceActiveFocus()
+                else if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+            }
+            Keys.onRightPressed: if (cursorPosition === text.length) searchKeyboardButton.forceActiveFocus()
+        }
+        NativeAction {
+            id: searchKeyboardButton
+            x: 720; y: 95
+            width: 210; height: 48
+            text: window.searchKeyboardOpen ? "Hide keyboard" : "Show keyboard"
+            downAction: function() {
+                if (window.searchKeyboardOpen) searchKeyRepeater.itemAt(0).forceActiveFocus()
+                else if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+            }
+            onClicked: {
+                window.searchKeyboardOpen = !window.searchKeyboardOpen
+                if (window.searchKeyboardOpen) Qt.callLater(function() { searchKeyRepeater.itemAt(0).forceActiveFocus() })
+                else searchInput.forceActiveFocus()
+            }
         }
         Timer {
             id: searchDelay
@@ -1427,16 +1471,42 @@ Window {
             repeat: false
             onTriggered: if (window.page === "search") familyApi.search(searchInput.text)
         }
+        GridLayout {
+            x: 28; y: 160
+            visible: window.searchKeyboardOpen
+            columns: 7
+            property int actionColumns: 7
+            columnSpacing: 6; rowSpacing: 6
+            Repeater {
+                id: searchKeyRepeater
+                model: window.searchSymbols
+                    ? ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "-", ".", "Space", "Back", "ABC", "Done"]
+                    : ["A", "B", "C", "D", "E", "F", "G",
+                        "H", "I", "J", "K", "L", "M", "N",
+                        "O", "P", "Q", "R", "S", "T", "U",
+                        "V", "W", "X", "Y", "Z", "Space", "Back", "123", "Done"]
+                NativeAction {
+                    required property var modelData
+                    required property int index
+                    Layout.preferredWidth: 70
+                    Layout.preferredHeight: 38
+                    fontSize: 14
+                    text: modelData
+                    upAction: index < 7 ? function() { searchInput.forceActiveFocus() } : null
+                    onClicked: window.typeSearchKey(modelData)
+                }
+            }
+        }
         Text {
-            x: 28; y: 158
+            x: 28; y: window.searchKeyboardOpen ? 384 : 158
             text: familyApi.searchLoading ? "Searching…" : (searchInput.text.trim() && !familyApi.searchResults.length ? "No matching videos" : "")
             color: familyApi.themeText; font.pixelSize: 17
         }
         GridView {
             id: searchGrid
-            x: 28; y: 195
+            x: 28; y: window.searchKeyboardOpen ? 420 : 195
             width: parent.width - 56
-            height: parent.height - 215
+            height: parent.height - y - 20
             cellWidth: 245; cellHeight: 180
             model: familyApi.searchResults
             clip: true
@@ -1454,7 +1524,8 @@ Window {
             Keys.onEnterPressed: if (currentIndex >= 0) window.showItem(familyApi.searchResults[currentIndex], "search")
             Keys.onUpPressed: function(event) {
                 if (searchGrid.currentIndex < Math.max(1, Math.floor(searchGrid.width / searchGrid.cellWidth))) {
-                    searchInput.forceActiveFocus()
+                    if (window.searchKeyboardOpen) searchKeyRepeater.itemAt(searchKeyRepeater.count - 1).forceActiveFocus()
+                    else searchInput.forceActiveFocus()
                     event.accepted = true
                 }
             }
