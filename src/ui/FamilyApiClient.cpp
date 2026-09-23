@@ -4,8 +4,10 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMetaType>
+#include <QHash>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
 #include <QUrlQuery>
@@ -659,6 +661,133 @@ void FamilyApiClient::deleteCoWatchPreset(const QString& presetId)
   });
 }
 
+int FamilyApiClient::familyNightRequiredAge(const QString& rating) const
+{
+  const QString normalized = rating.trimmed().toUpper();
+  if (normalized.isEmpty()) return -1;
+  const QList<QPair<QString, int>> known{
+    { QStringLiteral("TV-Y7"), 7 }, { QStringLiteral("TV-Y"), 0 },
+    { QStringLiteral("TV-G"), 0 }, { QStringLiteral("TV-PG"), 10 },
+    { QStringLiteral("TV-MA"), 17 }, { QStringLiteral("NC-17"), 18 },
+    { QStringLiteral("PG-13"), 13 }, { QStringLiteral("PG"), 8 },
+    { QStringLiteral("G"), 0 }, { QStringLiteral("R"), 17 }
+  };
+  for (const auto& pair : known) {
+    if (normalized == pair.first || normalized.endsWith(QStringLiteral("-") + pair.first))
+      return pair.second;
+  }
+  static const QRegularExpression numeric(QStringLiteral("(?:^|[^0-9])(\\d{1,2})(?:A|\\+)?$"));
+  const auto match = numeric.match(normalized);
+  return match.hasMatch() ? match.captured(1).toInt() : -1;
+}
+
+void FamilyApiClient::refreshFamilyNightCandidates()
+{
+  if (!signedIn()) return;
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = ++m_familyNightRevision;
+  m_familyNightCandidates.clear();
+  m_familyNightLoading = true;
+  emit familyNightChanged();
+  struct LoadState {
+    int pending = 0;
+    bool anySuccess = false;
+    QHash<QString, QVariantMap> merged;
+  };
+  auto load = std::make_shared<LoadState>();
+  const auto profiles = coWatchProfiles();
+  load->pending = profiles.size();
+  auto finish = std::make_shared<std::function<void()>>();
+  *finish = [this, load, session, revision] {
+    if (session != m_sessionRevision || revision != m_familyNightRevision) return;
+    if (--load->pending != 0) return;
+    m_familyNightLoading = false;
+    for (const auto& candidate : load->merged)
+      m_familyNightCandidates.append(candidate);
+    emit familyNightChanged();
+    if (!load->anySuccess)
+      emit errorOccurred(QStringLiteral("Family Night watchlists could not load."));
+  };
+  if (profiles.isEmpty()) { m_familyNightLoading = false; emit familyNightChanged(); return; }
+  for (const auto& value : profiles) {
+    const auto profile = value.toMap();
+    const QString userId = profile.value(QStringLiteral("Id")).toString();
+    const QString userName = profile.value(QStringLiteral("Name")).toString();
+    const QString token = userId == m_userId ? m_token
+      : m_settings.value(QStringLiteral("profiles/%1/token").arg(userId)).toString();
+    if (userId.isEmpty() || token.isEmpty()) { (*finish)(); continue; }
+    requestAs("GET", QStringLiteral("FamilyFlix/Watchlists/personal"), {}, {}, token, userId,
+              [this, load, finish, session, revision, token, userId, userName]
+              (const QVariant& data, const QString& error, int) {
+      if (session != m_sessionRevision || revision != m_familyNightRevision) return;
+      if (!error.isEmpty()) { (*finish)(); return; }
+      load->anySuccess = true;
+      QStringList ids;
+      for (const auto& value : data.toMap().value(QStringLiteral("entries")).toList()) {
+        const auto entry = value.toMap();
+        const QString kind = entry.value(QStringLiteral("itemType")).toString().toLower();
+        const QString id = entry.value(QStringLiteral("itemId")).toString();
+        if ((kind == QStringLiteral("movie") || kind == QStringLiteral("series"))
+            && !id.isEmpty() && !ids.contains(id)) ids.append(id);
+      }
+      for (int offset = 0; offset < ids.size(); offset += 40) {
+        const QStringList chunk = ids.mid(offset, 40);
+        ++load->pending;
+        requestAs("GET", QStringLiteral("Users/%1/Items").arg(userId),
+                  { { QStringLiteral("Ids"), chunk.join(QLatin1Char(',')) },
+                    { QStringLiteral("EnableUserData"), true },
+                    { QStringLiteral("Limit"), 40 } }, {}, token, userId,
+                  [this, load, finish, session, revision, userName]
+                  (const QVariant& response, const QString& itemError, int) {
+          if (session != m_sessionRevision || revision != m_familyNightRevision) return;
+          if (itemError.isEmpty()) {
+            for (const auto& value : items(response)) {
+              auto candidate = value.toMap();
+              const QString id = candidate.value(QStringLiteral("Id")).toString();
+              const QString kind = candidate.value(QStringLiteral("Type")).toString();
+              if (id.isEmpty() || (kind != QStringLiteral("Movie") && kind != QStringLiteral("Series"))) continue;
+              const QString key = id.toLower();
+              if (load->merged.contains(key)) candidate = load->merged.value(key);
+              auto sources = candidate.value(QStringLiteral("SourceProfiles")).toStringList();
+              if (!sources.contains(userName)) sources.append(userName);
+              candidate.insert(QStringLiteral("SourceProfiles"), sources);
+              load->merged.insert(key, candidate);
+            }
+          }
+          (*finish)();
+        });
+      }
+      (*finish)();
+    });
+  }
+}
+
+void FamilyApiClient::resolveFirstUnwatchedEpisode(const QString& seriesId)
+{
+  if (!signedIn() || seriesId.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("ParentId"), seriesId },
+            { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+            { QStringLiteral("Filters"), QStringLiteral("IsUnplayed") },
+            { QStringLiteral("IsMissing"), false },
+            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+            { QStringLiteral("EnableUserData"), true },
+            { QStringLiteral("Limit"), 1 } }, {},
+          [this, session, seriesId](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(error); return; }
+    const auto episodes = items(data);
+    if (episodes.isEmpty()) {
+      emit errorOccurred(QStringLiteral("No unwatched episode is available for this show."));
+      return;
+    }
+    emit firstUnwatchedEpisodeReady(seriesId, episodes.first().toMap());
+  });
+}
+
 void FamilyApiClient::authenticateParticipant(const QString& userId, const QString& password)
 {
   if (!signedIn() || userId.isEmpty() || userId == m_userId) return;
@@ -764,8 +893,10 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   ++m_tvGuideRevision;
   ++m_mediaSegmentsRevision;
   ++m_coWatchPresetRevision;
+  ++m_familyNightRevision;
   m_coWatchPresetMutationBusy = false;
   m_coWatchPresets.clear();
+  m_familyNightCandidates.clear(); m_familyNightLoading = false;
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_recentDeckActivity.clear();
@@ -788,6 +919,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
   emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged();
   emit coWatchPresetsChanged();
+  emit familyNightChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
   emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
   refreshHome();
@@ -807,8 +939,10 @@ void FamilyApiClient::signOut()
   ++m_itemRevision;
   ++m_mediaSegmentsRevision;
   ++m_coWatchPresetRevision;
+  ++m_familyNightRevision;
   m_coWatchPresetMutationBusy = false;
   m_coWatchPresets.clear();
+  m_familyNightCandidates.clear(); m_familyNightLoading = false;
   m_settings.remove(QStringLiteral("profiles/%1/token").arg(m_userId));
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
@@ -833,6 +967,7 @@ void FamilyApiClient::signOut()
   emit sessionChanged();
   emit coWatchChanged();
   emit coWatchPresetsChanged();
+  emit familyNightChanged();
   emit themeChanged();
   emit homeChanged();
   emit libraryBrowseChanged();

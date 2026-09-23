@@ -17,7 +17,40 @@ Window {
     property string page: familyApi.signedIn ? "home" : "login"
     property string chosenUser: ""
     property var chosenCoWatchUser: ({})
+    property string familyNightMedia: "All"
+    property int familyNightRuntime: 0
+    property int familyNightAge: -1
+    property string familyNightGenre: "Any"
+    property var familyNightPick: ({})
+    onFamilyNightMatchesChanged: if (page === "familyNight") Qt.callLater(pickFamilyNight)
+    property var familyNightGenres: {
+        const genres = ["Any"]
+        for (const item of familyApi.familyNightCandidates) {
+            for (const genre of (item.Genres || [])) {
+                if (!genres.includes(genre)) genres.push(genre)
+            }
+        }
+        return genres
+    }
+    property var familyNightMatches: {
+        const matches = []
+        for (const item of familyApi.familyNightCandidates) {
+            if (familyNightMedia === "Movies" && item.Type !== "Movie") continue
+            if (familyNightMedia === "Shows" && item.Type !== "Series") continue
+            const minutes = Math.ceil(Number(item.RunTimeTicks || 0) / 600000000)
+            if (familyNightRuntime > 0 && (minutes === 0 || minutes > familyNightRuntime)) continue
+            if (familyNightGenre !== "Any" && !(item.Genres || []).some(function(genre) {
+                return String(genre).toLowerCase() === familyNightGenre.toLowerCase()
+            })) continue
+            const requiredAge = familyApi.familyNightRequiredAge(item.OfficialRating || "")
+            if (familyNightAge >= 0 && (requiredAge < 0 || requiredAge > familyNightAge)) continue
+            matches.push(item)
+        }
+        return matches
+    }
     property var focusedItem: ({})
+    property var playingItem: ({})
+    property string playbackReturnPage: "detail"
     property var selectedSeries: ({})
     property string detailReturnPage: "home"
     property string notice: ""
@@ -80,8 +113,17 @@ Window {
         return null
     }
 
+    function pickFamilyNight() {
+        let pool = familyNightMatches.filter(function(item) { return item.Id !== familyNightPick.Id })
+        if (!pool.length) pool = familyNightMatches
+        familyNightPick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : ({})
+    }
+
     function playSelected() {
-        const item = familyApi.selectedItem
+        playItem(familyApi.selectedItem, "detail")
+    }
+
+    function playItem(item, returnPage) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
         const stream = familyApi.streamUrl(item.Id)
         if (!stream) return
@@ -89,6 +131,8 @@ Window {
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
+            playingItem = item
+            playbackReturnPage = returnPage || "detail"
             playerIsLive = false
             activeSkipSegment = ({})
             lastSkipSegmentKey = ""
@@ -138,7 +182,7 @@ Window {
             }
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             components.player.stop()
-            page = "detail"
+            page = playbackReturnPage
         } else if (page === "detail") {
             page = detailReturnPage
             if (page === "home") Qt.callLater(function() { window.focusCard(lastHomeRow, lastHomeCard) })
@@ -268,6 +312,10 @@ Window {
                 coWatchPassword.clear()
             }
         }
+        function onFirstUnwatchedEpisodeReady(seriesId, episode) {
+            if (window.page === "familyNight" && window.familyNightPick.Id === seriesId)
+                window.playItem(episode, "familyNight")
+        }
         function onLiveTvChanged() {
             if (window.page !== "liveTv") return
             if (familyApi.tvCategories.length) {
@@ -285,7 +333,7 @@ Window {
         function onPlaying() {
             if (window.page === "player" && !window.playerIsLive) {
                 window.playerPaused = false
-                familyApi.reportPlaybackStart(familyApi.selectedItem, components.player.getPosition() * 1000)
+                familyApi.reportPlaybackStart(window.playingItem, components.player.getPosition() * 1000)
             }
         }
         function onPaused() {
@@ -302,13 +350,13 @@ Window {
             }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
-            window.page = "detail"
+            window.page = window.playbackReturnPage
         }
         function onCanceled() {
             if (window.playerIsLive) { window.livePreviewActive = false; return }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
-            window.page = "detail"
+            window.page = window.playbackReturnPage
         }
         function onError(message) {
             if (window.playerIsLive) {
@@ -320,7 +368,7 @@ Window {
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             window.notice = message
-            window.page = "detail"
+            window.page = window.playbackReturnPage
         }
     }
     Timer {
@@ -623,6 +671,7 @@ Window {
                 }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: page = "allLibraries" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll; onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: window.openLiveTv() }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onClicked: page = "settings" }
@@ -893,6 +942,94 @@ Window {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "familyNight"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 30
+            spacing: 14
+            Row {
+                spacing: 18
+                NativeAction { text: "← Home"; onClicked: page = "home" }
+                Text { text: "Family Night"; color: familyApi.themeText; font.pixelSize: 32; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
+                NativeAction { text: "Refresh lists"; onClicked: familyApi.refreshFamilyNightCandidates() }
+            }
+            Text { text: "Pick from your Watchlist" + (familyApi.watchingTogether ? " and everyone watching together" : "") + "."; color: familyApi.themeText; font.pixelSize: 18 }
+            Flow {
+                width: parent.width
+                spacing: 10
+                NativeAction {
+                    width: 145
+                    text: "Type: " + window.familyNightMedia
+                    onClicked: {
+                        const values = ["All", "Movies", "Shows"]
+                        window.familyNightMedia = values[(values.indexOf(window.familyNightMedia) + 1) % values.length]
+                    }
+                }
+                NativeAction {
+                    width: 165
+                    text: "Length: " + (window.familyNightRuntime || "Any")
+                    onClicked: {
+                        const values = [0, 90, 120, 150, 180]
+                        window.familyNightRuntime = values[(values.indexOf(window.familyNightRuntime) + 1) % values.length]
+                    }
+                }
+                NativeAction {
+                    width: 185
+                    text: "Max age: " + (window.familyNightAge < 0 ? "Any" : window.familyNightAge)
+                    onClicked: {
+                        const values = [-1, 7, 10, 13, 17, 18]
+                        window.familyNightAge = values[(values.indexOf(window.familyNightAge) + 1) % values.length]
+                    }
+                }
+                NativeAction {
+                    width: 210
+                    text: "Genre: " + window.familyNightGenre
+                    onClicked: {
+                        const values = window.familyNightGenres
+                        window.familyNightGenre = values[(values.indexOf(window.familyNightGenre) + 1) % values.length]
+                    }
+                }
+            }
+            Text {
+                text: familyApi.familyNightLoading ? "Loading family watchlists…" : window.familyNightMatches.length + " choices match your filters"
+                color: familyApi.themeText; font.pixelSize: 18
+            }
+            Rectangle {
+                width: Math.min(parent.width, 800)
+                height: Math.min(300, window.height - 350)
+                color: familyApi.themeSurface
+                radius: 9
+                Image { anchors.fill: parent; source: familyApi.imageUrl(window.familyNightPick.Id || "", "Backdrop"); fillMode: Image.PreserveAspectCrop }
+                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 82; color: "#df08121d" }
+                Text {
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                    anchors.margins: 12
+                    text: window.familyNightPick.Name
+                        ? window.familyNightPick.Name + "  ·  " + (window.familyNightPick.SourceProfiles || []).join(", ")
+                        : "Use Surprise Me to pick a movie or show"
+                    color: "white"; font.pixelSize: 21; font.bold: true; wrapMode: Text.WordWrap
+                }
+            }
+            Row {
+                spacing: 12
+                NativeAction { width: 180; text: window.familyNightPick.Id ? "Reroll" : "Surprise Me"; onClicked: window.pickFamilyNight() }
+                NativeAction {
+                    width: 180
+                    text: "Play"
+                    visible: !!window.familyNightPick.Id
+                    onClicked: {
+                        if (window.familyNightPick.Type === "Series")
+                            familyApi.resolveFirstUnwatchedEpisode(window.familyNightPick.Id)
+                        else window.playItem(window.familyNightPick, "familyNight")
+                    }
+                }
+                NativeAction { width: 180; text: "See details"; visible: !!window.familyNightPick.Id; onClicked: window.showItem(window.familyNightPick, "familyNight") }
             }
         }
     }

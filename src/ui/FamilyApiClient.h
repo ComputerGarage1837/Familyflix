@@ -24,6 +24,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QString coWatchLabel READ coWatchLabel NOTIFY coWatchChanged)
   Q_PROPERTY(QString homeFeedOwnerId READ homeFeedOwnerId NOTIFY coWatchChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
+  Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
+  Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
   Q_PROPERTY(QVariantList libraries READ libraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList railLibraries READ railLibraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
@@ -66,6 +68,8 @@ public:
   QString coWatchLabel() const;
   QString homeFeedOwnerId() const { return m_homeFeedOwnerId; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
+  QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
+  bool familyNightLoading() const { return m_familyNightLoading; }
   QVariantList libraries() const { return m_libraries; }
   QVariantList railLibraries() const;
   QVariantList continueItems() const { return m_continueItems; }
@@ -109,6 +113,9 @@ public:
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
   Q_INVOKABLE bool activateCoWatchPreset(const QString& presetId);
   Q_INVOKABLE void deleteCoWatchPreset(const QString& presetId);
+  Q_INVOKABLE void refreshFamilyNightCandidates();
+  Q_INVOKABLE int familyNightRequiredAge(const QString& rating) const;
+  Q_INVOKABLE void resolveFirstUnwatchedEpisode(const QString& seriesId);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
@@ -151,6 +158,8 @@ signals:
   void publicUsersChanged();
   void coWatchChanged();
   void coWatchPresetsChanged();
+  void familyNightChanged();
+  void firstUnwatchedEpisodeReady(const QString& seriesId, const QVariantMap& episode);
   void homeChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
@@ -215,6 +224,9 @@ private:
   QVariantList m_coWatchPresets;
   quint64 m_coWatchPresetRevision = 0;
   bool m_coWatchPresetMutationBusy = false;
+  QVariantList m_familyNightCandidates;
+  bool m_familyNightLoading = false;
+  quint64 m_familyNightRevision = 0;
   QVariantList m_publicUsers;
   QVariantList m_libraries;
   QVariantList m_continueItems;
