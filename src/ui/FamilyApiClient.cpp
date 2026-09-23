@@ -919,6 +919,14 @@ void FamilyApiClient::moveHomeRow(const QString& rowId, int offset)
   changeLibraryMenuPreference(QStringLiteral("familyTvHomeRowOrderV1"), m_homeRowOrder.join('|'));
 }
 
+void FamilyApiClient::cycleSkipForwardMs()
+{
+  if (!signedIn()) return;
+  m_skipForwardMs = m_skipForwardMs >= 30000 ? 5000 : m_skipForwardMs + 5000;
+  emit seekPreferenceChanged();
+  changeLibraryMenuPreference(QStringLiteral("skipForwardLength"), QString::number(m_skipForwardMs));
+}
+
 void FamilyApiClient::refreshLibraryMenuPreferences()
 {
   if (!signedIn()) return;
@@ -951,10 +959,19 @@ void FamilyApiClient::applyLibraryMenuPreferences(const QVariantMap& customPrefs
   const bool changed = m_settings.value(orderKey).toStringList() != order
     || m_settings.value(hiddenKey).toStringList() != hidden;
   const bool layoutChanged = m_homeRowOrder != homeOrder || m_hiddenHomeRows != homeHidden;
+  bool backValid = false, forwardValid = false;
+  const int requestedBack = customPrefs.value(QStringLiteral("skipBackLength"), 10000).toInt(&backValid);
+  const int requestedForward = customPrefs.value(QStringLiteral("skipForwardLength"), 30000).toInt(&forwardValid);
+  const int skipBack = backValid ? qBound(1000, requestedBack, 60000) : 10000;
+  const int skipForward = forwardValid ? qBound(5000, requestedForward, 30000) : 30000;
+  const bool seekChanged = m_skipBackMs != skipBack || m_skipForwardMs != skipForward;
   m_settings.setValue(orderKey, order);
   m_settings.setValue(hiddenKey, hidden);
   m_homeRowOrder = homeOrder;
   m_hiddenHomeRows = homeHidden;
+  m_skipBackMs = skipBack;
+  m_skipForwardMs = skipForward;
+  if (seekChanged) emit seekPreferenceChanged();
   if (changed) refreshHome();
   else if (layoutChanged) emit homeChanged();
 }
@@ -1865,6 +1882,8 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_libraryMenuPending.clear();
   m_homeRowOrder.clear();
   m_hiddenHomeRows.clear();
+  m_skipBackMs = 10000;
+  m_skipForwardMs = 30000;
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
@@ -1913,7 +1932,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("userId"), m_userId);
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
-  emit sessionChanged(); emit themeChanged(); emit profileAppearanceChanged(); emit nextUpModeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
+  emit sessionChanged(); emit themeChanged(); emit profileAppearanceChanged(); emit nextUpModeChanged(); emit seekPreferenceChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
@@ -1945,6 +1964,8 @@ void FamilyApiClient::signOut()
   m_libraryMenuPending.clear();
   m_homeRowOrder.clear();
   m_hiddenHomeRows.clear();
+  m_skipBackMs = 10000;
+  m_skipForwardMs = 30000;
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
@@ -1995,6 +2016,7 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("userId"));
   m_settings.remove(QStringLiteral("userName"));
   emit sessionChanged();
+  emit seekPreferenceChanged();
   emit coWatchChanged();
   emit kidsSettingsChanged();
   emit nextUpModeChanged();

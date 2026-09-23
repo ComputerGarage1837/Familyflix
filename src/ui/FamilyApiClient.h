@@ -46,6 +46,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QStringList homeRowOrder READ homeRowOrder NOTIFY homeChanged)
   Q_PROPERTY(QStringList hiddenHomeRows READ hiddenHomeRows NOTIFY homeChanged)
   Q_PROPERTY(QVariantList homeLayoutRows READ homeLayoutRows NOTIFY homeChanged)
+  Q_PROPERTY(int skipBackMs READ skipBackMs NOTIFY seekPreferenceChanged)
+  Q_PROPERTY(int skipForwardMs READ skipForwardMs NOTIFY seekPreferenceChanged)
   Q_PROPERTY(QVariantMap selectedLibrary READ selectedLibrary NOTIFY libraryBrowseChanged)
   Q_PROPERTY(QVariantList libraryItems READ libraryItems NOTIFY libraryBrowseChanged)
   Q_PROPERTY(bool libraryHasMore READ libraryHasMore NOTIFY libraryBrowseChanged)
@@ -115,6 +117,8 @@ public:
   QStringList homeRowOrder() const { return m_homeRowOrder; }
   QStringList hiddenHomeRows() const { return m_hiddenHomeRows; }
   QVariantList homeLayoutRows() const;
+  int skipBackMs() const { return m_skipBackMs; }
+  int skipForwardMs() const { return m_skipForwardMs; }
   QVariantMap selectedLibrary() const { return m_selectedLibrary; }
   QVariantList libraryItems() const { return m_libraryItems; }
   bool libraryHasMore() const { return m_libraryHasMore; }
@@ -191,6 +195,7 @@ public:
   Q_INVOKABLE QString homeRowIdForLibrary(const QString& libraryId) const;
   Q_INVOKABLE void setHomeRowVisible(const QString& rowId, bool visible);
   Q_INVOKABLE void moveHomeRow(const QString& rowId, int offset);
+  Q_INVOKABLE void cycleSkipForwardMs();
   Q_INVOKABLE void openItem(const QString& itemId);
   Q_INVOKABLE void openSeason(const QString& seasonId);
   Q_INVOKABLE void refreshPlaylists();
@@ -243,6 +248,7 @@ signals:
   void playableItemReady(const QString& itemId, const QVariantMap& item);
   void nextEpisodeReady(const QVariantMap& episode);
   void homeChanged();
+  void seekPreferenceChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
   void selectedCastChanged();
@@ -360,6 +366,8 @@ private:
   QVariantList m_libraryRows;
   QStringList m_homeRowOrder;
   QStringList m_hiddenHomeRows;
+  int m_skipBackMs = 10000;
+  int m_skipForwardMs = 30000;
   QVariantMap m_selectedLibrary;
   QVariantList m_libraryItems;
   bool m_libraryHasMore = false;

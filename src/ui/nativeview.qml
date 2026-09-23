@@ -1665,6 +1665,7 @@ Window {
             NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
             NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
             NativeAction { text: "Next episode screen: " + familyApi.nextUpMode; width: 325; onClicked: familyApi.cycleNextUpMode() }
+            NativeAction { text: "Skip forward: " + (familyApi.skipForwardMs / 1000) + " sec"; width: 325; onClicked: familyApi.cycleSkipForwardMs() }
             NativeAction { text: "Background images: " + (familyApi.backdropEnabled ? "On" : "Off"); width: 325; onClicked: familyApi.toggleBackdropEnabled() }
             NativeAction { text: "Clock: " + familyApi.clockBehavior.replace(/_/g, " "); width: 325; onClicked: familyApi.cycleClockBehavior() }
             NativeAction { text: "Check Windows updates"; width: 325; onClicked: familyApi.checkWindowsUpdate(true) }
@@ -2608,7 +2609,7 @@ Window {
                 window.playerPaused = !window.playerPaused
                 event.accepted = true
             } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-                const delta = event.key === Qt.Key_Left ? -10000 : 10000
+                const delta = event.key === Qt.Key_Left ? -familyApi.skipBackMs : familyApi.skipForwardMs
                 components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 + delta))
                 event.accepted = true
             }
@@ -2652,8 +2653,8 @@ Window {
                         controlsTimer.restart()
                     }
                 }
-                NativeAction { text: "−10 sec"; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - 10000)); controlsTimer.restart() } }
-                NativeAction { text: "+10 sec"; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + 10000); controlsTimer.restart() } }
+                NativeAction { text: "−" + (familyApi.skipBackMs / 1000) + " sec"; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - familyApi.skipBackMs)); controlsTimer.restart() } }
+                NativeAction { text: "+" + (familyApi.skipForwardMs / 1000) + " sec"; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + familyApi.skipForwardMs); controlsTimer.restart() } }
                 NativeAction {
                     text: "Audio / Subs"
                     width: 145
