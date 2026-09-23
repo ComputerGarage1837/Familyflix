@@ -611,6 +611,13 @@ void FamilyApiClient::applyProfileSettings(const QVariantMap& values)
     m_settings.setValue(QStringLiteral("users/%1/nextUpTimeoutMs").arg(m_userId), timeout);
     emit nextUpModeChanged();
   }
+  bool prerollValid = false;
+  const int preroll = values.value(QStringLiteral("pref_resume_preroll")).toString().toInt(&prerollValid);
+  if (prerollValid && preroll >= 0 && preroll <= 300 && preroll != m_resumePrerollSeconds) {
+    m_resumePrerollSeconds = preroll;
+    m_settings.setValue(QStringLiteral("users/%1/resumePrerollSeconds").arg(m_userId), preroll);
+    emit nextUpModeChanged();
+  }
   const QString queuing = values.value(QStringLiteral("pref_enable_tv_queuing")).toString();
   if (queuing == QStringLiteral("true") || queuing == QStringLiteral("false")) {
     const bool enabled = queuing == QStringLiteral("true");
@@ -1287,6 +1294,8 @@ void FamilyApiClient::loadKidsSettings()
     m_nextUpMode = QStringLiteral("Extended");
   m_nextUpTimeoutMs = m_settings.value(QStringLiteral("users/%1/nextUpTimeoutMs").arg(m_userId), 7000).toInt();
   if (m_nextUpTimeoutMs < 0 || m_nextUpTimeoutMs > 30000) m_nextUpTimeoutMs = 7000;
+  m_resumePrerollSeconds = m_settings.value(QStringLiteral("users/%1/resumePrerollSeconds").arg(m_userId), 0).toInt();
+  if (m_resumePrerollSeconds < 0 || m_resumePrerollSeconds > 300) m_resumePrerollSeconds = 0;
   emit kidsSettingsChanged();
   emit nextUpModeChanged();
 }
@@ -1401,6 +1410,16 @@ void FamilyApiClient::cycleNextUpTimeout()
   m_settings.setValue(QStringLiteral("users/%1/nextUpTimeoutMs").arg(m_userId), m_nextUpTimeoutMs);
   emit nextUpModeChanged();
   changeProfileSetting(QStringLiteral("next_up_timeout"), QString::number(m_nextUpTimeoutMs));
+}
+
+void FamilyApiClient::cycleResumePreroll()
+{
+  if (!signedIn()) return;
+  const QList<int> choices{ 0, 3, 5, 7, 10, 20, 30, 60, 120, 300 };
+  m_resumePrerollSeconds = choices[(choices.indexOf(m_resumePrerollSeconds) + 1) % choices.size()];
+  m_settings.setValue(QStringLiteral("users/%1/resumePrerollSeconds").arg(m_userId), m_resumePrerollSeconds);
+  emit nextUpModeChanged();
+  changeProfileSetting(QStringLiteral("pref_resume_preroll"), QString::number(m_resumePrerollSeconds));
 }
 
 void FamilyApiClient::toggleBackdropEnabled()
@@ -2103,6 +2122,7 @@ void FamilyApiClient::signOut()
   m_kidsPinSalt.clear(); m_kidsPinHash.clear();
   m_nextUpMode = QStringLiteral("Extended");
   m_nextUpTimeoutMs = 7000;
+  m_resumePrerollSeconds = 0;
   m_mediaQueuingEnabled = true;
   m_backdropEnabled = true;
   m_clockBehavior = QStringLiteral("ALWAYS");

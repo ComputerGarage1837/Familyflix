@@ -388,7 +388,8 @@ Window {
         }
         const stream = familyApi.streamUrl(item.Id)
         if (!stream) return
-        const resume = startOver ? 0 : Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
+        const savedPosition = Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
+        const resume = startOver ? 0 : Math.max(0, savedPosition - familyApi.resumePrerollSeconds * 1000)
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         components.player.setPlaybackRate(Math.round(playbackSpeed * 1000))
@@ -2008,6 +2009,12 @@ Window {
                     ? "Off" : familyApi.nextUpTimeoutMs / 1000 + " sec")
                 width: 325
                 onClicked: familyApi.cycleNextUpTimeout()
+            }
+            NativeAction {
+                text: "Resume rewind: " + (familyApi.resumePrerollSeconds === 0
+                    ? "Off" : familyApi.resumePrerollSeconds + " sec")
+                width: 325
+                onClicked: familyApi.cycleResumePreroll()
             }
             NativeAction { text: "Skip forward: " + (familyApi.skipForwardMs / 1000) + " sec"; width: 325; onClicked: familyApi.cycleSkipForwardMs() }
             NativeAction { text: "Background images: " + (familyApi.backdropEnabled ? "On" : "Off"); width: 325; onClicked: familyApi.toggleBackdropEnabled() }
