@@ -53,6 +53,7 @@ Window {
     }
     property var focusedItem: ({})
     property string backgroundRandomId: ""
+    property var backgroundRandomItem: ({})
     property var playingItem: ({})
     property var nextEpisode: ({})
     property var playbackQueue: []
@@ -101,15 +102,18 @@ Window {
     function cycleBackground() {
         const choices = []
         for (const row of familyApi.libraryRows) {
-            for (const item of (row.Items || [])) if (item.Id) choices.push(safeArtworkId(item))
+            for (const item of (row.Items || [])) if (item.Id) choices.push(item)
         }
-        for (const item of familyApi.continueItems) if (item.Id) choices.push(safeArtworkId(item))
-        for (const item of familyApi.deckItems) if (item.Id) choices.push(safeArtworkId(item))
-        const valid = choices.filter(function(id) { return !!id })
+        for (const item of familyApi.continueItems) if (item.Id) choices.push(item)
+        for (const item of familyApi.deckItems) if (item.Id) choices.push(item)
+        const valid = choices.filter(function(item) { return artworkChoices(item, "backdrop").length > 0 })
         if (!valid.length) return
-        const alternatives = valid.filter(function(id) { return id !== backgroundRandomId })
+        const alternatives = valid.filter(function(item) {
+            return artworkChoices(item, "backdrop")[0].id !== backgroundRandomId
+        })
         const pool = alternatives.length ? alternatives : valid
-        backgroundRandomId = pool[Math.floor(Math.random() * pool.length)]
+        backgroundRandomItem = pool[Math.floor(Math.random() * pool.length)]
+        backgroundRandomId = artworkChoices(backgroundRandomItem, "backdrop")[0].id
     }
 
     function safeTitle(item) {
@@ -118,9 +122,64 @@ Window {
         return item.Name || ""
     }
 
-    function safeArtworkId(item) {
-        if (familyApi.kidsSpoilerHidden(item)) return item.SeriesId || ""
-        return item.Id || ""
+    function artworkChoices(item, purpose) {
+        if (!item || !item.Id) return []
+        const choices = []
+        function add(id, kind) {
+            if (id && !choices.some(function(value) { return value.id === id && value.kind === kind }))
+                choices.push({ id: id, kind: kind })
+        }
+        const tags = item.ImageTags || {}
+        const own = item.Id
+        const parentBackdrop = item.ParentBackdropItemId || ""
+        if (familyApi.kidsSpoilerHidden(item)) {
+            if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length)
+                add(parentBackdrop, "Backdrop")
+            if (item.SeriesThumbImageTag) add(item.SeriesId, "Thumb")
+            if (item.SeriesPrimaryImageTag) add(item.SeriesId, "Primary")
+            return choices
+        }
+        if (purpose === "portrait") {
+            add(own, "Primary")
+            return choices
+        }
+        if (purpose === "backdrop") {
+            // Match Android's BackgroundService.homeBackgroundArtwork order.
+            if (item.BackdropImageTags && item.BackdropImageTags.length) add(own, "Backdrop")
+            if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length)
+                add(parentBackdrop, "Backdrop")
+            if (tags.Thumb) add(own, "Thumb")
+            if (item.SeriesThumbImageTag) add(item.SeriesId, "Thumb")
+            if (item.ParentThumbImageTag) add(item.ParentThumbItemId, "Thumb")
+            if (tags.Primary && Number(item.PrimaryImageAspectRatio || 0) >= 1.3)
+                add(own, "Primary")
+        } else {
+            // Match the Android wide-card preference: episode still first,
+            // followed by the title or parent wide image when available.
+            if (item.Type === "Episode" && tags.Primary) add(own, "Primary")
+            if (item.ParentThumbImageTag) add(item.ParentThumbItemId, "Thumb")
+            if (item.SeriesThumbImageTag) add(item.SeriesId, "Thumb")
+            if (tags.Thumb) add(own, "Thumb")
+            if (item.BackdropImageTags && item.BackdropImageTags.length) add(own, "Backdrop")
+            if (item.ParentBackdropImageTags && item.ParentBackdropImageTags.length)
+                add(parentBackdrop, "Backdrop")
+            if (tags.Primary) add(own, "Primary")
+        }
+        return choices
+    }
+
+    component Artwork: Image {
+        property var item: ({})
+        property string purpose: "card"
+        property var candidates: window.artworkChoices(item, purpose)
+        property int candidateIndex: 0
+        onCandidatesChanged: candidateIndex = 0
+        source: candidateIndex < candidates.length
+            ? familyApi.imageUrl(candidates[candidateIndex].id, candidates[candidateIndex].kind) : ""
+        onStatusChanged: if (status === Image.Error && candidateIndex + 1 < candidates.length)
+            candidateIndex++
+        asynchronous: true
+        fillMode: Image.PreserveAspectCrop
     }
 
     function showItem(item, returnPage) {
@@ -575,19 +634,15 @@ Window {
     Timer { interval: 60000; repeat: true; running: window.page !== "player"; onTriggered: window.cycleBackground() }
 
     // The desktop shell and cards are Qt Quick controls, not the Jellyfin web client.
-    Image {
+    Artwork {
         id: pageBackdrop
         anchors.fill: parent
-        property string artworkId: page === "detail"
-            ? window.safeArtworkId(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
-            : (page === "nextEpisode" && nextEpisode.Id ? window.safeArtworkId(nextEpisode)
-            : (page === "home" && focusedItem.Id ? window.safeArtworkId(focusedItem) : backgroundRandomId)
+        purpose: "backdrop"
+        item: page === "detail"
+            ? (familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
+            : (page === "nextEpisode" && nextEpisode.Id ? nextEpisode
+            : (page === "home" && focusedItem.Id ? focusedItem : backgroundRandomItem)
               )
-        property bool backdropFailed: false
-        onArtworkIdChanged: backdropFailed = false
-        source: page === "player" ? "" : familyApi.imageUrl(artworkId, backdropFailed ? "Thumb" : "Backdrop")
-        onStatusChanged: if (status === Image.Error && !backdropFailed) backdropFailed = true
-        fillMode: Image.PreserveAspectCrop
         opacity: page === "player" ? 0 : 0.32
     }
     Rectangle {
@@ -1112,11 +1167,10 @@ Window {
                                             window.sidebarExpanded = false
                                             window.focusedItem = card.modelData
                                         }
-                                        Image {
+                                        Artwork {
                                             anchors.fill: parent
                                             anchors.margins: 3
-                                            source: familyApi.imageUrl(window.safeArtworkId(card.modelData), "Backdrop")
-                                            fillMode: Image.PreserveAspectCrop
+                                            item: card.modelData
                                         }
                                         Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
                                         Text {
@@ -1187,7 +1241,7 @@ Window {
                 color: familyApi.themeSurface
                 border.width: GridView.isCurrentItem ? 3 : 1
                 border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
-                Image { anchors.fill: parent; anchors.margins: 3; source: familyApi.imageUrl(modelData.Id || "", "Backdrop"); fillMode: Image.PreserveAspectCrop }
+                Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 55; color: "#d908111b" }
                 Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 12; text: modelData.Name || "Library"; color: "white"; font.pixelSize: 20; font.bold: true; elide: Text.ElideRight }
                 MouseArea { anchors.fill: parent; onClicked: { librariesGrid.currentIndex = index; familyApi.openLibrary(modelData); page = "libraryBrowse" } }
@@ -1226,7 +1280,7 @@ Window {
                 color: familyApi.themeSurface
                 border.width: GridView.isCurrentItem ? 3 : 1
                 border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
-                Image { anchors.fill: parent; anchors.margins: 3; source: familyApi.imageUrl(modelData.Id || "", "Backdrop"); fillMode: Image.PreserveAspectCrop }
+                Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
                 Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: modelData.Name || ""; color: "white"; font.pixelSize: 16; elide: Text.ElideRight }
                 MouseArea { anchors.fill: parent; onClicked: { libraryItemsGrid.currentIndex = index; window.showItem(modelData, "libraryBrowse") } }
@@ -1350,7 +1404,7 @@ Window {
                 height: Math.min(300, window.height - 350)
                 color: familyApi.themeSurface
                 radius: 9
-                Image { anchors.fill: parent; source: familyApi.imageUrl(window.familyNightPick.Id || "", "Backdrop"); fillMode: Image.PreserveAspectCrop }
+                Artwork { anchors.fill: parent; item: window.familyNightPick; purpose: "backdrop" }
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 82; color: "#df08121d" }
                 Text {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
@@ -1952,11 +2006,11 @@ Window {
                             Column {
                                 width: 112
                                 spacing: 3
-                                Image {
+                                Artwork {
                                     width: 44; height: 44
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    source: familyApi.imageUrl(modelData.Id || "", "Primary")
-                                    fillMode: Image.PreserveAspectCrop
+                                    item: modelData
+                                    purpose: "portrait"
                                 }
                                 Text {
                                     width: parent.width
@@ -2128,12 +2182,12 @@ Window {
                     : "Finding the next unwatched episode…"
                 color: familyApi.themeText; font.pixelSize: 23; wrapMode: Text.WordWrap
             }
-            Image {
+            Artwork {
                 width: Math.min(parent.width, 600)
                 height: familyApi.nextUpMode === "Minimal" ? 0 : 270
                 visible: height > 0
-                source: familyApi.imageUrl(window.safeArtworkId(nextEpisode), "Backdrop")
-                fillMode: Image.PreserveAspectCrop
+                item: nextEpisode
+                purpose: "backdrop"
             }
             Row {
                 spacing: 14
@@ -2171,11 +2225,11 @@ Window {
                     model: familyApi.seasonCast
                     Column {
                         width: 112; spacing: 3
-                        Image {
+                        Artwork {
                             width: 44; height: 44
                             anchors.horizontalCenter: parent.horizontalCenter
-                            source: familyApi.imageUrl(modelData.Id || "", "Primary")
-                            fillMode: Image.PreserveAspectCrop
+                            item: modelData
+                            purpose: "portrait"
                         }
                         Text { width: parent.width; text: modelData.Name || ""; color: familyApi.themeText; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
                     }
