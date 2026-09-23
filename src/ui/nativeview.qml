@@ -26,6 +26,7 @@ Window {
     property int lastHomeRow: 0
     property int lastHomeCard: 0
     property string watchlistMode: "personal"
+    property var playlistTarget: ({})
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
@@ -90,6 +91,10 @@ Window {
         } else if (page === "season") {
             familyApi.openItem(selectedSeries.Id || "")
             page = "detail"
+        } else if (page === "playlistPicker") {
+            page = "detail"
+        } else if (page === "playlist") {
+            page = "playlists"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -320,7 +325,7 @@ Window {
                 }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: notice = "Library browser is being ported" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: notice = "Playlist screen is being ported" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: notice = "TV guide is being ported" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onClicked: page = "settings" }
               }
@@ -547,6 +552,102 @@ Window {
 
     Item {
         anchors.fill: parent
+        visible: page === "playlists" || page === "playlistPicker"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+            spacing: 16
+            Row {
+                spacing: 18
+                NativeAction { text: "← Back"; onClicked: window.goBack() }
+                Text {
+                    text: page === "playlistPicker" ? "Add to Playlist" : "Playlists"
+                    color: "white"; font.pixelSize: 32; font.bold: true
+                }
+            }
+            Row {
+                spacing: 10
+                TextField {
+                    id: newPlaylistName
+                    width: 380
+                    height: 48
+                    placeholderText: "New playlist name"
+                    font.pixelSize: 18
+                    onAccepted: {
+                        familyApi.createPlaylist(text)
+                        text = ""
+                    }
+                }
+                NativeAction {
+                    text: "Create Playlist"
+                    onClicked: {
+                        familyApi.createPlaylist(newPlaylistName.text)
+                        newPlaylistName.clear()
+                    }
+                }
+            }
+            ScrollView {
+                width: parent.width
+                height: parent.height - 135
+                Column {
+                    width: Math.max(700, window.width - 90)
+                    spacing: 8
+                    Repeater {
+                        model: familyApi.playlists
+                        NativeAction {
+                            width: parent.width
+                            height: 62
+                            text: modelData.Name || "Playlist"
+                            onClicked: {
+                                if (page === "playlistPicker") {
+                                    familyApi.addToPlaylist(modelData.Id, window.playlistTarget)
+                                    page = "detail"
+                                } else {
+                                    familyApi.openPlaylist(modelData.Id)
+                                    page = "playlist"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "playlist"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+            spacing: 16
+            Row {
+                spacing: 18
+                NativeAction { text: "← Playlists"; onClicked: page = "playlists" }
+                Text { text: "Playlist"; color: "white"; font.pixelSize: 32; font.bold: true }
+            }
+            ScrollView {
+                width: parent.width
+                height: parent.height - 75
+                Column {
+                    width: Math.max(700, window.width - 90)
+                    spacing: 8
+                    Repeater {
+                        model: familyApi.playlistItems
+                        NativeAction {
+                            width: parent.width
+                            height: 62
+                            text: (modelData.SeriesName ? modelData.SeriesName + " — " : "") + (modelData.Name || "Video")
+                            onClicked: window.showItem(modelData, "playlist")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
         visible: page === "detail"
         Column {
             anchors.left: parent.left
@@ -601,6 +702,17 @@ Window {
                     onClicked: {
                         const entry = window.householdEntry(familyApi.selectedItem.Id || "")
                         if (entry) familyApi.voteHouseholdWatchlistItem(entry.itemId, !entry.currentUserVoted)
+                    }
+                }
+                NativeAction {
+                    width: 180
+                    text: "Add to Playlist"
+                    visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
+                          || familyApi.selectedItem.Type === "Episode"
+                    onClicked: {
+                        window.playlistTarget = familyApi.selectedItem
+                        familyApi.refreshPlaylists()
+                        page = "playlistPicker"
                     }
                 }
             }

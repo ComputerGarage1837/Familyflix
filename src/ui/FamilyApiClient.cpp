@@ -298,6 +298,7 @@ void FamilyApiClient::signOut()
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   m_libraryRows.clear(); m_selectedItem.clear();
   m_seasons.clear(); m_episodes.clear();
+  m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
   m_watchlistEntries.clear(); m_watchlistRevision = 0;
   m_householdWatchlistEntries.clear(); m_householdWatchlistRevision = 0;
   m_settings.remove(QStringLiteral("token"));
@@ -308,6 +309,7 @@ void FamilyApiClient::signOut()
   emit selectedItemChanged();
   emit watchlistChanged();
   emit seriesChanged();
+  emit playlistsChanged();
   refreshPublicUsers();
 }
 
@@ -657,6 +659,122 @@ void FamilyApiClient::openSeason(const QString& seasonId)
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_episodes = items(data);
     emit seriesChanged();
+  });
+}
+
+void FamilyApiClient::refreshPlaylists()
+{
+  if (!signedIn()) return;
+  const quint64 revision = m_sessionRevision;
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), QStringLiteral("Playlist") },
+            { QStringLiteral("SortBy"), QStringLiteral("DateCreated") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Descending") },
+            { QStringLiteral("Limit"), 500 } }, {},
+          [this, revision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Playlists could not load.")); return; }
+    m_playlists.clear();
+    for (const auto& value : items(data)) {
+      const auto playlist = value.toMap();
+      if (playlist.value(QStringLiteral("MediaType")).toString().compare(
+            QStringLiteral("Audio"), Qt::CaseInsensitive) != 0) m_playlists.append(value);
+    }
+    emit playlistsChanged();
+  });
+}
+
+void FamilyApiClient::openPlaylist(const QString& playlistId)
+{
+  if (!signedIn() || playlistId.isEmpty()) return;
+  m_selectedPlaylistId = playlistId;
+  m_playlistItems.clear();
+  emit playlistsChanged();
+  const quint64 revision = m_sessionRevision;
+  request("GET", QStringLiteral("Playlists/%1/Items").arg(playlistId),
+          { { QStringLiteral("UserId"), m_userId }, { QStringLiteral("Limit"), 500 } }, {},
+          [this, revision, playlistId](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || playlistId != m_selectedPlaylistId) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Playlist items could not load.")); return; }
+    m_playlistItems = items(data);
+    emit playlistsChanged();
+  });
+}
+
+void FamilyApiClient::createPlaylist(const QString& name)
+{
+  if (!signedIn() || name.trimmed().isEmpty()) return;
+  const quint64 revision = m_sessionRevision;
+  const QVariantMap command{
+    { QStringLiteral("Name"), name.trimmed() },
+    { QStringLiteral("Ids"), QVariantList{} },
+    { QStringLiteral("UserId"), m_userId },
+    { QStringLiteral("MediaType"), QStringLiteral("Video") },
+    { QStringLiteral("Users"), QVariantList{} },
+    { QStringLiteral("IsPublic"), false }
+  };
+  requestWithStatus("POST", QStringLiteral("Playlists"), {},
+    QJsonDocument(QJsonObject::fromVariantMap(command)).toJson(QJsonDocument::Compact),
+    [this, revision](const QVariant&, const QString& error, int status) {
+      if (revision != m_sessionRevision) return;
+      if (!error.isEmpty() || status < 200 || status >= 300) {
+        emit errorOccurred(QStringLiteral("Playlist could not be created."));
+        return;
+      }
+      refreshPlaylists();
+    });
+}
+
+void FamilyApiClient::addPlayableIdsToPlaylist(const QString& playlistId, const QStringList& ids)
+{
+  if (!signedIn() || playlistId.isEmpty() || ids.isEmpty()) return;
+  const quint64 revision = m_sessionRevision;
+  const QStringList batch = ids.mid(0, 100);
+  requestWithStatus("POST", QStringLiteral("Playlists/%1/Items").arg(playlistId),
+    { { QStringLiteral("Ids"), batch.join(QLatin1Char(',')) },
+      { QStringLiteral("UserId"), m_userId } }, {},
+    [this, revision, playlistId, ids](const QVariant&, const QString& error, int status) {
+      if (revision != m_sessionRevision) return;
+      if (!error.isEmpty() || status < 200 || status >= 300) {
+        emit errorOccurred(QStringLiteral("Could not add item to playlist."));
+        return;
+      }
+      if (ids.size() > 100) addPlayableIdsToPlaylist(playlistId, ids.mid(100));
+      else if (playlistId == m_selectedPlaylistId) openPlaylist(playlistId);
+    });
+}
+
+void FamilyApiClient::addToPlaylist(const QString& playlistId, const QVariantMap& item)
+{
+  if (!signedIn() || playlistId.isEmpty()) return;
+  const QString id = item.value(QStringLiteral("Id")).toString();
+  const QString type = item.value(QStringLiteral("Type")).toString();
+  if (id.isEmpty()) return;
+  if (type != QStringLiteral("Series")) {
+    if (type == QStringLiteral("Movie") || type == QStringLiteral("Episode"))
+      addPlayableIdsToPlaylist(playlistId, { id });
+    return;
+  }
+  const quint64 revision = m_sessionRevision;
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("ParentId"), id },
+            { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+            { QStringLiteral("IsMissing"), false },
+            { QStringLiteral("SortBy"), QStringLiteral("ParentIndexNumber,IndexNumber") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+            { QStringLiteral("Limit"), 10000 } }, {},
+          [this, revision, playlistId](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Show episodes could not load.")); return; }
+    QStringList ids;
+    for (const auto& value : items(data)) {
+      const QString episodeId = value.toMap().value(QStringLiteral("Id")).toString();
+      if (!episodeId.isEmpty()) ids.append(episodeId);
+    }
+    if (ids.isEmpty()) emit errorOccurred(QStringLiteral("This show has no playable episodes."));
+    else addPlayableIdsToPlaylist(playlistId, ids);
   });
 }
 
