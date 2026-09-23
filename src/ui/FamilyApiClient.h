@@ -23,6 +23,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool watchingTogether READ watchingTogether NOTIFY coWatchChanged)
   Q_PROPERTY(QString coWatchLabel READ coWatchLabel NOTIFY coWatchChanged)
   Q_PROPERTY(QString homeFeedOwnerId READ homeFeedOwnerId NOTIFY coWatchChanged)
+  Q_PROPERTY(bool combinedGroupDeckEnabled READ combinedGroupDeckEnabled NOTIFY coWatchChanged)
+  Q_PROPERTY(QVariantList groupDeckItems READ groupDeckItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
   Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
@@ -67,6 +69,8 @@ public:
   bool watchingTogether() const { return !m_coWatchUserIds.isEmpty(); }
   QString coWatchLabel() const;
   QString homeFeedOwnerId() const { return m_homeFeedOwnerId; }
+  bool combinedGroupDeckEnabled() const { return m_combinedGroupDeckEnabled; }
+  QVariantList groupDeckItems() const { return m_groupDeckItems; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
   bool familyNightLoading() const { return m_familyNightLoading; }
@@ -108,6 +112,7 @@ public:
   Q_INVOKABLE void authenticateParticipant(const QString& userId, const QString& password);
   Q_INVOKABLE bool setCoWatchProfile(const QString& userId, bool selected);
   Q_INVOKABLE void setHomeFeedOwner(const QString& userId);
+  Q_INVOKABLE void setCombinedGroupDeckEnabled(bool enabled);
   Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void refreshCoWatchPresets();
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
@@ -211,6 +216,7 @@ private:
   void saveCoWatchParty();
   void reconcileCoWatchParty();
   void mutateCoWatchPresets(const std::function<QVariantList(const QVariantList&)>& transform);
+  void refreshGroupDeck(quint64 session, quint64 homeRevision);
 
   QNetworkAccessManager m_network;
   QSettings m_settings;
@@ -220,6 +226,9 @@ private:
   QString m_userName;
   QStringList m_coWatchUserIds;
   QString m_homeFeedOwnerId;
+  bool m_combinedGroupDeckEnabled = true;
+  QVariantList m_groupDeckItems;
+  quint64 m_groupDeckRevision = 0;
   QString m_homeFeedUserId;
   QString m_homeFeedToken;
   QVariantList m_coWatchPresets;

@@ -76,6 +76,7 @@ Window {
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
+        if (familyApi.groupDeckItems.length) rows.push({ title: "The Deck · Watching Together", items: familyApi.groupDeckItems })
         if (familyApi.deckItems.length) rows.push({ title: "The Deck", items: familyApi.deckItems })
         for (let row of familyApi.libraryRows) {
             if (row.Items && row.Items.length) rows.push({ title: row.Name, items: row.Items })
@@ -615,6 +616,12 @@ Window {
                         onClicked: familyApi.setHomeFeedOwner(modelData.Id)
                     }
                 }
+            }
+            NativeAction {
+                width: 300
+                visible: familyApi.watchingTogether
+                text: "Combined Deck: " + (familyApi.combinedGroupDeckEnabled ? "On" : "Off")
+                onClicked: familyApi.setCombinedGroupDeckEnabled(!familyApi.combinedGroupDeckEnabled)
             }
             NativeAction {
                 width: 220

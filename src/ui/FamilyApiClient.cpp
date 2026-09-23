@@ -443,6 +443,7 @@ void FamilyApiClient::refreshPublicUsers()
     m_publicUsers = items(data);
     reconcileCoWatchParty();
     emit publicUsersChanged();
+    if (signedIn()) refreshGroupDeck(m_sessionRevision, m_homeRevision);
   });
 }
 
@@ -475,6 +476,8 @@ void FamilyApiClient::loadCoWatchParty()
   m_coWatchUserIds.removeDuplicates();
   m_homeFeedOwnerId = m_settings.value(QStringLiteral("users/%1/coWatchFeedOwner").arg(m_userId),
                                       m_userId).toString();
+  m_combinedGroupDeckEnabled = m_settings.value(
+    QStringLiteral("users/%1/combinedGroupDeck").arg(m_userId), true).toBool();
   if (m_coWatchUserIds.isEmpty() || (m_homeFeedOwnerId != m_userId
       && !m_coWatchUserIds.contains(m_homeFeedOwnerId))) m_homeFeedOwnerId = m_userId;
   emit coWatchChanged();
@@ -523,6 +526,15 @@ void FamilyApiClient::setHomeFeedOwner(const QString& userId)
       || userId == m_homeFeedOwnerId) return;
   m_homeFeedOwnerId = userId;
   saveCoWatchParty();
+  refreshHome();
+}
+
+void FamilyApiClient::setCombinedGroupDeckEnabled(bool enabled)
+{
+  if (!signedIn() || enabled == m_combinedGroupDeckEnabled) return;
+  m_combinedGroupDeckEnabled = enabled;
+  m_settings.setValue(QStringLiteral("users/%1/combinedGroupDeck").arg(m_userId), enabled);
+  emit coWatchChanged();
   refreshHome();
 }
 
@@ -599,7 +611,8 @@ void FamilyApiClient::saveCoWatchPreset(const QString& name)
   if (!watchingTogether() || safeName.isEmpty()) return;
   const QStringList participants = m_coWatchUserIds;
   const QString owner = m_homeFeedOwnerId;
-  mutateCoWatchPresets([safeName, participants, owner](const QVariantList& current) {
+  const bool groupDeck = m_combinedGroupDeckEnabled;
+  mutateCoWatchPresets([safeName, participants, owner, groupDeck](const QVariantList& current) {
     QVariantList updated;
     for (const auto& value : current) {
       if (value.toMap().value(QStringLiteral("name")).toString().compare(safeName, Qt::CaseInsensitive) != 0)
@@ -610,7 +623,7 @@ void FamilyApiClient::saveCoWatchPreset(const QString& name)
       { QStringLiteral("name"), safeName },
       { QStringLiteral("participantUserIds"), participants },
       { QStringLiteral("homeFeedOwnerUserId"), owner },
-      { QStringLiteral("combinedGroupDeckEnabled"), true }
+      { QStringLiteral("combinedGroupDeckEnabled"), groupDeck }
     });
     while (updated.size() > 20) updated.removeFirst();
     return updated;
@@ -641,6 +654,8 @@ bool FamilyApiClient::activateCoWatchPreset(const QString& presetId)
   m_coWatchUserIds = selected;
   const QString owner = chosen.value(QStringLiteral("homeFeedOwnerUserId")).toString();
   m_homeFeedOwnerId = owner == m_userId || selected.contains(owner) ? owner : m_userId;
+  m_combinedGroupDeckEnabled = chosen.value(QStringLiteral("combinedGroupDeckEnabled"), true).toBool();
+  m_settings.setValue(QStringLiteral("users/%1/combinedGroupDeck").arg(m_userId), m_combinedGroupDeckEnabled);
   saveCoWatchParty();
   refreshHome();
   if (selected.size() < requested.size())
@@ -899,7 +914,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_familyNightCandidates.clear(); m_familyNightLoading = false;
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
-  m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_recentDeckActivity.clear();
+  m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear(); m_recentDeckActivity.clear();
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_playlists.clear(); m_playlistItems.clear();
@@ -949,7 +964,7 @@ void FamilyApiClient::signOut()
   m_token.clear(); m_userId.clear(); m_userName.clear();
   m_coWatchUserIds.clear(); m_homeFeedOwnerId.clear(); m_homeFeedUserId.clear(); m_homeFeedToken.clear();
   m_themeName = QStringLiteral("Ocean");
-  m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear();
+  m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear();
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
@@ -986,6 +1001,8 @@ void FamilyApiClient::refreshHome()
   if (!signedIn()) return;
   const quint64 revision = m_sessionRevision;
   const quint64 homeRevision = ++m_homeRevision;
+  m_groupDeckItems.clear();
+  emit homeChanged();
   m_homeFeedUserId = m_userId;
   m_homeFeedToken = m_token;
   if (watchingTogether() && m_homeFeedOwnerId != m_userId && hasSavedProfile(m_homeFeedOwnerId)) {
@@ -994,6 +1011,7 @@ void FamilyApiClient::refreshHome()
   }
   const QString feedUserId = m_homeFeedUserId;
   const QString feedToken = m_homeFeedToken;
+  refreshGroupDeck(revision, homeRevision);
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   request("GET", QStringLiteral("Users/%1/Views").arg(m_userId), {}, {},
@@ -1107,6 +1125,93 @@ void FamilyApiClient::refreshHome()
     m_recentDeckActivityReady = true;
     correctDeckFromRecent();
   });
+}
+
+void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
+{
+  const quint64 groupRevision = ++m_groupDeckRevision;
+  m_groupDeckItems.clear();
+  emit homeChanged();
+  if (!signedIn() || !watchingTogether() || !m_combinedGroupDeckEnabled) return;
+  const auto profiles = coWatchProfiles();
+  if (profiles.size() < 2) return; // Wait for the visible profile directory.
+  struct DeckLoad {
+    int pending = 0;
+    QList<QVariantList> lists;
+    QStringList names;
+  };
+  const auto load = std::make_shared<DeckLoad>();
+  load->pending = profiles.size();
+  load->lists.resize(profiles.size());
+  for (int index = 0; index < profiles.size(); ++index) {
+    const auto profile = profiles[index].toMap();
+    const QString userId = profile.value(QStringLiteral("Id")).toString();
+    const QString token = userId == m_userId ? m_token
+      : m_settings.value(QStringLiteral("profiles/%1/token").arg(userId)).toString();
+    load->names.append(profile.value(QStringLiteral("Name")).toString());
+    const auto complete = [this, load, session, homeRevision, groupRevision] {
+      if (session != m_sessionRevision || homeRevision != m_homeRevision
+          || groupRevision != m_groupDeckRevision) return;
+      if (--load->pending != 0) return;
+      QHash<QString, int> positions;
+      QVariantList merged;
+      int largest = 0;
+      for (const auto& list : load->lists) largest = qMax(largest, int(list.size()));
+      for (int row = 0; row < largest && merged.size() < 50; ++row) {
+        for (int owner = 0; owner < load->lists.size(); ++owner) {
+          if (row >= load->lists[owner].size()) continue;
+          auto item = load->lists[owner][row].toMap();
+          const QString series = deckSeriesId(item);
+          const QString id = item.value(QStringLiteral("Id")).toString();
+          const QString key = !series.isEmpty()
+            ? QStringLiteral("%1:%2:%3").arg(series)
+                .arg(item.value(QStringLiteral("ParentIndexNumber")).toInt())
+                .arg(item.value(QStringLiteral("IndexNumber")).toInt())
+            : id;
+          if (key.isEmpty()) continue;
+          if (positions.contains(key)) {
+            const int existing = positions.value(key);
+            auto prior = merged[existing].toMap();
+            auto names = prior.value(QStringLiteral("SourceProfiles")).toStringList();
+            if (!names.contains(load->names[owner])) names.append(load->names[owner]);
+            prior.insert(QStringLiteral("SourceProfiles"), names);
+            merged[existing] = prior;
+          } else if (merged.size() < 50) {
+            item.insert(QStringLiteral("SourceProfiles"), QStringList{ load->names[owner] });
+            positions.insert(key, merged.size());
+            merged.append(item);
+          }
+        }
+      }
+      m_groupDeckItems = merged;
+      emit homeChanged();
+    };
+    if (userId.isEmpty() || token.isEmpty()) { complete(); continue; }
+    requestAs("GET", QStringLiteral("Shows/NextUp"),
+              { { QStringLiteral("UserId"), userId },
+                { QStringLiteral("Limit"), 60 },
+                { QStringLiteral("EnableResumable"), false },
+                { QStringLiteral("EnableRewatching"), true },
+                { QStringLiteral("EnableUserData"), true },
+                { QStringLiteral("EnableTotalRecordCount"), false } }, {}, token, userId,
+              [this, load, index, complete, session, homeRevision, groupRevision]
+              (const QVariant& response, const QString& error, int) {
+      if (session != m_sessionRevision || homeRevision != m_homeRevision
+          || groupRevision != m_groupDeckRevision) return;
+      if (error.isEmpty()) {
+        QSet<QString> seenSeries;
+        for (const auto& value : items(response)) {
+          const auto item = value.toMap();
+          const QString series = deckSeriesId(item);
+          if (!untouchedEpisode(item) || series.isEmpty() || seenSeries.contains(series)) continue;
+          seenSeries.insert(series);
+          load->lists[index].append(item);
+          if (load->lists[index].size() == 30) break;
+        }
+      }
+      complete();
+    });
+  }
 }
 
 void FamilyApiClient::openLibrary(const QVariantMap& library)
