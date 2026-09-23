@@ -1199,6 +1199,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
+  ++m_seasonRevision;
   ++m_tvGuideRevision;
   ++m_mediaSegmentsRevision;
   ++m_coWatchPresetRevision;
@@ -1211,7 +1212,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear(); m_recentDeckActivity.clear();
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
-  m_seasons.clear(); m_episodes.clear(); m_playlists.clear(); m_playlistItems.clear();
+  m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear(); m_playlists.clear(); m_playlistItems.clear();
   m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear(); m_watchlistEntries.clear(); m_householdWatchlistEntries.clear();
   m_watchlistRevision = 0; m_householdWatchlistRevision = 0;
@@ -1247,6 +1248,7 @@ void FamilyApiClient::signOut()
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
+  ++m_seasonRevision;
   ++m_mediaSegmentsRevision;
   ++m_coWatchPresetRevision;
   ++m_familyNightRevision;
@@ -1266,7 +1268,7 @@ void FamilyApiClient::signOut()
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
-  m_seasons.clear(); m_episodes.clear();
+  m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
   m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear();
@@ -1852,6 +1854,19 @@ void FamilyApiClient::openSeason(const QString& seasonId)
 {
   if (!signedIn() || seasonId.isEmpty()) return;
   const quint64 revision = m_sessionRevision;
+  const quint64 seasonRevision = ++m_seasonRevision;
+  m_episodes.clear();
+  m_seasonCast = peopleOfType(m_selectedItem, QStringLiteral("Actor"));
+  emit seriesChanged();
+  request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, seasonId), {}, {},
+          [this, revision, seasonRevision](const QVariant& season, const QString& seasonError) {
+    if (revision != m_sessionRevision || seasonRevision != m_seasonRevision) return;
+    if (seasonError.isEmpty()) {
+      const auto seasonal = peopleOfType(season.toMap(), QStringLiteral("Actor"));
+      if (!seasonal.isEmpty()) m_seasonCast = seasonal;
+      emit seriesChanged();
+    }
+  });
   request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
           { { QStringLiteral("ParentId"), seasonId },
             { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
@@ -1860,8 +1875,8 @@ void FamilyApiClient::openSeason(const QString& seasonId)
             { QStringLiteral("Recursive"), true },
             { QStringLiteral("Limit"), 250 },
             { QStringLiteral("EnableUserData"), true } }, {},
-          [this, revision](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision) return;
+          [this, revision, seasonRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || seasonRevision != m_seasonRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_episodes = items(data);
     emit seriesChanged();

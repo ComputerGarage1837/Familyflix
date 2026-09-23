@@ -50,6 +50,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList householdWatchlistEntries READ householdWatchlistEntries NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList seasons READ seasons NOTIFY seriesChanged)
   Q_PROPERTY(QVariantList episodes READ episodes NOTIFY seriesChanged)
+  Q_PROPERTY(QVariantList seasonCast READ seasonCast NOTIFY seriesChanged)
   Q_PROPERTY(QVariantList playlists READ playlists NOTIFY playlistsChanged)
   Q_PROPERTY(QVariantList playlistItems READ playlistItems NOTIFY playlistsChanged)
   Q_PROPERTY(QString selectedPlaylistId READ selectedPlaylistId NOTIFY playlistsChanged)
@@ -103,6 +104,7 @@ public:
   QVariantList householdWatchlistEntries() const { return m_householdWatchlistEntries; }
   QVariantList seasons() const { return m_seasons; }
   QVariantList episodes() const { return m_episodes; }
+  QVariantList seasonCast() const { return m_seasonCast; }
   QVariantList playlists() const { return m_playlists; }
   QVariantList playlistItems() const { return m_playlistItems; }
   QString selectedPlaylistId() const { return m_selectedPlaylistId; }
@@ -299,6 +301,8 @@ private:
   QVariantList m_householdWatchlistEntries;
   QVariantList m_seasons;
   QVariantList m_episodes;
+  QVariantList m_seasonCast;
+  quint64 m_seasonRevision = 0;
   QVariantList m_playlists;
   QVariantList m_playlistItems;
   QString m_selectedPlaylistId;

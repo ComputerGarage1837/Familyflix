@@ -56,6 +56,7 @@ Window {
     property var playingItem: ({})
     property string playbackReturnPage: "detail"
     property var selectedSeries: ({})
+    property var selectedSeason: ({})
     property string detailReturnPage: "home"
     property string notice: ""
     property bool playerControlsVisible: false
@@ -125,6 +126,7 @@ Window {
     function showSeason(season) {
         if (familyApi.selectedItem.Type !== "Series") return
         selectedSeries = familyApi.selectedItem
+        selectedSeason = season
         familyApi.openSeason(season.Id || "")
         page = "season"
     }
@@ -1927,11 +1929,29 @@ Window {
             Row {
                 spacing: 15
                 NativeAction { text: "← Show"; onClicked: window.goBack() }
-                Text { text: selectedSeries.Name || "Episodes"; color: "white"; font.pixelSize: 30; font.bold: true }
+                Text { text: (selectedSeries.Name || "Show") + " · " + (selectedSeason.Name || "Episodes"); color: "white"; font.pixelSize: 30; font.bold: true }
+            }
+            Text { text: "Season cast"; visible: familyApi.seasonCast.length > 0; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
+            Row {
+                spacing: 12
+                visible: familyApi.seasonCast.length > 0
+                Repeater {
+                    model: familyApi.seasonCast
+                    Column {
+                        width: 112; spacing: 3
+                        Image {
+                            width: 44; height: 44
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            source: familyApi.imageUrl(modelData.Id || "", "Primary")
+                            fillMode: Image.PreserveAspectCrop
+                        }
+                        Text { width: parent.width; text: modelData.Name || ""; color: familyApi.themeText; font.pixelSize: 14; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight }
+                    }
+                }
             }
             ScrollView {
                 width: parent.width
-                height: parent.height - 100
+                height: Math.max(140, parent.height - (familyApi.seasonCast.length ? 220 : 100))
                 Column {
                     width: Math.max(800, window.width - 90)
                     spacing: 8
