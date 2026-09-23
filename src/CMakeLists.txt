@@ -27,6 +27,10 @@ if(LINUX_DBUS)
 endif()
 
 get_property(ALL_SRCS GLOBAL PROPERTY SRCS_LIST)
+list(APPEND ALL_SRCS
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/FamilyApiClient.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/FamilyApiClient.h
+)
 set(MAIN_SRCS main.cpp)
 
 source_group("Source Files" FILES ${MAIN_SRCS})
@@ -156,10 +160,16 @@ endif()
 set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml
   PROPERTIES QT_RESOURCE_ALIAS webview.qml
 )
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/nativeview.qml
+  PROPERTIES QT_RESOURCE_ALIAS nativeview.qml
+)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/ui/NativeAction.qml
+  PROPERTIES QT_RESOURCE_ALIAS NativeAction.qml
+)
 qt_add_qml_module(${MAIN_TARGET}
   URI Konvergo
   VERSION 1.0
-  QML_FILES ${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml
+  QML_FILES ${CMAKE_CURRENT_SOURCE_DIR}/ui/webview.qml ${CMAKE_CURRENT_SOURCE_DIR}/ui/nativeview.qml ${CMAKE_CURRENT_SOURCE_DIR}/ui/NativeAction.qml
   NO_RESOURCE_TARGET_PATH
 )
 

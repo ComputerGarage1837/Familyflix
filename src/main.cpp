@@ -27,6 +27,7 @@
 #include "ui/WindowManager.h"
 #include "Globals.h"
 #include "ui/ErrorMessage.h"
+#include "ui/FamilyApiClient.h"
 #include "UniqueApplication.h"
 #include "utils/Log.h"
 
@@ -500,6 +501,8 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine *engine = Globals::Engine();
 
     Globals::SetContextProperty("components", &ComponentManager::Get().getQmlPropertyMap());
+    FamilyApiClient familyApi;
+    Globals::SetContextProperty("familyApi", &familyApi);
 
     // the only way to detect if QML parsing fails is to hook to this signal and then see
     // if we get a valid object passed to it. Any error messages will be reported on stderr
@@ -567,8 +570,8 @@ int main(int argc, char *argv[])
       app.installEventFilter(new PopupFixer(window));
 
       QObject* webChannel = qvariant_cast<QObject*>(window->property("webChannel"));
-      Q_ASSERT(webChannel);
-      ComponentManager::Get().setWebChannel(qobject_cast<QWebChannel*>(webChannel));
+      if (webChannel)
+        ComponentManager::Get().setWebChannel(qobject_cast<QWebChannel*>(webChannel));
 
       // Initialize WindowManager with window reference
       WindowManager::Get().initializeWindow(window);
@@ -578,7 +581,11 @@ int main(int argc, char *argv[])
         WindowManager::Get().raiseWindow();
       });
     });
+#ifdef Q_OS_WIN
+    engine->load(QUrl(QStringLiteral("qrc:/nativeview.qml")));
+#else
     engine->load(QUrl(QStringLiteral("qrc:/webview.qml")));
+#endif
 
     // run our application
     int ret = app.exec();

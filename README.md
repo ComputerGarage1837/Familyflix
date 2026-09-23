@@ -5,8 +5,23 @@ Family Flix is a family-specific Windows build based on Jellyfin Desktop. It ope
 The native player comes from Jellyfin Desktop and uses libmpv. The upstream project
 and its GPL-2.0 license remain credited below.
 
-This checkout is an early Windows port. Android-only features still need parity
-work before it is suitable as a full replacement for the Family Flix TV app.
+This is the **only active Family Flix for Windows project**. The older
+`../familyflix-windows` WebView2 launcher is retired and must not be shipped.
+
+This checkout is an early Windows port, not a finished Android TV-equivalent
+release. The release gate is feature parity with the Family Flix Android TV app:
+the same home and detail layouts, library ordering, Deck, Continue Watching,
+watchlist, mixed playlists, profiles and Watching Together, Kids Mode, Live TV
+guide, playback controls and skip prompts, themes, settings, buffers, update
+prompts, and remote/keyboard navigation. It must also preserve user settings
+between updates. A successful compile or a website wrapper is not sufficient.
+
+The Qt/libmpv desktop base supplies native Windows playback. The current
+Qt WebEngine screen is a temporary scaffold, not the planned Windows UI.
+Windows screens and their behavior must be implemented in native Qt Quick/QML,
+following the Android TV app's rules directly. Do not substitute the Family
+Flix browser implementation for Android TV parity. Do not publish this port as
+complete until the native screens and behavior are implemented and tested.
 
 # Jellyfin Desktop
 
