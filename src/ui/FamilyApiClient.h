@@ -79,6 +79,8 @@ public:
 
   Q_INVOKABLE void refreshPublicUsers();
   Q_INVOKABLE void signIn(const QString& userName, const QString& password);
+  Q_INVOKABLE bool hasSavedProfile(const QString& userId) const;
+  Q_INVOKABLE void useSavedProfile(const QString& userId);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
   Q_INVOKABLE bool libraryVisibleInRail(const QString& libraryId) const;
@@ -145,6 +147,7 @@ private:
                           const QString& operationId, qlonglong expected, int retries);
   void sendPlaybackStopped(qlonglong positionMilliseconds);
   void addPlayableIdsToPlaylist(const QString& playlistId, const QStringList& ids);
+  void activateSession(const QString& token, const QString& userId, const QString& userName);
 
   QNetworkAccessManager m_network;
   QSettings m_settings;
@@ -180,6 +183,7 @@ private:
   qlonglong m_watchlistRevision = 0;
   qlonglong m_householdWatchlistRevision = 0;
   quint64 m_sessionRevision = 0;
+  quint64 m_profileAttemptRevision = 0;
   quint64 m_homeRevision = 0;
   quint64 m_itemRevision = 0;
   QString m_playingItemId;

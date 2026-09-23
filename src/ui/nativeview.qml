@@ -361,7 +361,9 @@ Window {
                         text: modelData.Name || "User"
                         onClicked: {
                             chosenUser = modelData.Name || ""
-                            password.forceActiveFocus()
+                            if (familyApi.hasSavedProfile(modelData.Id || ""))
+                                familyApi.useSavedProfile(modelData.Id)
+                            else password.forceActiveFocus()
                         }
                     }
                 }

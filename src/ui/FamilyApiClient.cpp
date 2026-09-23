@@ -372,11 +372,13 @@ void FamilyApiClient::refreshPublicUsers()
 
 void FamilyApiClient::signIn(const QString& userName, const QString& password)
 {
+  const quint64 attempt = ++m_profileAttemptRevision;
   const QByteArray body = QJsonDocument(QJsonObject{
     { QStringLiteral("Username"), userName }, { QStringLiteral("Pw"), password }
   }).toJson(QJsonDocument::Compact);
   request("POST", QStringLiteral("Users/AuthenticateByName"), {}, body,
-          [this](const QVariant& data, const QString& error) {
+          [this, attempt](const QVariant& data, const QString& error) {
+    if (attempt != m_profileAttemptRevision) return;
     const auto login = data.toMap();
     const auto user = login.value(QStringLiteral("User")).toMap();
     const QString token = login.value(QStringLiteral("AccessToken")).toString();
@@ -385,28 +387,93 @@ void FamilyApiClient::signIn(const QString& userName, const QString& password)
       emit errorOccurred(QStringLiteral("Could not sign in. Check the password and try again."));
       return;
     }
-    ++m_sessionRevision;
-    m_token = token;
-    m_userId = id;
-    m_userName = user.value(QStringLiteral("Name")).toString();
-    m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
-                                   QStringLiteral("Ocean")).toString();
-    m_settings.setValue(QStringLiteral("token"), m_token);
-    m_settings.setValue(QStringLiteral("userId"), m_userId);
-    m_settings.setValue(QStringLiteral("userName"), m_userName);
-    emit sessionChanged();
-    emit themeChanged();
-    refreshHome();
-    refreshWatchlist();
-    refreshHouseholdWatchlist();
+    activateSession(token, id, user.value(QStringLiteral("Name")).toString());
   });
 }
 
-void FamilyApiClient::signOut()
+bool FamilyApiClient::hasSavedProfile(const QString& userId) const
+{
+  if (userId.isEmpty()) return false;
+  bool visible = false;
+  for (const auto& user : m_publicUsers) {
+    if (user.toMap().value(QStringLiteral("Id")).toString() == userId) {
+      visible = true;
+      break;
+    }
+  }
+  return visible && !m_settings.value(QStringLiteral("profiles/%1/token").arg(userId)).toString().isEmpty();
+}
+
+void FamilyApiClient::useSavedProfile(const QString& userId)
+{
+  if (!hasSavedProfile(userId)) return;
+  const quint64 attempt = ++m_profileAttemptRevision;
+  const QString token = m_settings.value(QStringLiteral("profiles/%1/token").arg(userId)).toString();
+  QNetworkRequest networkRequest(server.resolved(QUrl(QStringLiteral("Users/Me"))));
+  const QString authorization = QStringLiteral(
+    "MediaBrowser Client=\"Family Flix Windows\", Device=\"Windows\", "
+    "DeviceId=\"%1\", Version=\"0.1\", Token=\"%2\"").arg(m_deviceId, token);
+  networkRequest.setRawHeader("Authorization", authorization.toUtf8());
+  networkRequest.setRawHeader("X-Emby-Authorization", authorization.toUtf8());
+  networkRequest.setRawHeader("X-Emby-Token", token.toUtf8());
+  QNetworkReply* reply = m_network.get(networkRequest);
+  connect(reply, &QNetworkReply::finished, this, [this, reply, userId, token, attempt] {
+    const auto parsed = QJsonDocument::fromJson(reply->readAll()).object().toVariantMap();
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    reply->deleteLater();
+    if (attempt != m_profileAttemptRevision) return;
+    if (status == 200 && parsed.value(QStringLiteral("Id")).toString() == userId) {
+      activateSession(token, userId, parsed.value(QStringLiteral("Name")).toString());
+      return;
+    }
+    if (status == 401 || status == 403)
+      m_settings.remove(QStringLiteral("profiles/%1/token").arg(userId));
+    emit errorOccurred(QStringLiteral("Please enter this profile's password to continue."));
+  });
+}
+
+void FamilyApiClient::activateSession(const QString& token, const QString& userId,
+                                      const QString& userName)
 {
   ++m_sessionRevision;
   ++m_homeRevision;
   ++m_itemRevision;
+  ++m_tvGuideRevision;
+  ++m_mediaSegmentsRevision;
+  m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
+  m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
+  m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_recentDeckActivity.clear();
+  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
+  m_seasons.clear(); m_episodes.clear(); m_playlists.clear(); m_playlistItems.clear();
+  m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
+  m_mediaSegments.clear(); m_watchlistEntries.clear(); m_householdWatchlistEntries.clear();
+  m_watchlistRevision = 0; m_householdWatchlistRevision = 0;
+  m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
+  m_token = token;
+  m_userId = userId;
+  m_userName = userName;
+  m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
+                                 QStringLiteral("Ocean")).toString();
+  m_settings.setValue(QStringLiteral("token"), m_token);
+  m_settings.setValue(QStringLiteral("userId"), m_userId);
+  m_settings.setValue(QStringLiteral("userName"), m_userName);
+  m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
+  emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit selectedItemChanged();
+  emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
+  emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
+  refreshHome();
+  refreshWatchlist();
+  refreshHouseholdWatchlist();
+}
+
+void FamilyApiClient::signOut()
+{
+  ++m_profileAttemptRevision;
+  ++m_sessionRevision;
+  ++m_homeRevision;
+  ++m_itemRevision;
+  ++m_mediaSegmentsRevision;
+  m_settings.remove(QStringLiteral("profiles/%1/token").arg(m_userId));
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
@@ -414,10 +481,11 @@ void FamilyApiClient::signOut()
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear();
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
-  m_libraryRows.clear(); m_selectedItem.clear();
+  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
   m_seasons.clear(); m_episodes.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
   m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
+  m_mediaSegments.clear();
   ++m_tvGuideRevision;
   m_watchlistEntries.clear(); m_watchlistRevision = 0;
   m_householdWatchlistEntries.clear(); m_householdWatchlistRevision = 0;
@@ -428,6 +496,8 @@ void FamilyApiClient::signOut()
   emit themeChanged();
   emit homeChanged();
   emit selectedItemChanged();
+  emit selectedIssueSummaryChanged();
+  emit mediaSegmentsChanged();
   emit watchlistChanged();
   emit seriesChanged();
   emit playlistsChanged();
