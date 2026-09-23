@@ -252,10 +252,10 @@ Window {
         familyNightPick = pool.length ? pool[Math.floor(Math.random() * pool.length)] : ({})
     }
 
-    function playSelected() {
+    function playSelected(startOver) {
         playbackQueue = []
         playbackQueueIndex = -1
-        playItem(familyApi.selectedItem, "detail")
+        playItem(familyApi.selectedItem, "detail", false, !!startOver)
     }
 
     function setSleepTimer(minutes) {
@@ -311,7 +311,7 @@ Window {
         newPlaylistName.clear()
     }
 
-    function playItem(item, returnPage, automatic) {
+    function playItem(item, returnPage, automatic, startOver) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
         if (!familyApi.kidsPlaybackAllowed()) {
             notice = "Playback is paused for bedtime until 7:00 AM."
@@ -320,7 +320,7 @@ Window {
         }
         const stream = familyApi.streamUrl(item.Id)
         if (!stream) return
-        const resume = Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
+        const resume = startOver ? 0 : Number(item.UserData && item.UserData.PlaybackPositionTicks || 0) / 10000
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
@@ -492,6 +492,8 @@ Window {
     }
 
     onPageChanged: {
+        if (page !== "home" && page !== "detail" && page !== "season"
+            && page !== "nextEpisode" && page !== "player") focusedItem = ({})
         if (page === "player") {
             playerControlsVisible = false
             playerPaused = false
@@ -508,6 +510,11 @@ Window {
             Qt.callLater(function() {
                 const first = movieWatchlistRepeater.itemAt(0) || showWatchlistRepeater.itemAt(0)
                 if (first) first.forceActiveFocus()
+            })
+        } else if (page === "search") {
+            Qt.callLater(function() {
+                if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+                else searchInput.forceActiveFocus()
             })
         }
     }
@@ -762,7 +769,7 @@ Window {
             ? (familyApi.selectedItem.Id === focusedItem.Id ? familyApi.selectedItem : focusedItem)
             : (page === "season" && selectedSeries.Id ? selectedSeries
             : (page === "nextEpisode" && nextEpisode.Id ? nextEpisode
-            : (page === "home" && focusedItem.Id ? focusedItem : backgroundRandomItem)))
+            : (focusedItem.Id ? focusedItem : backgroundRandomItem)))
         opacity: page === "player" || !familyApi.backdropEnabled ? 0 : 0.65
     }
     Rectangle {
@@ -1176,6 +1183,11 @@ Window {
                     onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" }
                 }
                 NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "Search"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: page = "search"
+                }
+                NativeAction {
                     width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll
                     onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" }
@@ -1336,6 +1348,82 @@ Window {
 
     Item {
         anchors.fill: parent
+        visible: page === "search"
+        NativeAction { x: 28; y: 22; text: "← Home"; onClicked: page = "home" }
+        Text { x: 220; y: 25; text: "Search movies and shows"; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
+        TextField {
+            id: searchInput
+            x: 28; y: 90
+            width: Math.min(680, parent.width - 56)
+            height: 58
+            font.pixelSize: 22
+            placeholderText: "Title, episode, cast…"
+            activeFocusOnTab: true
+            onTextChanged: searchDelay.restart()
+            onAccepted: {
+                searchDelay.stop()
+                familyApi.search(text)
+                if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+            }
+            Keys.onDownPressed: if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
+        }
+        Timer {
+            id: searchDelay
+            interval: 300
+            repeat: false
+            onTriggered: if (window.page === "search") familyApi.search(searchInput.text)
+        }
+        Text {
+            x: 28; y: 158
+            text: familyApi.searchLoading ? "Searching…" : (searchInput.text.trim() && !familyApi.searchResults.length ? "No matching videos" : "")
+            color: familyApi.themeText; font.pixelSize: 17
+        }
+        GridView {
+            id: searchGrid
+            x: 28; y: 195
+            width: parent.width - 56
+            height: parent.height - 215
+            cellWidth: 245; cellHeight: 180
+            model: familyApi.searchResults
+            clip: true
+            keyNavigationEnabled: true
+            onCurrentIndexChanged: {
+                if (currentIndex >= count - 12) familyApi.loadMoreSearch()
+                if (currentIndex >= 0 && currentIndex < familyApi.searchResults.length)
+                    window.focusedItem = familyApi.searchResults[currentIndex]
+            }
+            onActiveFocusChanged: if (activeFocus && currentIndex >= 0 && currentIndex < familyApi.searchResults.length)
+                window.focusedItem = familyApi.searchResults[currentIndex]
+            Keys.onReturnPressed: if (currentIndex >= 0) window.showItem(familyApi.searchResults[currentIndex], "search")
+            Keys.onEnterPressed: if (currentIndex >= 0) window.showItem(familyApi.searchResults[currentIndex], "search")
+            Keys.onUpPressed: function(event) {
+                if (searchGrid.currentIndex < Math.max(1, Math.floor(searchGrid.width / searchGrid.cellWidth))) {
+                    searchInput.forceActiveFocus()
+                    event.accepted = true
+                }
+            }
+            delegate: Rectangle {
+                required property var modelData
+                required property int index
+                width: 228; height: 165; radius: 9
+                color: familyApi.themeSurface
+                border.width: GridView.isCurrentItem ? 3 : 1
+                border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
+                Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
+                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 52; color: "#d908111b" }
+                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: modelData.Name || modelData.SeriesName || "Video"; color: "white"; font.pixelSize: 16; font.bold: true; elide: Text.ElideRight }
+                MouseArea { anchors.fill: parent; onClicked: { searchGrid.currentIndex = index; window.showItem(modelData, "search") } }
+            }
+            footer: NativeAction {
+                visible: familyApi.searchHasMore && !familyApi.searchLoading
+                text: "Load more"
+                onClicked: familyApi.loadMoreSearch()
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
         visible: page === "allLibraries"
         NativeAction {
             x: 28; y: 22
@@ -1402,7 +1490,13 @@ Window {
             focus: visible
             clip: true
             keyNavigationEnabled: true
-            onCurrentIndexChanged: if (currentIndex >= count - 12) familyApi.loadMoreLibrary()
+            onCurrentIndexChanged: {
+                if (currentIndex >= count - 12) familyApi.loadMoreLibrary()
+                if (currentIndex >= 0 && currentIndex < familyApi.libraryItems.length)
+                    window.focusedItem = familyApi.libraryItems[currentIndex]
+            }
+            onActiveFocusChanged: if (activeFocus && currentIndex >= 0 && currentIndex < familyApi.libraryItems.length)
+                window.focusedItem = familyApi.libraryItems[currentIndex]
             Keys.onReturnPressed: if (currentIndex >= 0) window.showItem(familyApi.libraryItems[currentIndex], "libraryBrowse")
             Keys.onEnterPressed: if (currentIndex >= 0) window.showItem(familyApi.libraryItems[currentIndex], "libraryBrowse")
             Keys.onEscapePressed: page = "allLibraries"
@@ -1460,6 +1554,7 @@ Window {
                             border.color: activeFocus ? familyApi.themeAccent : familyApi.themeAccentSecondary
                             activeFocusOnTab: true
                             onActiveFocusChanged: if (activeFocus) {
+                                window.focusedItem = modelData
                                 if (x < movieWatchlistScroll.contentX)
                                     movieWatchlistScroll.contentX = Math.max(0, x - 8)
                                 else if (x + width > movieWatchlistScroll.contentX + movieWatchlistScroll.width)
@@ -1518,6 +1613,7 @@ Window {
                             border.color: activeFocus ? familyApi.themeAccent : familyApi.themeAccentSecondary
                             activeFocusOnTab: true
                             onActiveFocusChanged: if (activeFocus) {
+                                window.focusedItem = modelData
                                 if (x < showWatchlistScroll.contentX)
                                     showWatchlistScroll.contentX = Math.max(0, x - 8)
                                 else if (x + width > showWatchlistScroll.contentX + showWatchlistScroll.width)
@@ -2279,10 +2375,18 @@ Window {
                 spacing: 8
                 NativeAction { width: 55; text: "Back"; onClicked: window.goBack() }
                 NativeAction {
-                    width: 55
-                    text: "Play"
+                    width: 85
+                    text: Number(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.PlaybackPositionTicks || 0) > 0
+                        ? "Resume" : "Play"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
-                    onClicked: window.playSelected()
+                    onClicked: window.playSelected(false)
+                }
+                NativeAction {
+                    width: 80
+                    text: "Start over"
+                    visible: (familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode")
+                        && Number(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.PlaybackPositionTicks || 0) > 0
+                    onClicked: window.playSelected(true)
                 }
                 NativeAction {
                     text: familyApi.isWatchlisted(familyApi.selectedItem.Id || "")
@@ -2290,6 +2394,15 @@ Window {
                     width: 105
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                     onClicked: familyApi.toggleWatchlist(familyApi.selectedItem)
+                }
+                NativeAction {
+                    text: familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.IsFavorite
+                        ? "♥ Favourite" : "♡ Favourite"
+                    width: 105
+                    visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
+                          || familyApi.selectedItem.Type === "Episode" || familyApi.selectedItem.Type === "Season"
+                    onClicked: familyApi.setFavorite(familyApi.selectedItem,
+                        !(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.IsFavorite))
                 }
                 NativeAction {
                     text: familyApi.isHouseholdWatchlisted(familyApi.selectedItem.Id || "")

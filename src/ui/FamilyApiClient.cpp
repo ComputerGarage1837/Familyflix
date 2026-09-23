@@ -1885,6 +1885,8 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_skipBackMs = 10000;
   m_skipForwardMs = 30000;
   ++m_homeRevision;
+  ++m_searchRevision;
+  m_searchResults.clear(); m_searchQuery.clear(); m_searchLoading = m_searchHasMore = false;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
   ++m_seasonRevision;
@@ -1933,6 +1935,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
   emit sessionChanged(); emit themeChanged(); emit profileAppearanceChanged(); emit nextUpModeChanged(); emit seekPreferenceChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
+  emit searchChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
@@ -1967,6 +1970,8 @@ void FamilyApiClient::signOut()
   m_skipBackMs = 10000;
   m_skipForwardMs = 30000;
   ++m_homeRevision;
+  ++m_searchRevision;
+  m_searchResults.clear(); m_searchQuery.clear(); m_searchLoading = m_searchHasMore = false;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
   ++m_seasonRevision;
@@ -2017,6 +2022,7 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("userName"));
   emit sessionChanged();
   emit seekPreferenceChanged();
+  emit searchChanged();
   emit coWatchChanged();
   emit kidsSettingsChanged();
   emit nextUpModeChanged();
@@ -2036,6 +2042,61 @@ void FamilyApiClient::signOut()
   emit playlistsChanged();
   emit liveTvChanged();
   refreshPublicUsers();
+}
+
+void FamilyApiClient::search(const QString& query)
+{
+  if (!signedIn()) return;
+  const QString trimmed = query.trimmed();
+  ++m_searchRevision;
+  m_searchQuery = trimmed;
+  m_searchResults.clear();
+  m_searchLoading = false;
+  m_searchHasMore = !trimmed.isEmpty();
+  emit searchChanged();
+  if (!trimmed.isEmpty()) loadMoreSearch();
+}
+
+void FamilyApiClient::loadMoreSearch()
+{
+  if (!signedIn() || m_searchQuery.isEmpty() || m_searchLoading || !m_searchHasMore) return;
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = m_searchRevision;
+  const int start = m_searchResults.size();
+  const int limit = 48;
+  m_searchLoading = true;
+  emit searchChanged();
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("SearchTerm"), m_searchQuery },
+            { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), QStringLiteral("Movie,Series,Episode") },
+            { QStringLiteral("EnableUserData"), true },
+            { QStringLiteral("EnableImages"), true },
+            { QStringLiteral("StartIndex"), start },
+            { QStringLiteral("Limit"), limit } }, {},
+          [this, session, revision, start, limit](const QVariant& response, const QString& error) {
+    if (session != m_sessionRevision || revision != m_searchRevision) return;
+    m_searchLoading = false;
+    if (!error.isEmpty()) {
+      m_searchHasMore = false;
+      emit errorOccurred(QStringLiteral("Search could not load."));
+      emit searchChanged();
+      return;
+    }
+    const QVariantList page = items(response);
+    QSet<QString> seen;
+    for (const auto& value : m_searchResults)
+      seen.insert(value.toMap().value(QStringLiteral("Id")).toString());
+    for (const auto& value : page) {
+      const QString id = value.toMap().value(QStringLiteral("Id")).toString();
+      if (id.isEmpty() || seen.contains(id)) continue;
+      seen.insert(id);
+      m_searchResults.append(value);
+    }
+    const int total = response.toMap().value(QStringLiteral("TotalRecordCount"), -1).toInt();
+    m_searchHasMore = total >= 0 ? start + page.size() < total : page.size() == limit;
+    emit searchChanged();
+  });
 }
 
 void FamilyApiClient::refreshHome()
@@ -2499,6 +2560,22 @@ void FamilyApiClient::setPlayed(const QVariantMap& item, bool played)
     refreshHome();
     refreshWatchlist();
     refreshHouseholdWatchlist();
+  });
+}
+
+void FamilyApiClient::setFavorite(const QVariantMap& item, bool favorite)
+{
+  if (!signedIn()) return;
+  const QString itemId = item.value(QStringLiteral("Id")).toString();
+  if (itemId.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  request(favorite ? "POST" : "DELETE",
+          QStringLiteral("Users/%1/FavoriteItems/%2").arg(m_userId, itemId), {}, {},
+          [this, session, itemId](const QVariant&, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Favourite status did not save.")); return; }
+    if (m_selectedItem.value(QStringLiteral("Id")).toString() == itemId) openItem(itemId);
+    if (!m_searchQuery.isEmpty()) search(m_searchQuery);
   });
 }
 

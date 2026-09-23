@@ -43,6 +43,9 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList deckItems READ deckItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList libraryRows READ libraryRows NOTIFY homeChanged)
+  Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
+  Q_PROPERTY(bool searchLoading READ searchLoading NOTIFY searchChanged)
+  Q_PROPERTY(bool searchHasMore READ searchHasMore NOTIFY searchChanged)
   Q_PROPERTY(QStringList homeRowOrder READ homeRowOrder NOTIFY homeChanged)
   Q_PROPERTY(QStringList hiddenHomeRows READ hiddenHomeRows NOTIFY homeChanged)
   Q_PROPERTY(QVariantList homeLayoutRows READ homeLayoutRows NOTIFY homeChanged)
@@ -114,6 +117,9 @@ public:
   QVariantList continueItems() const { return m_continueItems; }
   QVariantList deckItems() const { return m_deckItems; }
   QVariantList libraryRows() const { return m_libraryRows; }
+  QVariantList searchResults() const { return m_searchResults; }
+  bool searchLoading() const { return m_searchLoading; }
+  bool searchHasMore() const { return m_searchHasMore; }
   QStringList homeRowOrder() const { return m_homeRowOrder; }
   QStringList hiddenHomeRows() const { return m_hiddenHomeRows; }
   QVariantList homeLayoutRows() const;
@@ -187,6 +193,8 @@ public:
   Q_INVOKABLE void resolveNextEpisode(const QVariantMap& currentEpisode);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
+  Q_INVOKABLE void search(const QString& query);
+  Q_INVOKABLE void loadMoreSearch();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
   Q_INVOKABLE void loadMoreLibrary();
   Q_INVOKABLE bool libraryVisibleInRail(const QString& libraryId) const;
@@ -229,6 +237,7 @@ public:
   Q_INVOKABLE bool isHouseholdWatchlisted(const QString& itemId) const;
   Q_INVOKABLE void toggleWatchlist(const QVariantMap& item);
   Q_INVOKABLE void setPlayed(const QVariantMap& item, bool played);
+  Q_INVOKABLE void setFavorite(const QVariantMap& item, bool favorite);
   Q_INVOKABLE void toggleHouseholdWatchlist(const QVariantMap& item);
   Q_INVOKABLE void voteHouseholdWatchlistItem(const QString& itemId, bool voted);
   Q_INVOKABLE void reportPlaybackStart(const QVariantMap& item, qlonglong positionMilliseconds);
@@ -248,6 +257,7 @@ signals:
   void playableItemReady(const QString& itemId, const QVariantMap& item);
   void nextEpisodeReady(const QVariantMap& episode);
   void homeChanged();
+  void searchChanged();
   void seekPreferenceChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
@@ -364,6 +374,11 @@ private:
   bool m_recentDeckActivityReady = false;
   bool m_deckCorrectionStarted = false;
   QVariantList m_libraryRows;
+  QVariantList m_searchResults;
+  QString m_searchQuery;
+  bool m_searchLoading = false;
+  bool m_searchHasMore = false;
+  quint64 m_searchRevision = 0;
   QStringList m_homeRowOrder;
   QStringList m_hiddenHomeRows;
   int m_skipBackMs = 10000;
