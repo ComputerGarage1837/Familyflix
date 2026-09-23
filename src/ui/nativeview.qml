@@ -311,7 +311,7 @@ Window {
         newPlaylistName.clear()
     }
 
-    function playItem(item, returnPage) {
+    function playItem(item, returnPage, automatic) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
         if (!familyApi.kidsPlaybackAllowed()) {
             notice = "Playback is paused for bedtime until 7:00 AM."
@@ -324,7 +324,8 @@ Window {
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
-            if (item.Type === "Episode" && playbackQueueIndex >= 0) kidsQueuedEpisodes++
+            if (!automatic && playbackQueueIndex < 0) kidsQueuedEpisodes = 0
+            if (item.Type === "Episode") kidsQueuedEpisodes++
             playingItem = item
             playbackReturnPage = returnPage || "detail"
             playerIsLive = false
@@ -613,7 +614,7 @@ Window {
             if (window.autoNextPending) {
                 window.autoNextPending = false
                 familyApi.openItem(episode.Id)
-                window.playItem(episode, "detail")
+                window.playItem(episode, "detail", true)
             }
         }
         function onLiveTvChanged() {
@@ -670,7 +671,7 @@ Window {
                 if (nextItem && !limitReached) {
                     window.playbackQueueIndex = nextIndex
                     familyApi.openItem(nextItem.Id)
-                    window.playItem(nextItem, "playlist")
+                    window.playItem(nextItem, "playlist", true)
                     return
                 }
                 window.playbackQueue = []
@@ -681,8 +682,11 @@ Window {
             } else if (window.playingItem.Type === "Episode" && familyApi.mediaQueuingEnabled
                        && familyApi.activeSeriesAutoplayMode !== "STOP_AFTER_EPISODE"
                        && (familyApi.activeSeriesAutoplayMode === "PLAY_NEXT" || familyApi.nextUpMode !== "Off")) {
+                const limitReached = familyApi.kidsModeEnabled && familyApi.kidsEpisodeLimit > 0
+                    && window.kidsQueuedEpisodes >= familyApi.kidsEpisodeLimit
                 window.nextEpisode = ({})
-                window.autoNextPending = familyApi.activeSeriesAutoplayMode === "PLAY_NEXT"
+                window.autoNextPending = familyApi.activeSeriesAutoplayMode === "PLAY_NEXT" && !limitReached
+                if (limitReached) { window.notice = "Kids Mode automatic-next limit reached"; noticeTimer.restart() }
                 window.page = "nextEpisode"
                 familyApi.resolveNextEpisode(window.playingItem)
             } else window.page = window.playbackReturnPage
