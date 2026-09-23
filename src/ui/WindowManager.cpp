@@ -514,20 +514,27 @@ void WindowManager::loadGeometry()
   // Validate geometry fits in available screens
   if (!fitsInScreens(rect))
   {
+#if defined(Q_OS_WIN)
+    // The native Qt Windows UI starts windowed. The old web shell defaulted to a
+    // 1920x1080 client area, larger than a 1080p desktop once window chrome is added.
+    const QSize defaultSize(1280, 720);
+#else
+    const QSize defaultSize = WEBUI_SIZE;
+#endif
     QScreen* primary = QGuiApplication::primaryScreen();
     if (primary)
     {
-      QRect screenRect = primary->geometry();
+      QRect screenRect = primary->availableGeometry();
       rect = QRect(
-        screenRect.x() + (screenRect.width() - WEBUI_SIZE.width()) / 2,
-        screenRect.y() + (screenRect.height() - WEBUI_SIZE.height()) / 2,
-        WEBUI_SIZE.width(),
-        WEBUI_SIZE.height()
+        screenRect.x() + (screenRect.width() - defaultSize.width()) / 2,
+        screenRect.y() + (screenRect.height() - defaultSize.height()) / 2,
+        defaultSize.width(),
+        defaultSize.height()
       );
     }
     else
     {
-      rect = QRect(0, 0, WEBUI_SIZE.width(), WEBUI_SIZE.height());
+      rect = QRect(0, 0, defaultSize.width(), defaultSize.height());
     }
   }
 
@@ -759,7 +766,11 @@ bool WindowManager::fitsInScreens(const QRect& rc)
 {
   for (QScreen* screen : QGuiApplication::screens())
   {
+#if defined(Q_OS_WIN)
+    if (screen->availableGeometry().contains(rc))
+#else
     if (screen->geometry().intersects(rc))
+#endif
       return true;
   }
   return false;
