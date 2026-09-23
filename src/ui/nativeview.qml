@@ -80,6 +80,8 @@ Window {
     property int lastHomeCard: 0
     property string lastHomeItemId: ""
     property bool homeCardFocused: false
+    property bool contextOpen: false
+    property var contextItem: ({})
     property string watchlistMode: "personal"
     property var playlistTarget: ({})
     property string selectedPlaylistName: ""
@@ -214,6 +216,19 @@ Window {
             : item.Type === "Episode" ? (item.SeriesId || "") : "")
         familyApi.openItem(item.Id || "")
         page = "detail"
+    }
+
+    function openContext(item) {
+        if (!item || !item.Id) return
+        contextItem = item
+        focusedItem = item
+        contextOpen = true
+        Qt.callLater(function() { contextDetails.forceActiveFocus() })
+    }
+
+    function closeContext() {
+        contextOpen = false
+        if (page === "home") Qt.callLater(window.focusHomeItem)
     }
 
     function showSeason(season) {
@@ -380,6 +395,7 @@ Window {
     }
 
     function goBack() {
+        if (contextOpen) { closeContext(); return }
         if (page === "player") {
             if (playerIsLive) {
                 page = "liveTv"
@@ -492,6 +508,7 @@ Window {
     }
 
     onPageChanged: {
+        contextOpen = false
         if (page !== "home" && page !== "detail" && page !== "season"
             && page !== "nextEpisode" && page !== "player") focusedItem = ({})
         if (page === "player") {
@@ -1296,6 +1313,7 @@ Window {
                                         id: card
                                         required property var modelData
                                         required property int index
+                                        property bool longSelectOpened: false
                                         width: 226
                                         height: 170
                                         radius: 9
@@ -1326,9 +1344,45 @@ Window {
                                                 : (card.modelData.SeriesName || card.modelData.Name || "")
                                             color: "white"; font.pixelSize: 15; elide: Text.ElideRight
                                         }
-                                        MouseArea { anchors.fill: parent; onClicked: { card.forceActiveFocus(); window.showItem(card.modelData) } }
-                                        Keys.onReturnPressed: window.showItem(modelData)
-                                        Keys.onEnterPressed: window.showItem(modelData)
+                                        Timer {
+                                            id: longSelectTimer
+                                            interval: 600
+                                            onTriggered: { card.longSelectOpened = true; window.openContext(card.modelData) }
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                            pressAndHoldInterval: 600
+                                            onPressAndHold: { card.longSelectOpened = true; card.forceActiveFocus(); window.openContext(card.modelData) }
+                                            onClicked: function(mouse) {
+                                                if (card.longSelectOpened) { card.longSelectOpened = false; return }
+                                                card.forceActiveFocus()
+                                                if (mouse.button === Qt.RightButton) window.openContext(card.modelData)
+                                                else window.showItem(card.modelData)
+                                            }
+                                        }
+                                        Keys.onPressed: function(event) {
+                                            if (event.key === Qt.Key_Menu) {
+                                                window.openContext(card.modelData)
+                                                event.accepted = true
+                                            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                                if (!event.isAutoRepeat && !longSelectTimer.running) {
+                                                    card.longSelectOpened = false
+                                                    longSelectTimer.start()
+                                                }
+                                                event.accepted = true
+                                            }
+                                        }
+                                        Keys.onReleased: function(event) {
+                                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                                if (!event.isAutoRepeat) {
+                                                    longSelectTimer.stop()
+                                                    if (!card.longSelectOpened) window.showItem(card.modelData)
+                                                    card.longSelectOpened = false
+                                                }
+                                                event.accepted = true
+                                            }
+                                        }
                                         Keys.onLeftPressed: {
                                             if (card.index > 0) window.focusCard(section.index, card.index - 1)
                                             else homeButton.forceActiveFocus()
@@ -2880,6 +2934,112 @@ Window {
                                     "preferredSubtitleLanguage", String(selected.lang).toLowerCase())
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: contextOverlay
+        anchors.fill: parent
+        z: 45
+        visible: window.contextOpen && page === "home"
+        color: "#dd020810"
+        MouseArea { anchors.fill: parent; onClicked: window.closeContext() }
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 80, 590)
+            height: Math.min(parent.height - 60, 440)
+            radius: 14
+            color: familyApi.themeSurface
+            border.width: 2
+            border.color: familyApi.themeAccent
+            Column {
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 16
+                Text {
+                    width: parent.width
+                    text: window.contextItem.Name || window.contextItem.SeriesName || "Video"
+                    color: familyApi.themeText; font.pixelSize: 25; font.bold: true; elide: Text.ElideRight
+                }
+                Text { text: "Choose an action"; color: familyApi.themeText; font.pixelSize: 17 }
+                GridLayout {
+                    columns: 2
+                    property int actionColumns: 2
+                    columnSpacing: 12
+                    rowSpacing: 12
+                    NativeAction {
+                        id: contextDetails
+                        Layout.preferredWidth: 255
+                        text: "Details"
+                        onClicked: { window.closeContext(); window.showItem(window.contextItem, "home") }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: "Play"
+                        visible: window.contextItem.Type === "Movie" || window.contextItem.Type === "Episode"
+                        onClicked: { window.closeContext(); window.playItem(window.contextItem, "home") }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: familyApi.isWatchlisted(window.contextItem.Id || "") ? "Remove from Watchlist" : "Add to Watchlist"
+                        visible: window.contextItem.Type === "Movie" || window.contextItem.Type === "Series"
+                        onClicked: { window.closeContext(); familyApi.toggleWatchlist(window.contextItem) }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: familyApi.isHouseholdWatchlisted(window.contextItem.Id || "") ? "Remove from Family List" : "Add to Family List"
+                        visible: window.contextItem.Type === "Movie" || window.contextItem.Type === "Series"
+                        onClicked: { window.closeContext(); familyApi.toggleHouseholdWatchlist(window.contextItem) }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: window.contextItem.UserData && window.contextItem.UserData.IsFavorite ? "Remove Favourite" : "Add Favourite"
+                        onClicked: {
+                            window.closeContext()
+                            familyApi.setFavorite(window.contextItem,
+                                !(window.contextItem.UserData && window.contextItem.UserData.IsFavorite))
+                        }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: "Add to Playlist"
+                        onClicked: {
+                            window.closeContext()
+                            window.playlistTarget = window.contextItem
+                            window.detailReturnPage = "home"
+                            familyApi.openItem(window.contextItem.Id)
+                            familyApi.refreshPlaylists()
+                            window.page = "playlistPicker"
+                        }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: window.contextItem.UserData && window.contextItem.UserData.Played ? "Mark unwatched" : "Mark watched"
+                        onClicked: {
+                            window.closeContext()
+                            familyApi.setPlayed(window.contextItem,
+                                !(window.contextItem.UserData && window.contextItem.UserData.Played))
+                        }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: "Report playback problem"
+                        visible: window.contextItem.Type === "Movie" || window.contextItem.Type === "Episode"
+                        onClicked: {
+                            window.closeContext()
+                            window.detailReturnPage = "home"
+                            window.issueCategory = "noAudio"
+                            familyApi.openItem(window.contextItem.Id)
+                            window.page = "issueReport"
+                        }
+                    }
+                    NativeAction {
+                        Layout.preferredWidth: 255
+                        text: "Close"
+                        onClicked: window.closeContext()
                     }
                 }
             }

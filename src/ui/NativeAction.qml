@@ -11,6 +11,7 @@ FocusScope {
     property var leftAction: null
     property var rightAction: null
     property var focusScroll: null
+    property int navColumns: 1
     signal clicked()
     width: 160
     height: 48
@@ -40,8 +41,8 @@ FocusScope {
     Keys.onReturnPressed: clicked()
     Keys.onEnterPressed: clicked()
     Keys.onSpacePressed: clicked()
-    Keys.onUpPressed: upAction ? upAction() : moveAmongSiblings(-1)
-    Keys.onDownPressed: downAction ? downAction() : moveAmongSiblings(1)
+    Keys.onUpPressed: upAction ? upAction() : moveAmongSiblings(-(parent && parent.actionColumns ? parent.actionColumns : navColumns))
+    Keys.onDownPressed: downAction ? downAction() : moveAmongSiblings(parent && parent.actionColumns ? parent.actionColumns : navColumns)
     Keys.onLeftPressed: leftAction ? leftAction() : moveAmongSiblings(-1)
     Keys.onRightPressed: rightAction ? rightAction() : moveAmongSiblings(1)
 
