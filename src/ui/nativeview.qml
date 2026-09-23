@@ -12,7 +12,7 @@ Window {
     minimumWidth: 960
     minimumHeight: 540
     visible: true
-    color: "#08121d"
+    color: familyApi.themeScreen
 
     property string page: familyApi.signedIn ? "home" : "login"
     property string chosenUser: ""
@@ -274,9 +274,10 @@ Window {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0; color: "#bf07121e" }
-            GradientStop { position: 1; color: "#f008111b" }
+            GradientStop { position: 0; color: familyApi.themeAccentSecondary }
+            GradientStop { position: 1; color: familyApi.themeScreen }
         }
+        opacity: 0.78
         visible: page !== "player"
     }
 
@@ -363,7 +364,8 @@ Window {
             width: window.sidebarExpanded ? 220 : 64
             anchors.top: parent.top
             anchors.bottom: parent.bottom
-            color: "#e50b1724"
+            color: familyApi.themeSurface
+            opacity: 0.94
             Flickable {
                 id: sidebarScroll
                 anchors.fill: parent
@@ -476,9 +478,9 @@ Window {
                                         width: 226
                                         height: 170
                                         radius: 9
-                                        color: "#25374a"
+                                        color: familyApi.themeSurface
                                         border.width: card.activeFocus ? 3 : 0
-                                        border.color: "#ffd36a"
+                                        border.color: familyApi.themeAccent
                                         focus: false
                                         activeFocusOnTab: true
                                         onActiveFocusChanged: if (activeFocus) {
@@ -588,6 +590,29 @@ Window {
                 NativeAction { text: "← Home"; onClicked: page = "home" }
                 Text { text: "Family Flix Settings"; color: "white"; font.pixelSize: 32; font.bold: true }
             }
+            Text { text: "Colour theme"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
+            Flickable {
+                width: parent.width
+                height: 80
+                contentWidth: themeRow.width
+                contentHeight: height
+                clip: true
+                Row {
+                    id: themeRow
+                    spacing: 9
+                    Repeater {
+                        model: familyApi.themeOptions
+                        NativeAction {
+                            width: 145
+                            height: 62
+                            text: modelData.name
+                            accent: modelData.accent
+                            selected: familyApi.themeName === modelData.name
+                            onClicked: familyApi.setTheme(modelData.name)
+                        }
+                    }
+                }
+            }
             Text { text: "Libraries on the left menu"; color: "white"; font.pixelSize: 23; font.bold: true }
             Text {
                 text: "Hidden libraries stay on Home. Move changes both menu and Home order."
@@ -595,7 +620,7 @@ Window {
             }
             ScrollView {
                 width: parent.width
-                height: parent.height - 155
+                height: parent.height - 260
                 Column {
                     width: Math.max(800, window.width - 90)
                     spacing: 8

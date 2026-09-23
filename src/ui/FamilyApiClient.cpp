@@ -15,6 +15,41 @@
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
 
+struct ThemePalette {
+  const char* name;
+  const char* screen;
+  const char* surface;
+  const char* accent;
+  const char* secondary;
+  const char* text;
+  const char* onAccent;
+};
+const ThemePalette palettes[] = {
+  {"Ocean", "#071116", "#102028", "#20C5C7", "#9585FF", "#F4FBFC", "#042326"},
+  {"Violet", "#100A18", "#1B1226", "#B879EF", "#60DDE1", "#FBF7FF", "#23102E"},
+  {"Royal Blue", "#07101D", "#101E30", "#5AA2FF", "#FF91A6", "#F3F8FF", "#071B33"},
+  {"Forest", "#08140D", "#102419", "#58CE83", "#E8BB60", "#F3FBF5", "#082415"},
+  {"Amber", "#171006", "#2A1D0B", "#F2AA3B", "#55D4C6", "#FFF8EA", "#2B1900"},
+  {"Rose", "#170A10", "#2A121D", "#EC79A8", "#66D6D0", "#FFF6FA", "#35101F"},
+  {"Crimson", "#160908", "#291311", "#EF756D", "#F2B84B", "#FFF7F5", "#35100D"},
+  {"Indigo", "#0A0B18", "#15162A", "#8D94FF", "#52D6CE", "#F7F7FF", "#141636"},
+  {"Lime", "#0D1508", "#192510", "#A4CF55", "#5FC6DD", "#F8FCEB", "#1B2808"},
+  {"Copper", "#160E09", "#291B13", "#DC8B5F", "#75C7C1", "#FFF8F3", "#32180B"},
+  {"Graphite", "#0D0E10", "#1A1C1F", "#A4B0BA", "#E3A65A", "#F7F8F9", "#171B1E"},
+  {"Aurora", "#071326", "#101E32", "#42E0C5", "#B079FF", "#F5FBFF", "#031D24"},
+  {"Sunset Cinema", "#180A19", "#271426", "#FFB44D", "#FF718F", "#FFF8EF", "#351700"},
+  {"Neon Arcade", "#050817", "#0E1730", "#2DE2E6", "#FF4FD8", "#F7FBFF", "#0A1804"},
+  {"Cinema Noir", "#101113", "#1C1E21", "#E6E1D7", "#D45D68", "#F5F3EE", "#16130D"}
+};
+
+const ThemePalette& paletteFor(const QString& name)
+{
+  for (const auto& palette : palettes) {
+    if (name == QLatin1String(palette.name)) return palette;
+  }
+  return palettes[0];
+}
+
 QString deckSeriesId(const QVariantMap& episode)
 {
   const QString id = episode.value(QStringLiteral("SeriesId")).toString();
@@ -50,6 +85,38 @@ FamilyApiClient::FamilyApiClient(QObject* parent)
   m_token = m_settings.value(QStringLiteral("token")).toString();
   m_userId = m_settings.value(QStringLiteral("userId")).toString();
   m_userName = m_settings.value(QStringLiteral("userName")).toString();
+  if (!m_userId.isEmpty())
+    m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
+                                   QStringLiteral("Ocean")).toString();
+}
+
+QColor FamilyApiClient::themeScreen() const { return QColor(QLatin1String(paletteFor(m_themeName).screen)); }
+QColor FamilyApiClient::themeSurface() const { return QColor(QLatin1String(paletteFor(m_themeName).surface)); }
+QColor FamilyApiClient::themeAccent() const { return QColor(QLatin1String(paletteFor(m_themeName).accent)); }
+QColor FamilyApiClient::themeAccentSecondary() const { return QColor(QLatin1String(paletteFor(m_themeName).secondary)); }
+QColor FamilyApiClient::themeText() const { return QColor(QLatin1String(paletteFor(m_themeName).text)); }
+QColor FamilyApiClient::themeOnAccent() const { return QColor(QLatin1String(paletteFor(m_themeName).onAccent)); }
+
+QVariantList FamilyApiClient::themeOptions() const
+{
+  QVariantList options;
+  for (const auto& palette : palettes) {
+    options.append(QVariantMap{
+      { QStringLiteral("name"), QString::fromLatin1(palette.name) },
+      { QStringLiteral("screen"), QString::fromLatin1(palette.screen) },
+      { QStringLiteral("accent"), QString::fromLatin1(palette.accent) },
+      { QStringLiteral("secondary"), QString::fromLatin1(palette.secondary) }
+    });
+  }
+  return options;
+}
+
+void FamilyApiClient::setTheme(const QString& name)
+{
+  if (m_userId.isEmpty() || name != QLatin1String(paletteFor(name).name) || name == m_themeName) return;
+  m_themeName = name;
+  m_settings.setValue(QStringLiteral("users/%1/theme").arg(m_userId), name);
+  emit themeChanged();
 }
 
 void FamilyApiClient::request(const QByteArray& method, const QString& path,
@@ -284,10 +351,13 @@ void FamilyApiClient::signIn(const QString& userName, const QString& password)
     m_token = token;
     m_userId = id;
     m_userName = user.value(QStringLiteral("Name")).toString();
+    m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
+                                   QStringLiteral("Ocean")).toString();
     m_settings.setValue(QStringLiteral("token"), m_token);
     m_settings.setValue(QStringLiteral("userId"), m_userId);
     m_settings.setValue(QStringLiteral("userName"), m_userName);
     emit sessionChanged();
+    emit themeChanged();
     refreshHome();
     refreshWatchlist();
     refreshHouseholdWatchlist();
@@ -302,6 +372,7 @@ void FamilyApiClient::signOut()
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
+  m_themeName = QStringLiteral("Ocean");
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear();
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
@@ -316,6 +387,7 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("userId"));
   m_settings.remove(QStringLiteral("userName"));
   emit sessionChanged();
+  emit themeChanged();
   emit homeChanged();
   emit selectedItemChanged();
   emit watchlistChanged();

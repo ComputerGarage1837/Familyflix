@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QDateTime>
+#include <QColor>
 #include <QNetworkAccessManager>
 #include <QSettings>
 #include <QStringList>
@@ -32,6 +33,14 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList tvCategories READ tvCategories NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvChannels READ tvChannels NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvPrograms READ tvPrograms NOTIFY liveTvChanged)
+  Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
+  Q_PROPERTY(QColor themeScreen READ themeScreen NOTIFY themeChanged)
+  Q_PROPERTY(QColor themeSurface READ themeSurface NOTIFY themeChanged)
+  Q_PROPERTY(QColor themeAccent READ themeAccent NOTIFY themeChanged)
+  Q_PROPERTY(QColor themeAccentSecondary READ themeAccentSecondary NOTIFY themeChanged)
+  Q_PROPERTY(QColor themeText READ themeText NOTIFY themeChanged)
+  Q_PROPERTY(QColor themeOnAccent READ themeOnAccent NOTIFY themeChanged)
+  Q_PROPERTY(QVariantList themeOptions READ themeOptions CONSTANT)
 
 public:
   explicit FamilyApiClient(QObject* parent = nullptr);
@@ -55,6 +64,14 @@ public:
   QVariantList tvCategories() const { return m_tvCategories; }
   QVariantList tvChannels() const { return m_tvChannels; }
   QVariantList tvPrograms() const { return m_tvPrograms; }
+  QString themeName() const { return m_themeName; }
+  QColor themeScreen() const;
+  QColor themeSurface() const;
+  QColor themeAccent() const;
+  QColor themeAccentSecondary() const;
+  QColor themeText() const;
+  QColor themeOnAccent() const;
+  QVariantList themeOptions() const;
 
   Q_INVOKABLE void refreshPublicUsers();
   Q_INVOKABLE void signIn(const QString& userName, const QString& password);
@@ -75,6 +92,7 @@ public:
   Q_INVOKABLE QVariantList tvChannelsForBand(int band) const;
   Q_INVOKABLE QVariantList tvProgramsForChannel(const QString& channelId) const;
   Q_INVOKABLE void refreshTvGuide(int band, const QDateTime& startUtc);
+  Q_INVOKABLE void setTheme(const QString& name);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE void refreshWatchlist();
@@ -97,6 +115,7 @@ signals:
   void seriesChanged();
   void playlistsChanged();
   void liveTvChanged();
+  void themeChanged();
   void errorOccurred(const QString& message);
 
 private:
@@ -145,6 +164,7 @@ private:
   QVariantList m_tvChannels;
   QVariantList m_tvPrograms;
   quint64 m_tvGuideRevision = 0;
+  QString m_themeName = QStringLiteral("Ocean");
   qlonglong m_watchlistRevision = 0;
   qlonglong m_householdWatchlistRevision = 0;
   quint64 m_sessionRevision = 0;
