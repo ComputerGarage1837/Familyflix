@@ -101,6 +101,7 @@ public:
   Q_INVOKABLE void refreshMediaSegments(const QString& itemId);
   Q_INVOKABLE QString mediaSegmentAction(const QString& type) const;
   Q_INVOKABLE void setMediaSegmentAction(const QString& type, const QString& action);
+  Q_INVOKABLE void reportIssue(const QString& itemId, const QString& category, const QString& note);
   Q_INVOKABLE void setTheme(const QString& name);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
@@ -126,6 +127,7 @@ signals:
   void playlistsChanged();
   void liveTvChanged();
   void mediaSegmentsChanged();
+  void issueReportFinished(bool success, const QString& message);
   void themeChanged();
   void errorOccurred(const QString& message);
 

@@ -33,6 +33,8 @@ Window {
     property var livePreviewChannel: ({})
     property bool livePreviewActive: false
     property bool playerIsLive: false
+    property string issueCategory: "noAudio"
+    property bool issueReportPending: false
     property var activeSkipSegment: ({})
     property string lastSkipSegmentKey: ""
     property var homeRows: {
@@ -151,6 +153,8 @@ Window {
             page = "home"
         } else if (page === "skipSettings") {
             page = "settings"
+        } else if (page === "issueReport") {
+            page = "detail"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -225,6 +229,7 @@ Window {
     Connections {
         target: familyApi
         function onSessionChanged() {
+            window.issueReportPending = false
             window.page = familyApi.signedIn ? "home" : "login"
             if (!familyApi.signedIn) {
                 window.chosenUser = ""
@@ -234,6 +239,15 @@ Window {
         function onErrorOccurred(message) {
             window.notice = message
             noticeTimer.restart()
+        }
+        function onIssueReportFinished(success, message) {
+            window.issueReportPending = false
+            window.notice = message
+            noticeTimer.restart()
+            if (success) {
+                issueNote.clear()
+                window.page = "detail"
+            }
         }
         function onLiveTvChanged() {
             if (window.page !== "liveTv") return
@@ -1082,6 +1096,12 @@ Window {
                         page = "playlistPicker"
                     }
                 }
+                NativeAction {
+                    width: 120
+                    text: "Report issue"
+                    visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
+                    onClicked: { window.issueCategory = "noAudio"; window.issueReportPending = false; page = "issueReport" }
+                }
             }
             Flickable {
                 width: parent.width
@@ -1099,6 +1119,58 @@ Window {
                             text: modelData.Name || "Season"
                             onClicked: window.showSeason(modelData)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "issueReport"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 760)
+            spacing: 14
+            Text { text: "Report a problem · " + (familyApi.selectedItem.Name || "Video"); color: familyApi.themeText; font.pixelSize: 27; font.bold: true }
+            Repeater {
+                model: [
+                    { value: "noAudio", label: "No audio" },
+                    { value: "wrongEpisode", label: "Wrong episode" },
+                    { value: "brokenVideo", label: "Broken video" },
+                    { value: "subtitles", label: "Subtitles" },
+                    { value: "introTiming", label: "Skip timing" },
+                    { value: "other", label: "Other" }
+                ]
+                NativeAction {
+                    width: parent.width
+                    height: 48
+                    text: modelData.label
+                    selected: window.issueCategory === modelData.value
+                    onClicked: window.issueCategory = modelData.value
+                }
+            }
+            TextArea {
+                id: issueNote
+                width: parent.width
+                height: 90
+                placeholderText: "Optional details (up to 1,000 characters)"
+                wrapMode: TextEdit.Wrap
+                background: Rectangle { color: familyApi.themeSurface; border.color: familyApi.themeAccent; radius: 6 }
+                color: familyApi.themeText
+                font.pixelSize: 17
+                onTextChanged: if (text.length > 1000) text = text.slice(0, 1000)
+            }
+            Row {
+                spacing: 12
+                NativeAction { text: "Cancel"; onClicked: window.goBack() }
+                NativeAction {
+                    text: window.issueReportPending ? "Sending…" : "Send report"
+                    width: 165
+                    onClicked: {
+                        if (window.issueReportPending) return
+                        window.issueReportPending = true
+                        familyApi.reportIssue(familyApi.selectedItem.Id, window.issueCategory, issueNote.text)
                     }
                 }
             }

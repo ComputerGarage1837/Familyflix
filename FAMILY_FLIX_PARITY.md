@@ -17,7 +17,7 @@ check against the same Jellyfin server and user profiles before release.
 | Intro, recap, preview and outro prompts | Native segment fetch, Ask/Auto/Off defaults and playback prompt coded | Build and runtime test detection, timing, focus and per-series choices |
 | Live TV guide, preview, categories and time shifting | Native categories, channel list, two-hour viewport/scrolling timeline, preview/fullscreen selection coded | Test live playback, guide timing, category/disabled-channel handling, pause/seek and buffer controls |
 | Movie/show and Live TV one-hour buffers | Separate up-to-one-hour native settings with memory-first and temporary-disk fallback | Test long VOD and live playback, storage cap and seek behavior; actual hour depends on bitrate and stream seekability |
-| Issues, broken-media warnings and admin Health Centre | Native item-detail warnings coded from server issue summaries; server plugin exists | Test warning categorization and port reporting plus admin Health Centre controls |
+| Issues, broken-media warnings and admin Health Centre | Native item-detail warnings and movie/episode reporting coded against the server plugin | Test reports and warnings; port admin Health Centre controls |
 | Settings sync and updates | Windows release check and download prompt coded; native session persisted | Port Android-like settings screens and preserve them through installs |
 | Keyboard, mouse and remote | First native Qt controls and hidden-until-interaction playback bar coded | Test D-pad, Back, page restoration and focus on every screen |
 

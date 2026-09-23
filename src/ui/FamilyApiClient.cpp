@@ -160,6 +160,34 @@ void FamilyApiClient::refreshMediaSegments(const QString& itemId)
   });
 }
 
+void FamilyApiClient::reportIssue(const QString& itemId, const QString& category, const QString& note)
+{
+  static const QSet<QString> categories = { QStringLiteral("noAudio"),
+    QStringLiteral("wrongEpisode"), QStringLiteral("brokenVideo"),
+    QStringLiteral("subtitles"), QStringLiteral("introTiming"), QStringLiteral("other") };
+  if (!signedIn() || itemId.isEmpty() || !categories.contains(category) || note.size() > 1000) return;
+  const quint64 session = m_sessionRevision;
+  const QVariantMap report{
+    { QStringLiteral("operationId"), QUuid::createUuid().toString(QUuid::WithoutBraces) },
+    { QStringLiteral("itemId"), itemId },
+    { QStringLiteral("category"), category },
+    { QStringLiteral("note"), note.trimmed() },
+    { QStringLiteral("deviceName"), QStringLiteral("Family Flix Windows") },
+    { QStringLiteral("appVersion"), QStringLiteral("0.1") }
+  };
+  request("POST", QStringLiteral("FamilyFlix/Issues/Reports"), {},
+          QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
+          [this, session, itemId](const QVariant&, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) {
+      emit issueReportFinished(false, QStringLiteral("Could not send the report. Please try again."));
+      return;
+    }
+    emit issueReportFinished(true, QStringLiteral("Problem report sent."));
+    if (m_selectedItem.value(QStringLiteral("Id")).toString() == itemId) openItem(itemId);
+  });
+}
+
 void FamilyApiClient::request(const QByteArray& method, const QString& path,
                               const QVariantMap& query, const QByteArray& body,
                               ReplyHandler handler)
