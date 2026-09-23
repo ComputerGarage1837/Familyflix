@@ -33,6 +33,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList tvCategories READ tvCategories NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvChannels READ tvChannels NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvPrograms READ tvPrograms NOTIFY liveTvChanged)
+  Q_PROPERTY(QVariantList mediaSegments READ mediaSegments NOTIFY mediaSegmentsChanged)
   Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
   Q_PROPERTY(QColor themeScreen READ themeScreen NOTIFY themeChanged)
   Q_PROPERTY(QColor themeSurface READ themeSurface NOTIFY themeChanged)
@@ -64,6 +65,7 @@ public:
   QVariantList tvCategories() const { return m_tvCategories; }
   QVariantList tvChannels() const { return m_tvChannels; }
   QVariantList tvPrograms() const { return m_tvPrograms; }
+  QVariantList mediaSegments() const { return m_mediaSegments; }
   QString themeName() const { return m_themeName; }
   QColor themeScreen() const;
   QColor themeSurface() const;
@@ -92,6 +94,9 @@ public:
   Q_INVOKABLE QVariantList tvChannelsForBand(int band) const;
   Q_INVOKABLE QVariantList tvProgramsForChannel(const QString& channelId) const;
   Q_INVOKABLE void refreshTvGuide(int band, const QDateTime& startUtc);
+  Q_INVOKABLE void refreshMediaSegments(const QString& itemId);
+  Q_INVOKABLE QString mediaSegmentAction(const QString& type) const;
+  Q_INVOKABLE void setMediaSegmentAction(const QString& type, const QString& action);
   Q_INVOKABLE void setTheme(const QString& name);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
@@ -115,6 +120,7 @@ signals:
   void seriesChanged();
   void playlistsChanged();
   void liveTvChanged();
+  void mediaSegmentsChanged();
   void themeChanged();
   void errorOccurred(const QString& message);
 
@@ -163,6 +169,8 @@ private:
   QVariantList m_tvCategories;
   QVariantList m_tvChannels;
   QVariantList m_tvPrograms;
+  QVariantList m_mediaSegments;
+  quint64 m_mediaSegmentsRevision = 0;
   quint64 m_tvGuideRevision = 0;
   QString m_themeName = QStringLiteral("Ocean");
   qlonglong m_watchlistRevision = 0;

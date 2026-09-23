@@ -119,6 +119,44 @@ void FamilyApiClient::setTheme(const QString& name)
   emit themeChanged();
 }
 
+QString FamilyApiClient::mediaSegmentAction(const QString& type) const
+{
+  static const QSet<QString> supported = { QStringLiteral("Intro"), QStringLiteral("Outro"),
+    QStringLiteral("Preview"), QStringLiteral("Recap"), QStringLiteral("Commercial") };
+  if (!supported.contains(type)) return QStringLiteral("Off");
+  const QString fallback = type == QStringLiteral("Intro") || type == QStringLiteral("Outro")
+    ? QStringLiteral("Ask") : QStringLiteral("Off");
+  return m_settings.value(QStringLiteral("users/%1/segments/%2").arg(m_userId, type), fallback).toString();
+}
+
+void FamilyApiClient::setMediaSegmentAction(const QString& type, const QString& action)
+{
+  static const QSet<QString> supported = { QStringLiteral("Intro"), QStringLiteral("Outro"),
+    QStringLiteral("Preview"), QStringLiteral("Recap"), QStringLiteral("Commercial") };
+  static const QSet<QString> actions = { QStringLiteral("Off"), QStringLiteral("Ask"), QStringLiteral("Auto") };
+  if (m_userId.isEmpty() || !supported.contains(type) || !actions.contains(action)) return;
+  m_settings.setValue(QStringLiteral("users/%1/segments/%2").arg(m_userId, type), action);
+  emit mediaSegmentsChanged();
+}
+
+void FamilyApiClient::refreshMediaSegments(const QString& itemId)
+{
+  const quint64 revision = ++m_mediaSegmentsRevision;
+  const quint64 session = m_sessionRevision;
+  m_mediaSegments.clear();
+  emit mediaSegmentsChanged();
+  if (!signedIn() || itemId.isEmpty()) return;
+  request("GET", QStringLiteral("MediaSegments/%1").arg(itemId),
+          { { QStringLiteral("includeSegmentTypes"),
+              QStringLiteral("Intro,Outro,Preview,Recap,Commercial") } }, {},
+          [this, revision, session](const QVariant& data, const QString& error) {
+    if (revision != m_mediaSegmentsRevision || session != m_sessionRevision) return;
+    if (!error.isEmpty()) return;
+    m_mediaSegments = items(data);
+    emit mediaSegmentsChanged();
+  });
+}
+
 void FamilyApiClient::request(const QByteArray& method, const QString& path,
                               const QVariantMap& query, const QByteArray& body,
                               ReplyHandler handler)

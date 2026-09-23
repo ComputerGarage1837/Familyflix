@@ -33,6 +33,8 @@ Window {
     property var livePreviewChannel: ({})
     property bool livePreviewActive: false
     property bool playerIsLive: false
+    property var activeSkipSegment: ({})
+    property string lastSkipSegmentKey: ""
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
@@ -83,6 +85,9 @@ Window {
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
             playerIsLive = false
+            activeSkipSegment = ({})
+            lastSkipSegmentKey = ""
+            familyApi.refreshMediaSegments(item.Id)
             page = "player"
         }
     }
@@ -144,8 +149,38 @@ Window {
             livePreviewActive = false
             playerIsLive = false
             page = "home"
+        } else if (page === "skipSettings") {
+            page = "settings"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
+        }
+    }
+
+    function checkSkipSegment() {
+        if (page !== "player" || playerIsLive || playerPaused) return
+        const position = components.player.getPosition() * 1000
+        if (activeSkipSegment.Key && position >= activeSkipSegment.End) {
+            activeSkipSegment = ({})
+            skipPromptTimer.stop()
+        }
+        for (const segment of familyApi.mediaSegments) {
+            const start = Number(segment.StartTicks || 0) / 10000
+            const end = Number(segment.EndTicks || 0) / 10000
+            if (position < start || position >= end) continue
+            const type = String(segment.Type || "")
+            const action = familyApi.mediaSegmentAction(type)
+            const minimum = action === "Ask" ? 3000 : 1000
+            if (action === "Off" || end - start < minimum) continue
+            const key = type + ":" + start + ":" + end
+            if (lastSkipSegmentKey === key) return
+            lastSkipSegmentKey = key
+            if (action === "Auto") {
+                components.player.seekTo(end)
+                return
+            }
+            activeSkipSegment = { Type: type, End: end, Key: key }
+            skipPromptTimer.restart()
+            return
         }
     }
 
@@ -263,6 +298,8 @@ Window {
     }
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
+    Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
+    Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
 
     // The desktop shell and cards are Qt Quick controls, not the Jellyfin web client.
     Image {
@@ -591,6 +628,7 @@ Window {
                 Text { text: "Family Flix Settings"; color: "white"; font.pixelSize: 32; font.bold: true }
             }
             Text { text: "Colour theme"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
+            NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
             Flickable {
                 width: parent.width
                 height: 80
@@ -643,6 +681,38 @@ Window {
                             }
                             NativeAction { width: 70; text: "↑"; onClicked: familyApi.moveLibrary(modelData.Id, -1) }
                             NativeAction { width: 70; text: "↓"; onClicked: familyApi.moveLibrary(modelData.Id, 1) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "skipSettings"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+            spacing: 18
+            NativeAction { text: "← Settings"; onClicked: window.goBack() }
+            Text { text: "Skip prompts"; color: familyApi.themeText; font.pixelSize: 30; font.bold: true }
+            Text { text: "Ask shows a button during a detected segment. Auto skips it; Off leaves it alone."; color: familyApi.themeText; font.pixelSize: 17 }
+            Repeater {
+                model: ["Intro", "Outro", "Preview", "Recap", "Commercial"]
+                Row {
+                    id: segmentRow
+                    required property string modelData
+                    spacing: 16
+                    Text { width: 160; height: 54; verticalAlignment: Text.AlignVCenter; text: modelData; color: familyApi.themeText; font.pixelSize: 21 }
+                    Repeater {
+                        model: ["Ask", "Auto", "Off"]
+                        NativeAction {
+                            required property string modelData
+                            width: 105
+                            text: modelData
+                            selected: familyApi.mediaSegmentAction(segmentRow.modelData) === modelData
+                            onClicked: familyApi.setMediaSegmentAction(segmentRow.modelData, modelData)
                         }
                     }
                 }
@@ -1071,6 +1141,21 @@ Window {
         MouseArea {
             anchors.fill: parent
             onClicked: { window.playerControlsVisible = true; controlsTimer.restart(); playerPanel.forceActiveFocus() }
+        }
+        NativeAction {
+            anchors.right: parent.right
+            anchors.rightMargin: 28
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: window.playerControlsVisible ? 120 : 32
+            width: 190
+            height: 54
+            visible: !!window.activeSkipSegment.Key
+            text: "Skip " + (window.activeSkipSegment.Type || "segment")
+            onClicked: {
+                components.player.seekTo(window.activeSkipSegment.End)
+                window.activeSkipSegment = ({})
+                skipPromptTimer.stop()
+            }
         }
         Rectangle {
             anchors.left: parent.left
