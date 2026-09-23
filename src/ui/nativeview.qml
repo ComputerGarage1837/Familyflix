@@ -25,6 +25,7 @@ Window {
     property string familyNightGenre: "Any"
     property var familyNightPick: ({})
     property string pendingFamilyNightId: ""
+    property string pendingSeriesPlayId: ""
     onFamilyNightMatchesChanged: if (page === "familyNight") Qt.callLater(pickFamilyNight)
     property var familyNightGenres: {
         const genres = ["Any"]
@@ -312,6 +313,11 @@ Window {
     function playSelected(startOver) {
         playbackQueue = []
         playbackQueueIndex = -1
+        if (familyApi.selectedItem.Type === "Series") {
+            pendingSeriesPlayId = familyApi.selectedItem.Id || ""
+            familyApi.resolveFirstUnwatchedEpisode(pendingSeriesPlayId)
+            return
+        }
         playItem(familyApi.selectedItem, "detail", false, !!startOver)
     }
 
@@ -494,9 +500,10 @@ Window {
     function checkSkipSegment() {
         if (page !== "player" || playerIsLive || playerPaused) return
         const position = components.player.getPosition() * 1000
-        if (activeSkipSegment.Key && position >= activeSkipSegment.End) {
+        if (activeSkipSegment.Key
+            && (position < activeSkipSegment.Start || position >= activeSkipSegment.End)) {
             activeSkipSegment = ({})
-            skipPromptTimer.stop()
+            lastSkipSegmentKey = ""
         }
         for (const segment of familyApi.mediaSegments) {
             const start = Number(segment.StartTicks || 0) / 10000
@@ -513,8 +520,7 @@ Window {
                 components.player.seekTo(end)
                 return
             }
-            activeSkipSegment = { Type: type, End: end, Key: key }
-            skipPromptTimer.restart()
+            activeSkipSegment = { Type: type, Start: start, End: end, Key: key }
             return
         }
     }
@@ -633,6 +639,7 @@ Window {
         target: familyApi
         function onSessionChanged() {
             window.issueReportPending = false
+            window.pendingSeriesPlayId = ""
             searchInput.clear()
             window.searchKeyboardOpen = false
             window.searchSymbols = false
@@ -674,6 +681,12 @@ Window {
         function onFirstUnwatchedEpisodeReady(seriesId, episode) {
             if (window.page === "familyNight" && window.familyNightPick.Id === seriesId)
                 window.playItem(episode, "familyNight")
+            else if (window.page === "detail" && window.pendingSeriesPlayId === seriesId
+                     && familyApi.selectedItem.Id === seriesId) {
+                window.pendingSeriesPlayId = ""
+                familyApi.openItem(episode.Id)
+                window.playItem(episode, "detail")
+            }
         }
         function onPlayableItemReady(itemId, item) {
             if (window.page !== "familyNight" || window.pendingFamilyNightId !== itemId
@@ -822,7 +835,6 @@ Window {
             && !window.seriesTracksApplied && window.seriesTrackAttempts < 10
         onTriggered: window.applySeriesTracks()
     }
-    Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
     Timer {
         interval: 1000; repeat: true; running: window.sleepDeadlineMs > 0
         onTriggered: {
@@ -2584,10 +2596,12 @@ Window {
                 spacing: 8
                 NativeAction { width: 55; text: "Back"; onClicked: window.goBack() }
                 NativeAction {
-                    width: 85
-                    text: Number(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.PlaybackPositionTicks || 0) > 0
-                        ? "Resume" : "Play"
+                    width: 105
+                    text: familyApi.selectedItem.Type === "Series" ? "Play next"
+                        : Number(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.PlaybackPositionTicks || 0) > 0
+                            ? "Resume" : "Play"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
+                        || familyApi.selectedItem.Type === "Series"
                     onClicked: window.playSelected(false)
                 }
                 NativeAction {
@@ -2961,7 +2975,7 @@ Window {
             onClicked: {
                 components.player.seekTo(window.activeSkipSegment.End)
                 window.activeSkipSegment = ({})
-                skipPromptTimer.stop()
+                window.lastSkipSegmentKey = ""
             }
         }
         Rectangle {

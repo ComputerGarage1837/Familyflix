@@ -1767,19 +1767,33 @@ void FamilyApiClient::resolveFirstUnwatchedEpisode(const QString& seriesId)
             { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
             { QStringLiteral("Filters"), QStringLiteral("IsUnplayed") },
             { QStringLiteral("IsMissing"), false },
-            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
-            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
             { QStringLiteral("EnableUserData"), true },
-            { QStringLiteral("Limit"), 1 } }, {},
+            { QStringLiteral("Limit"), 2000 } }, {},
           [this, session, seriesId](const QVariant& data, const QString& error) {
     if (session != m_sessionRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
-    const auto episodes = items(data);
-    if (episodes.isEmpty()) {
+    QVariantMap first;
+    int bestSeason = INT_MAX;
+    int bestNumber = INT_MAX;
+    for (const auto& value : items(data)) {
+      const auto episode = value.toMap();
+      if (episode.value(QStringLiteral("Type")).toString() != QStringLiteral("Episode")
+          || episode.value(QStringLiteral("UserData")).toMap().value(QStringLiteral("Played")).toBool()) continue;
+      const int season = episode.value(QStringLiteral("ParentIndexNumber")).toInt();
+      const int number = episode.value(QStringLiteral("IndexNumber")).toInt();
+      if (number <= 0) continue;
+      const int rankSeason = season > 0 ? season : INT_MAX - 1;
+      if (rankSeason < bestSeason || (rankSeason == bestSeason && number < bestNumber)) {
+        first = episode;
+        bestSeason = rankSeason;
+        bestNumber = number;
+      }
+    }
+    if (first.isEmpty()) {
       emit errorOccurred(QStringLiteral("No unwatched episode is available for this show."));
       return;
     }
-    emit firstUnwatchedEpisodeReady(seriesId, episodes.first().toMap());
+    emit firstUnwatchedEpisodeReady(seriesId, first);
   });
 }
 
