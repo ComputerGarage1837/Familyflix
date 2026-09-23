@@ -253,11 +253,11 @@ QVariantList FamilyApiClient::themeOptions() const
 void FamilyApiClient::setTheme(const QString& name)
 {
   if (m_userId.isEmpty() || name != QLatin1String(paletteFor(name).name) || name == m_themeName) return;
-  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
   m_themeName = name;
   m_settings.setValue(QStringLiteral("users/%1/theme").arg(m_userId), name);
   emit themeChanged();
-  changeProfileSetting(QStringLiteral("app_theme"), androidTheme(name));
+  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("app_theme"), androidTheme(name));
+  else refreshProfileSettings();
 }
 
 QString FamilyApiClient::mediaSegmentAction(const QString& type) const
@@ -276,9 +276,9 @@ void FamilyApiClient::setMediaSegmentAction(const QString& type, const QString& 
     QStringLiteral("Preview"), QStringLiteral("Recap"), QStringLiteral("Commercial") };
   static const QSet<QString> actions = { QStringLiteral("Off"), QStringLiteral("Ask"), QStringLiteral("Auto") };
   if (m_userId.isEmpty() || !supported.contains(type) || !actions.contains(action)) return;
-  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
   m_settings.setValue(QStringLiteral("users/%1/segments/%2").arg(m_userId, type), action);
   emit mediaSegmentsChanged();
+  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
   QStringList entries = m_profileSettingsValues.value(QStringLiteral("media_segment_actions")).toString()
     .split(',', Qt::SkipEmptyParts);
   const QString prefix = type + '=';
@@ -334,8 +334,16 @@ void FamilyApiClient::applyProfileSettings(const QVariantMap& values)
     m_clockBehavior = clock;
     emit profileAppearanceChanged();
   }
-  for (const auto& entry : values.value(QStringLiteral("media_segment_actions")).toString()
-         .split(',', Qt::SkipEmptyParts)) {
+  const QString segments = values.value(QStringLiteral("media_segment_actions")).toString();
+  if (!segments.isNull()) {
+    for (const QString& type : { QStringLiteral("Intro"), QStringLiteral("Outro"),
+                                 QStringLiteral("Preview"), QStringLiteral("Recap"),
+                                 QStringLiteral("Commercial") })
+      m_settings.setValue(QStringLiteral("users/%1/segments/%2").arg(m_userId, type),
+        type == QStringLiteral("Intro") || type == QStringLiteral("Outro")
+          ? QStringLiteral("Ask") : QStringLiteral("Off"));
+  }
+  for (const auto& entry : segments.split(',', Qt::SkipEmptyParts)) {
     const QStringList parts = entry.split('=');
     if (parts.size() != 2) continue;
     const QString action = parts[1] == QStringLiteral("ASK_TO_SKIP") ? QStringLiteral("Ask")
@@ -882,35 +890,35 @@ bool FamilyApiClient::kidsSpoilerHidden(const QVariantMap& item) const
 void FamilyApiClient::cycleNextUpMode()
 {
   if (!signedIn()) return;
-  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
   m_nextUpMode = m_nextUpMode == QStringLiteral("Extended") ? QStringLiteral("Minimal")
     : m_nextUpMode == QStringLiteral("Minimal") ? QStringLiteral("Off")
     : QStringLiteral("Extended");
   m_settings.setValue(QStringLiteral("users/%1/nextUpMode").arg(m_userId), m_nextUpMode);
   emit nextUpModeChanged();
-  changeProfileSetting(QStringLiteral("next_up_behavior"), m_nextUpMode == QStringLiteral("Off")
-    ? QStringLiteral("DISABLED") : m_nextUpMode.toUpper());
+  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("next_up_behavior"),
+    m_nextUpMode == QStringLiteral("Off") ? QStringLiteral("DISABLED") : m_nextUpMode.toUpper());
+  else refreshProfileSettings();
 }
 
 void FamilyApiClient::toggleBackdropEnabled()
 {
   if (!signedIn()) return;
-  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
   m_backdropEnabled = !m_backdropEnabled;
   emit profileAppearanceChanged();
-  changeProfileSetting(QStringLiteral("pref_show_backdrop"), m_backdropEnabled
-    ? QStringLiteral("true") : QStringLiteral("false"));
+  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("pref_show_backdrop"),
+    m_backdropEnabled ? QStringLiteral("true") : QStringLiteral("false"));
+  else refreshProfileSettings();
 }
 
 void FamilyApiClient::cycleClockBehavior()
 {
   if (!signedIn()) return;
-  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
   const QStringList choices{ QStringLiteral("ALWAYS"), QStringLiteral("IN_MENUS"),
     QStringLiteral("IN_VIDEO"), QStringLiteral("NEVER") };
   m_clockBehavior = choices[(choices.indexOf(m_clockBehavior) + 1) % choices.size()];
   emit profileAppearanceChanged();
-  changeProfileSetting(QStringLiteral("pref_clock_behavior"), m_clockBehavior);
+  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("pref_clock_behavior"), m_clockBehavior);
+  else refreshProfileSettings();
 }
 
 QString FamilyApiClient::temporaryStorageGiB() const
