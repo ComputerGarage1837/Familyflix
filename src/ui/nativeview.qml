@@ -848,12 +848,36 @@ Window {
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: page = "allLibraries" }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: window.openLiveTv() }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }; onClicked: page = "settings" }
+                NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: page = "allLibraries"
+                }
+                NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" }
+                }
+                NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" }
+                }
+                NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: { familyApi.refreshPlaylists(); page = "playlists" }
+                }
+                NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: window.openLiveTv()
+                }
+                NativeAction {
+                    width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onClicked: page = "settings"
+                }
               }
             }
         }

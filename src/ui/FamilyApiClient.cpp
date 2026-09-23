@@ -1358,6 +1358,8 @@ void FamilyApiClient::refreshGroupDeck(quint64 session, quint64 homeRevision)
           const QString series = deckSeriesId(item);
           const QString id = item.value(QStringLiteral("Id")).toString();
           const QString key = !series.isEmpty()
+              && item.value(QStringLiteral("ParentIndexNumber")).isValid()
+              && item.value(QStringLiteral("IndexNumber")).isValid()
             ? QStringLiteral("%1:%2:%3").arg(series)
                 .arg(item.value(QStringLiteral("ParentIndexNumber")).toInt())
                 .arg(item.value(QStringLiteral("IndexNumber")).toInt())
