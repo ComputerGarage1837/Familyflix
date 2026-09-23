@@ -58,6 +58,8 @@ Window {
     property var playbackQueue: []
     property int playbackQueueIndex: -1
     property int kidsQueuedEpisodes: 0
+    property double sleepDeadlineMs: 0
+    property int sleepMinutesRemaining: sleepDeadlineMs > 0 ? Math.max(0, Math.ceil((sleepDeadlineMs - Date.now()) / 60000)) : 0
     property string playbackReturnPage: "detail"
     property var selectedSeries: ({})
     property var selectedSeason: ({})
@@ -161,6 +163,29 @@ Window {
         playbackQueue = []
         playbackQueueIndex = -1
         playItem(familyApi.selectedItem, "detail")
+    }
+
+    function setSleepTimer(minutes) {
+        sleepDeadlineMs = minutes > 0 ? Date.now() + minutes * 60000 : 0
+        notice = minutes > 0 ? "Sleep timer set for " + minutes + " minutes" : "Sleep timer turned off"
+        noticeTimer.restart()
+    }
+
+    function expireSleepTimer() {
+        sleepDeadlineMs = 0
+        if (page === "player" && !playerIsLive)
+            familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+        const wasPlaying = page === "player" || livePreviewActive
+        if (wasPlaying) {
+            playbackQueue = []
+            playbackQueueIndex = -1
+            livePreviewActive = false
+            page = playerIsLive ? "liveTv" : playbackReturnPage
+            playerIsLive = false
+            components.player.stop()
+        }
+        notice = "Sleep timer ended playback"
+        noticeTimer.restart()
     }
 
     function playPlaylistFrom(startIndex) {
@@ -376,6 +401,7 @@ Window {
             window.issueReportPending = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
+            window.sleepDeadlineMs = 0
             window.page = familyApi.signedIn ? "home" : "login"
             if (!familyApi.signedIn) {
                 window.chosenUser = ""
@@ -511,6 +537,13 @@ Window {
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
     Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
     Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
+    Timer {
+        interval: 1000; repeat: true; running: window.sleepDeadlineMs > 0
+        onTriggered: {
+            window.sleepMinutesRemaining = Math.max(0, Math.ceil((window.sleepDeadlineMs - Date.now()) / 60000))
+            if (Date.now() >= window.sleepDeadlineMs) window.expireSleepTimer()
+        }
+    }
     Timer { interval: 20000; running: true; repeat: false; onTriggered: familyApi.checkWindowsUpdate(false) }
     Timer {
         interval: 60000; repeat: true
@@ -747,15 +780,34 @@ Window {
     Item {
         anchors.fill: parent
         visible: page === "kidsSettings"
-        Column {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 100, 700)
+        ScrollView {
+            anchors.fill: parent
+            anchors.margins: 40
+            Column {
+            width: Math.min(window.width - 100, 700)
             spacing: 12
             Text { text: "Kids Mode · " + familyApi.userName; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
             Text { text: "These settings stay with this Windows profile between updates."; color: familyApi.themeText; font.pixelSize: 17 }
             NativeAction { width: parent.width; text: "Kids Mode: " + (familyApi.kidsModeEnabled ? "On" : "Off"); onClicked: familyApi.setKidsModeEnabled(!familyApi.kidsModeEnabled) }
             NativeAction { width: parent.width; text: "Hide unwatched episode spoilers: " + (familyApi.kidsHideSpoilers ? "On" : "Off"); onClicked: familyApi.setKidsHideSpoilers(!familyApi.kidsHideSpoilers) }
             NativeAction { width: parent.width; text: "Episodes before automatic next stops: " + (familyApi.kidsEpisodeLimit || "Unlimited"); onClicked: familyApi.cycleKidsEpisodeLimit() }
+            Text {
+                text: "Sleep timer: " + (window.sleepDeadlineMs > 0 ? window.sleepMinutesRemaining + " minutes remaining" : "Off")
+                color: familyApi.themeText; font.pixelSize: 19
+            }
+            Flow {
+                width: parent.width; spacing: 8
+                Repeater {
+                    model: [0, 30, 60, 90, 120]
+                    NativeAction {
+                        required property int modelData
+                        width: 125; height: 46
+                        text: modelData === 0 ? "Off" : modelData + " min"
+                        selected: modelData === 0 ? window.sleepDeadlineMs === 0 : false
+                        onClicked: window.setSleepTimer(modelData)
+                    }
+                }
+            }
             NativeAction {
                 width: parent.width
                 text: "Bedtime: " + (familyApi.kidsBedtimeStart < 0 ? "Off" : (familyApi.kidsBedtimeStart / 60) + ":00–7:00")
@@ -780,6 +832,7 @@ Window {
                 }
                 NativeAction { text: "Clear PIN"; visible: familyApi.kidsHasPin; onClicked: { familyApi.setKidsPin(""); newKidsPin.clear() } }
                 NativeAction { text: "Back"; onClicked: window.goBack() }
+            }
             }
         }
     }
