@@ -167,6 +167,7 @@ public:
   Q_INVOKABLE void setTheme(const QString& name);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
+  Q_INVOKABLE QString temporaryStorageGiB() const;
   Q_INVOKABLE void refreshWatchlist();
   Q_INVOKABLE void refreshHouseholdWatchlist();
   Q_INVOKABLE bool isWatchlisted(const QString& itemId) const;

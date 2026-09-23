@@ -20,6 +20,8 @@ Window {
     property string familyNightMedia: "All"
     property int familyNightRuntime: 0
     property int familyNightAge: -1
+    property int vodBufferMinutes: Number(components.settings.value("video", "familyVodBufferMinutes")) || 60
+    property int liveBufferMinutes: Number(components.settings.value("video", "familyLiveBufferMinutes")) || 60
     property string familyNightGenre: "Any"
     property var familyNightPick: ({})
     property string pendingFamilyNightId: ""
@@ -239,6 +241,8 @@ Window {
             playerIsLive = false
             page = "home"
         } else if (page === "skipSettings") {
+            page = "settings"
+        } else if (page === "bufferSettings") {
             page = "settings"
         } else if (page === "issueReport") {
             page = "detail"
@@ -1238,6 +1242,7 @@ Window {
             }
             Text { text: "Colour theme"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
             NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
+            NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
             Flickable {
                 width: parent.width
                 height: 80
@@ -1293,6 +1298,63 @@ Window {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "bufferSettings"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+            spacing: 18
+            NativeAction { text: "← Settings"; onClicked: window.goBack() }
+            Text { text: "Playback buffers"; color: familyApi.themeText; font.pixelSize: 30; font.bold: true }
+            Text {
+                width: parent.width
+                text: "Choose how far ahead movies and shows can load, and how much live TV can be retained. Actual duration depends on bitrate and stream seekability."
+                color: familyApi.themeText; font.pixelSize: 17; wrapMode: Text.WordWrap
+            }
+            Text { text: "Temporary storage free: " + familyApi.temporaryStorageGiB(); color: familyApi.themeText; font.pixelSize: 18 }
+            Text { text: "Movies and shows · ahead of playback"; color: familyApi.themeText; font.pixelSize: 22; font.bold: true }
+            Flow {
+                width: parent.width; spacing: 10
+                Repeater {
+                    model: [5, 10, 20, 30, 60]
+                    NativeAction {
+                        required property int modelData
+                        width: 145
+                        text: modelData === 60 ? "1 hour" : modelData + " minutes"
+                        selected: window.vodBufferMinutes === modelData
+                        onClicked: {
+                            components.settings.setValue("video", "familyVodBufferMinutes", modelData)
+                            window.vodBufferMinutes = modelData
+                        }
+                    }
+                }
+            }
+            Text { text: "Live TV · pause and rewind"; color: familyApi.themeText; font.pixelSize: 22; font.bold: true }
+            Flow {
+                width: parent.width; spacing: 10
+                Repeater {
+                    model: [5, 10, 20, 30, 60]
+                    NativeAction {
+                        required property int modelData
+                        width: 145
+                        text: modelData === 60 ? "1 hour" : modelData + " minutes"
+                        selected: window.liveBufferMinutes === modelData
+                        onClicked: {
+                            components.settings.setValue("video", "familyLiveBufferMinutes", modelData)
+                            window.liveBufferMinutes = modelData
+                        }
+                    }
+                }
+            }
+            Text {
+                width: parent.width
+                text: "Family Flix uses memory first, then temporary storage when available. It reserves free space and removes the temporary buffer when playback ends."
+                color: familyApi.themeText; font.pixelSize: 16; wrapMode: Text.WordWrap
             }
         }
     }

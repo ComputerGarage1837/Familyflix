@@ -16,6 +16,8 @@
 #include <QUuid>
 #include <QUrl>
 #include <QTime>
+#include <QStorageInfo>
+#include <QDir>
 
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
@@ -660,6 +662,13 @@ bool FamilyApiClient::kidsSpoilerHidden(const QVariantMap& item) const
   return m_kidsEnabled && m_kidsHideSpoilers
     && item.value(QStringLiteral("Type")).toString() == QStringLiteral("Episode")
     && !item.value(QStringLiteral("UserData")).toMap().value(QStringLiteral("Played")).toBool();
+}
+
+QString FamilyApiClient::temporaryStorageGiB() const
+{
+  const qint64 bytes = QStorageInfo(QDir::tempPath()).bytesAvailable();
+  if (bytes < 0) return QStringLiteral("unavailable");
+  return QStringLiteral("%1 GiB").arg(bytes / (1024.0 * 1024 * 1024), 0, 'f', 1);
 }
 
 void FamilyApiClient::stopWatchingTogether()
