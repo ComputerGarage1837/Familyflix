@@ -58,6 +58,9 @@ Window {
     property var playingItem: ({})
     property var nextEpisode: ({})
     property bool autoNextPending: false
+    property bool nextUpAutoBlocked: false
+    property double nextUpDeadlineMs: 0
+    property int nextUpSecondsRemaining: 0
     property var playbackQueue: []
     property int playbackQueueIndex: -1
     property int kidsQueuedEpisodes: 0
@@ -698,6 +701,7 @@ Window {
             if (window.page !== "nextEpisode") return
             if (!episode.Id) {
                 window.autoNextPending = false
+                window.nextUpDeadlineMs = 0
                 window.page = window.playbackReturnPage
                 return
             }
@@ -706,6 +710,10 @@ Window {
                 window.autoNextPending = false
                 familyApi.openItem(episode.Id)
                 window.playItem(episode, "detail", true)
+            } else if (!window.nextUpAutoBlocked && familyApi.nextUpTimeoutMs > 0 && familyApi.nextUpMode !== "Off"
+                       && familyApi.mediaQueuingEnabled) {
+                window.nextUpDeadlineMs = Date.now() + familyApi.nextUpTimeoutMs
+                window.nextUpSecondsRemaining = Math.ceil(familyApi.nextUpTimeoutMs / 1000)
             }
         }
         function onLiveTvChanged() {
@@ -782,6 +790,8 @@ Window {
                 const limitReached = familyApi.kidsModeEnabled && familyApi.kidsEpisodeLimit > 0
                     && window.kidsQueuedEpisodes >= familyApi.kidsEpisodeLimit
                 window.nextEpisode = ({})
+                window.nextUpDeadlineMs = 0
+                window.nextUpAutoBlocked = limitReached
                 window.autoNextPending = familyApi.activeSeriesAutoplayMode === "PLAY_NEXT" && !limitReached
                 if (limitReached) { window.notice = "Kids Mode automatic-next limit reached"; noticeTimer.restart() }
                 window.page = "nextEpisode"
@@ -820,6 +830,17 @@ Window {
         onTriggered: if (!window.playerIsLive) familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, false)
     }
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
+    Timer {
+        interval: 250; repeat: true
+        running: window.page === "nextEpisode" && window.nextUpDeadlineMs > 0
+        onTriggered: {
+            window.nextUpSecondsRemaining = Math.max(0, Math.ceil((window.nextUpDeadlineMs - Date.now()) / 1000))
+            if (Date.now() < window.nextUpDeadlineMs || !window.nextEpisode.Id) return
+            window.nextUpDeadlineMs = 0
+            familyApi.openItem(window.nextEpisode.Id)
+            window.playItem(window.nextEpisode, "detail", true)
+        }
+    }
     Timer {
         id: controlsTimer
         interval: 6000
@@ -1982,6 +2003,12 @@ Window {
             NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
             NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
             NativeAction { text: "Next episode screen: " + familyApi.nextUpMode; width: 325; onClicked: familyApi.cycleNextUpMode() }
+            NativeAction {
+                text: "Next episode countdown: " + (familyApi.nextUpTimeoutMs === 0
+                    ? "Off" : familyApi.nextUpTimeoutMs / 1000 + " sec")
+                width: 325
+                onClicked: familyApi.cycleNextUpTimeout()
+            }
             NativeAction { text: "Skip forward: " + (familyApi.skipForwardMs / 1000) + " sec"; width: 325; onClicked: familyApi.cycleSkipForwardMs() }
             NativeAction { text: "Background images: " + (familyApi.backdropEnabled ? "On" : "Off"); width: 325; onClicked: familyApi.toggleBackdropEnabled() }
             NativeAction { text: "Clock: " + familyApi.clockBehavior.replace(/_/g, " "); width: 325; onClicked: familyApi.cycleClockBehavior() }
@@ -2852,6 +2879,11 @@ Window {
                     : "Finding the next unwatched episode…"
                 color: familyApi.themeText; font.pixelSize: 23; wrapMode: Text.WordWrap
             }
+            Text {
+                visible: window.nextUpDeadlineMs > 0
+                text: "Playing in " + window.nextUpSecondsRemaining + " seconds"
+                color: familyApi.themeText; font.pixelSize: 18
+            }
             Artwork {
                 width: Math.min(parent.width, 600)
                 height: familyApi.nextUpMode === "Minimal" ? 0 : 270
@@ -2866,11 +2898,12 @@ Window {
                     text: "Play next episode"
                     visible: !!nextEpisode.Id
                     onClicked: {
+                        window.nextUpDeadlineMs = 0
                         familyApi.openItem(nextEpisode.Id)
                         window.playItem(nextEpisode, "detail")
                     }
                 }
-                NativeAction { width: 150; text: "Done"; onClicked: window.goBack() }
+                NativeAction { width: 150; text: "Done"; onClicked: { window.nextUpDeadlineMs = 0; window.goBack() } }
             }
         }
     }

@@ -32,6 +32,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(int kidsBedtimeStart READ kidsBedtimeStart NOTIFY kidsSettingsChanged)
   Q_PROPERTY(bool kidsHasPin READ kidsHasPin NOTIFY kidsSettingsChanged)
   Q_PROPERTY(QString nextUpMode READ nextUpMode NOTIFY nextUpModeChanged)
+  Q_PROPERTY(int nextUpTimeoutMs READ nextUpTimeoutMs NOTIFY nextUpModeChanged)
   Q_PROPERTY(bool mediaQueuingEnabled READ mediaQueuingEnabled NOTIFY nextUpModeChanged)
   Q_PROPERTY(bool backdropEnabled READ backdropEnabled NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QString clockBehavior READ clockBehavior NOTIFY profileAppearanceChanged)
@@ -110,6 +111,7 @@ public:
   int kidsBedtimeStart() const { return m_kidsBedtimeStart; }
   bool kidsHasPin() const { return !m_kidsPinSalt.isEmpty() && !m_kidsPinHash.isEmpty(); }
   QString nextUpMode() const { return m_nextUpMode; }
+  int nextUpTimeoutMs() const { return m_nextUpTimeoutMs; }
   bool mediaQueuingEnabled() const { return m_mediaQueuingEnabled; }
   bool backdropEnabled() const { return m_backdropEnabled; }
   QString clockBehavior() const { return m_clockBehavior; }
@@ -187,6 +189,7 @@ public:
   Q_INVOKABLE bool kidsPlaybackAllowed() const;
   Q_INVOKABLE bool kidsSpoilerHidden(const QVariantMap& item) const;
   Q_INVOKABLE void cycleNextUpMode();
+  Q_INVOKABLE void cycleNextUpTimeout();
   Q_INVOKABLE void toggleBackdropEnabled();
   Q_INVOKABLE void cycleClockBehavior();
   Q_INVOKABLE void stopWatchingTogether();
@@ -356,6 +359,7 @@ private:
   QByteArray m_kidsPinSalt;
   QByteArray m_kidsPinHash;
   QString m_nextUpMode = QStringLiteral("Extended");
+  int m_nextUpTimeoutMs = 7000;
   bool m_mediaQueuingEnabled = true;
   bool m_backdropEnabled = true;
   QString m_clockBehavior = QStringLiteral("ALWAYS");

@@ -604,6 +604,13 @@ void FamilyApiClient::applyProfileSettings(const QVariantMap& values)
     m_settings.setValue(QStringLiteral("users/%1/nextUpMode").arg(m_userId), mode);
     emit nextUpModeChanged();
   }
+  bool timeoutValid = false;
+  const int timeout = values.value(QStringLiteral("next_up_timeout")).toString().toInt(&timeoutValid);
+  if (timeoutValid && timeout >= 0 && timeout <= 30000 && timeout != m_nextUpTimeoutMs) {
+    m_nextUpTimeoutMs = timeout;
+    m_settings.setValue(QStringLiteral("users/%1/nextUpTimeoutMs").arg(m_userId), timeout);
+    emit nextUpModeChanged();
+  }
   const QString queuing = values.value(QStringLiteral("pref_enable_tv_queuing")).toString();
   if (queuing == QStringLiteral("true") || queuing == QStringLiteral("false")) {
     const bool enabled = queuing == QStringLiteral("true");
@@ -1278,6 +1285,8 @@ void FamilyApiClient::loadKidsSettings()
                                  QStringLiteral("Extended")).toString();
   if (m_nextUpMode != QStringLiteral("Minimal") && m_nextUpMode != QStringLiteral("Off"))
     m_nextUpMode = QStringLiteral("Extended");
+  m_nextUpTimeoutMs = m_settings.value(QStringLiteral("users/%1/nextUpTimeoutMs").arg(m_userId), 7000).toInt();
+  if (m_nextUpTimeoutMs < 0 || m_nextUpTimeoutMs > 30000) m_nextUpTimeoutMs = 7000;
   emit kidsSettingsChanged();
   emit nextUpModeChanged();
 }
@@ -1382,6 +1391,16 @@ void FamilyApiClient::cycleNextUpMode()
   emit nextUpModeChanged();
   changeProfileSetting(QStringLiteral("next_up_behavior"),
     m_nextUpMode == QStringLiteral("Off") ? QStringLiteral("DISABLED") : m_nextUpMode.toUpper());
+}
+
+void FamilyApiClient::cycleNextUpTimeout()
+{
+  if (!signedIn()) return;
+  const QList<int> choices{ 0, 5000, 7000, 10000, 15000, 20000, 30000 };
+  m_nextUpTimeoutMs = choices[(choices.indexOf(m_nextUpTimeoutMs) + 1) % choices.size()];
+  m_settings.setValue(QStringLiteral("users/%1/nextUpTimeoutMs").arg(m_userId), m_nextUpTimeoutMs);
+  emit nextUpModeChanged();
+  changeProfileSetting(QStringLiteral("next_up_timeout"), QString::number(m_nextUpTimeoutMs));
 }
 
 void FamilyApiClient::toggleBackdropEnabled()
@@ -2083,6 +2102,7 @@ void FamilyApiClient::signOut()
   m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0; m_kidsBedtimeStart = -1;
   m_kidsPinSalt.clear(); m_kidsPinHash.clear();
   m_nextUpMode = QStringLiteral("Extended");
+  m_nextUpTimeoutMs = 7000;
   m_mediaQueuingEnabled = true;
   m_backdropEnabled = true;
   m_clockBehavior = QStringLiteral("ALWAYS");
