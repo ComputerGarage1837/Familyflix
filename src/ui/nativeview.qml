@@ -2005,6 +2005,11 @@ Window {
             NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
             NativeAction { text: "Next episode screen: " + familyApi.nextUpMode; width: 325; onClicked: familyApi.cycleNextUpMode() }
             NativeAction {
+                text: "Queue next episode: " + (familyApi.mediaQueuingEnabled ? "On" : "Off")
+                width: 325
+                onClicked: familyApi.toggleMediaQueuing()
+            }
+            NativeAction {
                 text: "Next episode countdown: " + (familyApi.nextUpTimeoutMs === 0
                     ? "Off" : familyApi.nextUpTimeoutMs / 1000 + " sec")
                 width: 325

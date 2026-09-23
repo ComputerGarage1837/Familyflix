@@ -1422,6 +1422,15 @@ void FamilyApiClient::cycleResumePreroll()
   changeProfileSetting(QStringLiteral("pref_resume_preroll"), QString::number(m_resumePrerollSeconds));
 }
 
+void FamilyApiClient::toggleMediaQueuing()
+{
+  if (!signedIn()) return;
+  m_mediaQueuingEnabled = !m_mediaQueuingEnabled;
+  emit nextUpModeChanged();
+  changeProfileSetting(QStringLiteral("pref_enable_tv_queuing"),
+    m_mediaQueuingEnabled ? QStringLiteral("true") : QStringLiteral("false"));
+}
+
 void FamilyApiClient::toggleBackdropEnabled()
 {
   if (!signedIn()) return;

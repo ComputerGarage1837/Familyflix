@@ -193,6 +193,7 @@ public:
   Q_INVOKABLE void cycleNextUpMode();
   Q_INVOKABLE void cycleNextUpTimeout();
   Q_INVOKABLE void cycleResumePreroll();
+  Q_INVOKABLE void toggleMediaQueuing();
   Q_INVOKABLE void toggleBackdropEnabled();
   Q_INVOKABLE void cycleClockBehavior();
   Q_INVOKABLE void stopWatchingTogether();
