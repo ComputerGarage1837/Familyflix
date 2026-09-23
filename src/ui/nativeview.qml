@@ -282,7 +282,7 @@ Window {
                     onClicked: homeScroll.contentY = 0
                 }
                 Repeater {
-                    model: familyApi.libraries
+                    model: familyApi.railLibraries
                     NativeAction {
                         width: 188
                         text: modelData.Name || "Library"
@@ -294,7 +294,7 @@ Window {
                 NativeAction { width: parent.width; text: "Watchlist"; onClicked: { familyApi.refreshWatchlist(); page = "watchlist" } }
                 NativeAction { width: parent.width; text: "Playlists"; onClicked: notice = "Playlist screen is being ported" }
                 NativeAction { width: parent.width; text: "Live TV"; onClicked: notice = "TV guide is being ported" }
-                NativeAction { width: parent.width; text: "Settings"; onClicked: notice = "Settings screen is being ported" }
+                NativeAction { width: parent.width; text: "Settings"; onClicked: page = "settings" }
             }
         }
         Text {
@@ -453,6 +453,55 @@ Window {
                             height: 160
                             text: modelData.title || "Show"
                             onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "settings"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 40
+            spacing: 16
+            Row {
+                spacing: 18
+                NativeAction { text: "← Home"; onClicked: page = "home" }
+                Text { text: "Family Flix Settings"; color: "white"; font.pixelSize: 32; font.bold: true }
+            }
+            Text { text: "Libraries on the left menu"; color: "white"; font.pixelSize: 23; font.bold: true }
+            Text {
+                text: "Hidden libraries stay on Home. Move changes both menu and Home order."
+                color: "#c8d5e3"; font.pixelSize: 16
+            }
+            ScrollView {
+                width: parent.width
+                height: parent.height - 155
+                Column {
+                    width: Math.max(800, window.width - 90)
+                    spacing: 8
+                    Repeater {
+                        model: familyApi.libraries
+                        Row {
+                            required property var modelData
+                            spacing: 12
+                            Text {
+                                width: Math.max(250, window.width - 500)
+                                height: 55
+                                verticalAlignment: Text.AlignVCenter
+                                text: modelData.Name || "Library"
+                                color: "white"; font.pixelSize: 19
+                            }
+                            NativeAction {
+                                width: 110
+                                text: familyApi.libraryVisibleInRail(modelData.Id) ? "Hide" : "Show"
+                                onClicked: familyApi.setLibraryVisibleInRail(modelData.Id, !familyApi.libraryVisibleInRail(modelData.Id))
+                            }
+                            NativeAction { width: 70; text: "↑"; onClicked: familyApi.moveLibrary(modelData.Id, -1) }
+                            NativeAction { width: 70; text: "↓"; onClicked: familyApi.moveLibrary(modelData.Id, 1) }
                         }
                     }
                 }

@@ -7,6 +7,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSet>
+#include <QStringList>
 #include <QUrlQuery>
 #include <QUuid>
 #include <QUrl>
@@ -95,6 +96,65 @@ QVariantList FamilyApiClient::untouchedDeck(const QVariantList& response)
   return result;
 }
 
+QVariantList FamilyApiClient::railLibraries() const
+{
+  QVariantList visible;
+  for (const auto& value : m_libraries) {
+    const auto library = value.toMap();
+    if (libraryVisibleInRail(library.value(QStringLiteral("Id")).toString())) visible.append(value);
+  }
+  return visible;
+}
+
+bool FamilyApiClient::libraryVisibleInRail(const QString& libraryId) const
+{
+  const auto hidden = m_settings.value(QStringLiteral("users/%1/hiddenLibraryIds").arg(m_userId)).toStringList();
+  return !hidden.contains(libraryId, Qt::CaseInsensitive);
+}
+
+void FamilyApiClient::setLibraryVisibleInRail(const QString& libraryId, bool visible)
+{
+  if (m_userId.isEmpty() || libraryId.isEmpty()) return;
+  const QString key = QStringLiteral("users/%1/hiddenLibraryIds").arg(m_userId);
+  QStringList hidden = m_settings.value(key).toStringList();
+  hidden.removeAll(libraryId);
+  if (!visible) hidden.append(libraryId);
+  m_settings.setValue(key, hidden);
+  emit homeChanged();
+}
+
+void FamilyApiClient::moveLibrary(const QString& libraryId, int offset)
+{
+  if (m_userId.isEmpty() || libraryId.isEmpty() || m_libraries.isEmpty()) return;
+  int from = -1;
+  for (int index = 0; index < m_libraries.size(); ++index) {
+    if (m_libraries[index].toMap().value(QStringLiteral("Id")).toString() == libraryId) {
+      from = index;
+      break;
+    }
+  }
+  if (from < 0) return;
+  const int to = qBound(0, from + offset, int(m_libraries.size()) - 1);
+  if (to == from) return;
+  m_libraries.move(from, to);
+  QStringList order;
+  for (const auto& value : m_libraries)
+    order.append(value.toMap().value(QStringLiteral("Id")).toString());
+  m_settings.setValue(QStringLiteral("users/%1/libraryMenuOrder").arg(m_userId), order);
+  QVariantList reorderedRows;
+  for (const auto& value : m_libraries) {
+    const QString id = value.toMap().value(QStringLiteral("Id")).toString();
+    for (const auto& row : m_libraryRows) {
+      if (row.toMap().value(QStringLiteral("Id")).toString() == id) {
+        reorderedRows.append(row);
+        break;
+      }
+    }
+  }
+  m_libraryRows = reorderedRows;
+  emit homeChanged();
+}
+
 void FamilyApiClient::refreshPublicUsers()
 {
   request("GET", QStringLiteral("Users/Public"), {}, {}, [this](const QVariant& data, const QString& error) {
@@ -135,6 +195,7 @@ void FamilyApiClient::signIn(const QString& userName, const QString& password)
 void FamilyApiClient::signOut()
 {
   ++m_sessionRevision;
+  ++m_homeRevision;
   ++m_itemRevision;
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
@@ -158,9 +219,10 @@ void FamilyApiClient::refreshHome()
 {
   if (!signedIn()) return;
   const quint64 revision = m_sessionRevision;
+  const quint64 homeRevision = ++m_homeRevision;
   request("GET", QStringLiteral("Users/%1/Views").arg(m_userId), {}, {},
-          [this, revision](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision) return;
+          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_libraries.clear();
     for (const auto& value : items(data)) {
@@ -170,22 +232,46 @@ void FamilyApiClient::refreshHome()
           || kind == QStringLiteral("livetv")) continue;
       m_libraries.append(library);
     }
-    m_libraryRows.clear();
-    emit homeChanged();
+    const QStringList order = m_settings.value(
+      QStringLiteral("users/%1/libraryMenuOrder").arg(m_userId)).toStringList();
+    QVariantList ordered;
+    for (const QString& id : order) {
+      for (const auto& value : m_libraries) {
+        if (value.toMap().value(QStringLiteral("Id")).toString() == id) {
+          ordered.append(value);
+          break;
+        }
+      }
+    }
+    for (const auto& value : m_libraries) {
+      const QString id = value.toMap().value(QStringLiteral("Id")).toString();
+      if (!order.contains(id)) ordered.append(value);
+    }
+    m_libraries = ordered;
+    const QVariantList previousRows = m_libraryRows;
+    QVariantList nextRows;
     for (const auto& value : m_libraries) {
       const auto library = value.toMap();
       const QString id = library.value(QStringLiteral("Id")).toString();
       const QString name = library.value(QStringLiteral("Name")).toString();
       if (id.isEmpty()) continue;
-      m_libraryRows.append(QVariantMap{
+      QVariantList cachedItems;
+      for (const auto& previous : previousRows) {
+        const auto previousRow = previous.toMap();
+        if (previousRow.value(QStringLiteral("Id")).toString() == id) {
+          cachedItems = previousRow.value(QStringLiteral("Items")).toList();
+          break;
+        }
+      }
+      nextRows.append(QVariantMap{
         { QStringLiteral("Id"), id }, { QStringLiteral("Name"), name },
-        { QStringLiteral("Items"), QVariantList{} }
+        { QStringLiteral("Items"), cachedItems }
       });
       request("GET", QStringLiteral("Users/%1/Items/Latest").arg(m_userId),
               { { QStringLiteral("ParentId"), id }, { QStringLiteral("Limit"), 12 },
                 { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode,Movie,Series") } }, {},
-              [this, revision, id](const QVariant& recent, const QString& recentError) {
-        if (revision != m_sessionRevision || !recentError.isEmpty()) return;
+              [this, revision, homeRevision, id](const QVariant& recent, const QString& recentError) {
+        if (revision != m_sessionRevision || homeRevision != m_homeRevision || !recentError.isEmpty()) return;
         for (int index = 0; index < m_libraryRows.size(); ++index) {
           auto row = m_libraryRows[index].toMap();
           if (row.value(QStringLiteral("Id")).toString() != id) continue;
@@ -196,11 +282,13 @@ void FamilyApiClient::refreshHome()
         emit homeChanged();
       });
     }
+    m_libraryRows = nextRows;
+    emit homeChanged();
   });
   request("GET", QStringLiteral("Users/%1/Items/Resume").arg(m_userId),
           { { QStringLiteral("Limit"), 15 }, { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode,Movie") } }, {},
-          [this, revision](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision) return;
+          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_continueItems = items(data);
     emit homeChanged();
@@ -208,8 +296,8 @@ void FamilyApiClient::refreshHome()
   request("GET", QStringLiteral("Shows/NextUp"),
           { { QStringLiteral("UserId"), m_userId }, { QStringLiteral("Limit"), 30 },
             { QStringLiteral("EnableResumable"), false }, { QStringLiteral("EnableRewatching"), true } }, {},
-          [this, revision](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision) return;
+          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_deckItems = untouchedDeck(items(data));
     emit homeChanged();

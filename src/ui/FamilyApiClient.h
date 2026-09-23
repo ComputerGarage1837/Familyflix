@@ -15,6 +15,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QString userName READ userName NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList publicUsers READ publicUsers NOTIFY publicUsersChanged)
   Q_PROPERTY(QVariantList libraries READ libraries NOTIFY homeChanged)
+  Q_PROPERTY(QVariantList railLibraries READ railLibraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList deckItems READ deckItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList libraryRows READ libraryRows NOTIFY homeChanged)
@@ -30,6 +31,7 @@ public:
   QString userName() const { return m_userName; }
   QVariantList publicUsers() const { return m_publicUsers; }
   QVariantList libraries() const { return m_libraries; }
+  QVariantList railLibraries() const;
   QVariantList continueItems() const { return m_continueItems; }
   QVariantList deckItems() const { return m_deckItems; }
   QVariantList libraryRows() const { return m_libraryRows; }
@@ -42,6 +44,9 @@ public:
   Q_INVOKABLE void signIn(const QString& userName, const QString& password);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
+  Q_INVOKABLE bool libraryVisibleInRail(const QString& libraryId) const;
+  Q_INVOKABLE void setLibraryVisibleInRail(const QString& libraryId, bool visible);
+  Q_INVOKABLE void moveLibrary(const QString& libraryId, int offset);
   Q_INVOKABLE void openItem(const QString& itemId);
   Q_INVOKABLE void openSeason(const QString& seasonId);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
@@ -92,6 +97,7 @@ private:
   QVariantList m_episodes;
   qlonglong m_watchlistRevision = 0;
   quint64 m_sessionRevision = 0;
+  quint64 m_homeRevision = 0;
   quint64 m_itemRevision = 0;
   QString m_playingItemId;
   QString m_playSessionId;
