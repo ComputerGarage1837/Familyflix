@@ -1812,7 +1812,7 @@ void FamilyApiClient::resolveFirstUnwatchedEpisode(const QString& seriesId)
           { { QStringLiteral("ParentId"), seriesId },
             { QStringLiteral("Recursive"), true },
             { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
-            { QStringLiteral("Filters"), QStringLiteral("IsUnplayed") },
+            { QStringLiteral("IsPlayed"), false },
             { QStringLiteral("IsMissing"), false },
             { QStringLiteral("EnableUserData"), true },
             { QStringLiteral("Limit"), 2000 } }, {},
@@ -1872,10 +1872,8 @@ void FamilyApiClient::resolveNextEpisode(const QVariantMap& currentEpisode)
             { QStringLiteral("Recursive"), true },
             { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
             { QStringLiteral("IsMissing"), false },
-            { QStringLiteral("Filters"), QStringLiteral("IsUnplayed") },
+            { QStringLiteral("IsPlayed"), false },
             { QStringLiteral("EnableUserData"), true },
-            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
-            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
             { QStringLiteral("Limit"), 2000 } }, {},
           [this, session, seriesId, currentSeason, currentNumber](const QVariant& data, const QString& error) {
     if (session != m_sessionRevision) return;
@@ -1889,7 +1887,8 @@ void FamilyApiClient::resolveNextEpisode(const QVariantMap& currentEpisode)
           || candidate.value(QStringLiteral("UserData")).toMap().value(QStringLiteral("Played")).toBool()) continue;
       const int season = candidate.value(QStringLiteral("ParentIndexNumber")).toInt();
       const int number = candidate.value(QStringLiteral("IndexNumber")).toInt();
-      if (season < currentSeason || (season == currentSeason && number <= currentNumber)
+      if (season <= 0 || number <= 0 || season < currentSeason
+          || (season == currentSeason && number <= currentNumber)
           || season > bestSeason || (season == bestSeason && number >= bestNumber)) continue;
       next = candidate;
       bestSeason = season;
