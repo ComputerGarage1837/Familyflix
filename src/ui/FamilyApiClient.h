@@ -331,5 +331,8 @@ private:
   QString m_mediaSourceId;
   bool m_playbackStartConfirmed = false;
   qlonglong m_pendingStopMilliseconds = -1;
+  QVariantMap m_queuedPlaybackItem;
+  qlonglong m_queuedPlaybackPositionMilliseconds = 0;
+  qlonglong m_queuedPlaybackStopMilliseconds = -1;
   std::shared_ptr<CoWatchPlaybackState> m_coWatchPlayback;
 };

@@ -1266,6 +1266,8 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_familyNightCandidates.clear(); m_familyNightLoading = false;
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
+  m_queuedPlaybackItem.clear(); m_queuedPlaybackPositionMilliseconds = 0;
+  m_queuedPlaybackStopMilliseconds = -1;
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear(); m_recentDeckActivity.clear();
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
@@ -1315,6 +1317,8 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("profiles/%1/token").arg(m_userId));
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
+  m_queuedPlaybackItem.clear(); m_queuedPlaybackPositionMilliseconds = 0;
+  m_queuedPlaybackStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
   m_coWatchUserIds.clear(); m_homeFeedOwnerId.clear(); m_homeFeedUserId.clear(); m_homeFeedToken.clear();
   m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0; m_kidsBedtimeStart = -1;
@@ -2206,7 +2210,17 @@ void FamilyApiClient::reportPlaybackStart(const QVariantMap& item, qlonglong pos
 {
   if (!signedIn()) return;
   const QString itemId = item.value(QStringLiteral("Id")).toString();
-  if (itemId.isEmpty() || !m_playingItemId.isEmpty()) return;
+  if (itemId.isEmpty()) return;
+  if (!m_playingItemId.isEmpty()) {
+    // The previous item's Playing request may still be in flight. Start this
+    // item only after its Stopped report has been handed to Jellyfin.
+    if (itemId != m_playingItemId || m_pendingStopMilliseconds >= 0) {
+      m_queuedPlaybackItem = item;
+      m_queuedPlaybackPositionMilliseconds = positionMilliseconds;
+      m_queuedPlaybackStopMilliseconds = -1;
+    }
+    return;
+  }
   m_playingItemId = itemId;
   m_playSessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
   const auto sources = item.value(QStringLiteral("MediaSources")).toList();
@@ -2243,6 +2257,16 @@ void FamilyApiClient::reportPlaybackStart(const QVariantMap& item, qlonglong pos
     if (revision != m_sessionRevision || playSession != m_playSessionId) return;
     if (!error.isEmpty()) {
       emit errorOccurred(QStringLiteral("Playback status could not sync with Jellyfin."));
+      m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
+      m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
+      const QVariantMap queued = m_queuedPlaybackItem;
+      const qlonglong queuedPosition = m_queuedPlaybackPositionMilliseconds;
+      const qlonglong queuedStop = m_queuedPlaybackStopMilliseconds;
+      m_queuedPlaybackItem.clear(); m_queuedPlaybackStopMilliseconds = -1;
+      if (!queued.isEmpty()) {
+        reportPlaybackStart(queued, queuedPosition);
+        if (queuedStop >= 0) reportPlaybackStopped(queuedStop);
+      }
       return;
     }
     m_playbackStartConfirmed = true;
@@ -2306,7 +2330,12 @@ void FamilyApiClient::reportPlaybackProgress(qlonglong positionMilliseconds, boo
 
 void FamilyApiClient::reportPlaybackStopped(qlonglong positionMilliseconds)
 {
-  if (m_playingItemId.isEmpty() || m_pendingStopMilliseconds >= 0) return;
+  if (m_playingItemId.isEmpty()) return;
+  if (m_pendingStopMilliseconds >= 0) {
+    if (!m_queuedPlaybackItem.isEmpty())
+      m_queuedPlaybackStopMilliseconds = qMax<qlonglong>(0, positionMilliseconds);
+    return;
+  }
   m_pendingStopMilliseconds = qMax<qlonglong>(0, positionMilliseconds);
   if (m_playbackStartConfirmed) sendPlaybackStopped(m_pendingStopMilliseconds);
 }
@@ -2341,6 +2370,14 @@ void FamilyApiClient::sendPlaybackStopped(qlonglong positionMilliseconds)
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_coWatchPlayback.reset();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
+  const QVariantMap queued = m_queuedPlaybackItem;
+  const qlonglong queuedPosition = m_queuedPlaybackPositionMilliseconds;
+  const qlonglong queuedStop = m_queuedPlaybackStopMilliseconds;
+  m_queuedPlaybackItem.clear(); m_queuedPlaybackStopMilliseconds = -1;
+  if (!queued.isEmpty()) {
+    reportPlaybackStart(queued, queuedPosition);
+    if (queuedStop >= 0) reportPlaybackStopped(queuedStop);
+  }
 }
 
 void FamilyApiClient::sendCoWatchStop(const std::shared_ptr<CoWatchPlaybackState>& state,
