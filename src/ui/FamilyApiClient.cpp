@@ -19,6 +19,7 @@
 #include <QTime>
 #include <QStorageInfo>
 #include <QDir>
+#include <climits>
 
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
@@ -610,7 +611,12 @@ void FamilyApiClient::loadKidsSettings()
   m_kidsBedtimeStart = m_settings.value(key + QStringLiteral("bedtimeStart"), -1).toInt();
   m_kidsPinSalt = m_settings.value(key + QStringLiteral("pinSalt")).toByteArray();
   m_kidsPinHash = m_settings.value(key + QStringLiteral("pinHash")).toByteArray();
+  m_nextUpMode = m_settings.value(QStringLiteral("users/%1/nextUpMode").arg(m_userId),
+                                 QStringLiteral("Extended")).toString();
+  if (m_nextUpMode != QStringLiteral("Minimal") && m_nextUpMode != QStringLiteral("Off"))
+    m_nextUpMode = QStringLiteral("Extended");
   emit kidsSettingsChanged();
+  emit nextUpModeChanged();
 }
 
 void FamilyApiClient::saveKidsSettings()
@@ -701,6 +707,16 @@ bool FamilyApiClient::kidsSpoilerHidden(const QVariantMap& item) const
   return m_kidsEnabled && m_kidsHideSpoilers
     && item.value(QStringLiteral("Type")).toString() == QStringLiteral("Episode")
     && !item.value(QStringLiteral("UserData")).toMap().value(QStringLiteral("Played")).toBool();
+}
+
+void FamilyApiClient::cycleNextUpMode()
+{
+  if (!signedIn()) return;
+  m_nextUpMode = m_nextUpMode == QStringLiteral("Extended") ? QStringLiteral("Minimal")
+    : m_nextUpMode == QStringLiteral("Minimal") ? QStringLiteral("Off")
+    : QStringLiteral("Extended");
+  m_settings.setValue(QStringLiteral("users/%1/nextUpMode").arg(m_userId), m_nextUpMode);
+  emit nextUpModeChanged();
 }
 
 QString FamilyApiClient::temporaryStorageGiB() const
@@ -1097,6 +1113,47 @@ void FamilyApiClient::resolvePlayableItem(const QString& itemId)
   });
 }
 
+void FamilyApiClient::resolveNextEpisode(const QVariantMap& currentEpisode)
+{
+  if (!signedIn() || currentEpisode.value(QStringLiteral("Type")).toString() != QStringLiteral("Episode")) return;
+  const QString seriesId = currentEpisode.value(QStringLiteral("SeriesId")).toString();
+  if (seriesId.isEmpty()) { emit nextEpisodeReady({}); return; }
+  const int currentSeason = currentEpisode.value(QStringLiteral("ParentIndexNumber")).toInt();
+  const int currentNumber = currentEpisode.value(QStringLiteral("IndexNumberEnd"),
+                              currentEpisode.value(QStringLiteral("IndexNumber"))).toInt();
+  const quint64 session = m_sessionRevision;
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("ParentId"), seriesId },
+            { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+            { QStringLiteral("IsMissing"), false },
+            { QStringLiteral("Filters"), QStringLiteral("IsUnplayed") },
+            { QStringLiteral("EnableUserData"), true },
+            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+            { QStringLiteral("Limit"), 2000 } }, {},
+          [this, session, seriesId, currentSeason, currentNumber](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit nextEpisodeReady({}); return; }
+    QVariantMap next;
+    int bestSeason = INT_MAX;
+    int bestNumber = INT_MAX;
+    for (const auto& value : items(data)) {
+      const auto candidate = value.toMap();
+      if (candidate.value(QStringLiteral("SeriesId")).toString() != seriesId
+          || candidate.value(QStringLiteral("UserData")).toMap().value(QStringLiteral("Played")).toBool()) continue;
+      const int season = candidate.value(QStringLiteral("ParentIndexNumber")).toInt();
+      const int number = candidate.value(QStringLiteral("IndexNumber")).toInt();
+      if (season < currentSeason || (season == currentSeason && number <= currentNumber)
+          || season > bestSeason || (season == bestSeason && number >= bestNumber)) continue;
+      next = candidate;
+      bestSeason = season;
+      bestNumber = number;
+    }
+    emit nextEpisodeReady(next);
+  });
+}
+
 void FamilyApiClient::authenticateParticipant(const QString& userId, const QString& password)
 {
   if (!signedIn() || userId.isEmpty() || userId == m_userId) return;
@@ -1262,6 +1319,7 @@ void FamilyApiClient::signOut()
   m_coWatchUserIds.clear(); m_homeFeedOwnerId.clear(); m_homeFeedUserId.clear(); m_homeFeedToken.clear();
   m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0; m_kidsBedtimeStart = -1;
   m_kidsPinSalt.clear(); m_kidsPinHash.clear();
+  m_nextUpMode = QStringLiteral("Extended");
   m_themeName = QStringLiteral("Ocean");
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear();
   m_recentDeckActivity.clear();
@@ -1281,6 +1339,7 @@ void FamilyApiClient::signOut()
   emit sessionChanged();
   emit coWatchChanged();
   emit kidsSettingsChanged();
+  emit nextUpModeChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit themeChanged();

@@ -31,6 +31,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(int kidsEpisodeLimit READ kidsEpisodeLimit NOTIFY kidsSettingsChanged)
   Q_PROPERTY(int kidsBedtimeStart READ kidsBedtimeStart NOTIFY kidsSettingsChanged)
   Q_PROPERTY(bool kidsHasPin READ kidsHasPin NOTIFY kidsSettingsChanged)
+  Q_PROPERTY(QString nextUpMode READ nextUpMode NOTIFY nextUpModeChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
   Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
@@ -85,6 +86,7 @@ public:
   int kidsEpisodeLimit() const { return m_kidsEpisodeLimit; }
   int kidsBedtimeStart() const { return m_kidsBedtimeStart; }
   bool kidsHasPin() const { return !m_kidsPinSalt.isEmpty() && !m_kidsPinHash.isEmpty(); }
+  QString nextUpMode() const { return m_nextUpMode; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
   bool familyNightLoading() const { return m_familyNightLoading; }
@@ -138,6 +140,7 @@ public:
   Q_INVOKABLE bool verifyKidsPin(const QString& pin) const;
   Q_INVOKABLE bool kidsPlaybackAllowed() const;
   Q_INVOKABLE bool kidsSpoilerHidden(const QVariantMap& item) const;
+  Q_INVOKABLE void cycleNextUpMode();
   Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void refreshCoWatchPresets();
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
@@ -147,6 +150,7 @@ public:
   Q_INVOKABLE int familyNightRequiredAge(const QString& rating) const;
   Q_INVOKABLE void resolveFirstUnwatchedEpisode(const QString& seriesId);
   Q_INVOKABLE void resolvePlayableItem(const QString& itemId);
+  Q_INVOKABLE void resolveNextEpisode(const QVariantMap& currentEpisode);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
@@ -193,10 +197,12 @@ signals:
   void publicUsersChanged();
   void coWatchChanged();
   void kidsSettingsChanged();
+  void nextUpModeChanged();
   void coWatchPresetsChanged();
   void familyNightChanged();
   void firstUnwatchedEpisodeReady(const QString& seriesId, const QVariantMap& episode);
   void playableItemReady(const QString& itemId, const QVariantMap& item);
+  void nextEpisodeReady(const QVariantMap& episode);
   void homeChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
@@ -270,6 +276,7 @@ private:
   int m_kidsBedtimeStart = -1;
   QByteArray m_kidsPinSalt;
   QByteArray m_kidsPinHash;
+  QString m_nextUpMode = QStringLiteral("Extended");
   QString m_homeFeedUserId;
   QString m_homeFeedToken;
   QVariantList m_coWatchPresets;

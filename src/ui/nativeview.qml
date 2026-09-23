@@ -54,6 +54,7 @@ Window {
     property var focusedItem: ({})
     property string backgroundRandomId: ""
     property var playingItem: ({})
+    property var nextEpisode: ({})
     property string playbackReturnPage: "detail"
     property var selectedSeries: ({})
     property var selectedSeason: ({})
@@ -233,6 +234,8 @@ Window {
         } else if (page === "season") {
             familyApi.openItem(selectedSeries.Id || "")
             page = "detail"
+        } else if (page === "nextEpisode") {
+            page = playbackReturnPage
         } else if (page === "playlistPicker") {
             page = "detail"
         } else if (page === "playlist") {
@@ -385,6 +388,11 @@ Window {
             window.pendingFamilyNightId = ""
             window.playItem(item, "familyNight")
         }
+        function onNextEpisodeReady(episode) {
+            if (window.page !== "nextEpisode") return
+            if (!episode.Id) { window.page = window.playbackReturnPage; return }
+            window.nextEpisode = episode
+        }
         function onLiveTvChanged() {
             if (window.page !== "liveTv") return
             if (familyApi.tvCategories.length) {
@@ -424,7 +432,11 @@ Window {
             }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
-            window.page = window.playbackReturnPage
+            if (window.playingItem.Type === "Episode" && familyApi.nextUpMode !== "Off") {
+                window.nextEpisode = ({})
+                window.page = "nextEpisode"
+                familyApi.resolveNextEpisode(window.playingItem)
+            } else window.page = window.playbackReturnPage
         }
         function onCanceled() {
             if (window.playerIsLive) { window.livePreviewActive = false; return }
@@ -475,7 +487,9 @@ Window {
         anchors.fill: parent
         property string artworkId: page === "detail"
             ? window.safeArtworkId(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
+            : (page === "nextEpisode" && nextEpisode.Id ? window.safeArtworkId(nextEpisode)
             : (page === "home" && focusedItem.Id ? window.safeArtworkId(focusedItem) : backgroundRandomId)
+              )
         property bool backdropFailed: false
         onArtworkIdChanged: backdropFailed = false
         source: page === "player" ? "" : familyApi.imageUrl(artworkId, backdropFailed ? "Thumb" : "Backdrop")
@@ -1270,6 +1284,7 @@ Window {
             Text { text: "Colour theme"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
             NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
             NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
+            NativeAction { text: "Next episode screen: " + familyApi.nextUpMode; width: 325; onClicked: familyApi.cycleNextUpMode() }
             NativeAction { text: "Check Windows updates"; width: 325; onClicked: familyApi.checkWindowsUpdate(true) }
             Flickable {
                 width: parent.width
@@ -1915,6 +1930,44 @@ Window {
                         familyApi.reportIssue(familyApi.selectedItem.Id, window.issueCategory, issueNote.text)
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "nextEpisode"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 800)
+            spacing: 16
+            Text { text: "Up next"; color: familyApi.themeText; font.pixelSize: 32; font.bold: true }
+            Text {
+                width: parent.width
+                text: nextEpisode.Id
+                    ? (nextEpisode.SeriesName || "Show") + " · " + window.safeTitle(nextEpisode)
+                    : "Finding the next unwatched episode…"
+                color: familyApi.themeText; font.pixelSize: 23; wrapMode: Text.WordWrap
+            }
+            Image {
+                width: Math.min(parent.width, 600)
+                height: familyApi.nextUpMode === "Minimal" ? 0 : 270
+                visible: height > 0
+                source: familyApi.imageUrl(window.safeArtworkId(nextEpisode), "Backdrop")
+                fillMode: Image.PreserveAspectCrop
+            }
+            Row {
+                spacing: 14
+                NativeAction {
+                    width: 205
+                    text: "Play next episode"
+                    visible: !!nextEpisode.Id
+                    onClicked: {
+                        familyApi.openItem(nextEpisode.Id)
+                        window.playItem(nextEpisode, "detail")
+                    }
+                }
+                NativeAction { width: 150; text: "Done"; onClicked: window.goBack() }
             }
         }
     }
