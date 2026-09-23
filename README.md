@@ -1,7 +1,8 @@
 # Family Flix for Windows
 
-Family Flix is a family-specific Windows build based on Jellyfin Desktop. It opens
-`https://myfamilyflix.duckdns.org/web/` directly and uses the Family Flix branding.
+Family Flix is a family-specific Windows build based on Jellyfin Desktop. Its
+Windows interface talks directly to the Jellyfin API at
+`https://myfamilyflix.duckdns.org/`; it does not display the browser client.
 The native player comes from Jellyfin Desktop and uses libmpv. The upstream project
 and its GPL-2.0 license remain credited below.
 

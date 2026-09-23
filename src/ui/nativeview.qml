@@ -67,6 +67,15 @@ Window {
         }
     }
 
+    function focusCard(rowIndex, cardIndex) {
+        const row = rowRepeater.itemAt(rowIndex)
+        if (!row) return
+        const card = row.cardAt(cardIndex)
+        if (!card) return
+        homeScroll.contentY = Math.max(0, row.y - 12)
+        card.forceActiveFocus()
+    }
+
     Component.onCompleted: {
         if (familyApi.signedIn) familyApi.refreshHome()
         else familyApi.refreshPublicUsers()
@@ -77,7 +86,13 @@ Window {
 
     Connections {
         target: familyApi
-        function onSessionChanged() { window.page = familyApi.signedIn ? "home" : "login" }
+        function onSessionChanged() {
+            window.page = familyApi.signedIn ? "home" : "login"
+            if (!familyApi.signedIn) {
+                window.chosenUser = ""
+                password.clear()
+            }
+        }
         function onErrorOccurred(message) {
             window.notice = message
             noticeTimer.restart()
@@ -133,6 +148,7 @@ Window {
                 spacing: 12
                 visible: !chosenUser
                 Repeater {
+                    id: userRepeater
                     model: familyApi.publicUsers
                     NativeAction {
                         width: 175
@@ -179,7 +195,7 @@ Window {
                 anchors.margins: 16
                 spacing: 8
                 Text { text: "Family Flix"; color: "white"; font.pixelSize: 27; font.bold: true; height: 60 }
-                NativeAction { width: parent.width; text: "Home"; selected: true; onClicked: homeScroll.contentY = 0 }
+                NativeAction { id: homeButton; width: parent.width; text: "Home"; selected: true; onClicked: homeScroll.contentY = 0 }
                 Repeater {
                     model: familyApi.libraries
                     NativeAction {
@@ -227,10 +243,14 @@ Window {
                 width: homeScroll.width
                 spacing: 30
                 Repeater {
+                    id: rowRepeater
                     model: homeRows
                     Column {
+                        id: section
                         required property var modelData
+                        required property int index
                         property string sectionTitle: modelData.title
+                        function cardAt(cardIndex) { return cardRepeater.itemAt(cardIndex) }
                         width: rowColumn.width
                         spacing: 10
                         Text { text: modelData.title; color: "white"; font.pixelSize: 22; font.bold: true; leftPadding: 28 }
@@ -245,10 +265,12 @@ Window {
                                 x: 28
                                 spacing: 13
                                 Repeater {
+                                    id: cardRepeater
                                     model: modelData.items
                                     Rectangle {
                                         id: card
                                         required property var modelData
+                                        required property int index
                                         width: 226
                                         height: 170
                                         radius: 9
@@ -256,6 +278,7 @@ Window {
                                         border.width: card.activeFocus ? 3 : 0
                                         border.color: "#ffd36a"
                                         focus: false
+                                        activeFocusOnTab: true
                                         Image {
                                             anchors.fill: parent
                                             anchors.margins: 3
@@ -269,8 +292,16 @@ Window {
                                             text: card.modelData.SeriesName || card.modelData.Name || ""
                                             color: "white"; font.pixelSize: 15; elide: Text.ElideRight
                                         }
-                                        MouseArea { anchors.fill: parent; onClicked: window.showItem(card.modelData) }
+                                        MouseArea { anchors.fill: parent; onClicked: { card.forceActiveFocus(); window.showItem(card.modelData) } }
                                         Keys.onReturnPressed: window.showItem(modelData)
+                                        Keys.onEnterPressed: window.showItem(modelData)
+                                        Keys.onLeftPressed: {
+                                            if (card.index > 0) window.focusCard(section.index, card.index - 1)
+                                            else homeButton.forceActiveFocus()
+                                        }
+                                        Keys.onRightPressed: window.focusCard(section.index, card.index + 1)
+                                        Keys.onUpPressed: window.focusCard(section.index - 1, 0)
+                                        Keys.onDownPressed: window.focusCard(section.index + 1, 0)
                                     }
                                 }
                             }

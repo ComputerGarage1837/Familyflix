@@ -1,6 +1,7 @@
 #include "FamilyApiClient.h"
 
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QMetaType>
 #include <QNetworkReply>
@@ -8,6 +9,7 @@
 #include <QSet>
 #include <QUrlQuery>
 #include <QUuid>
+#include <QUrl>
 
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
@@ -140,7 +142,14 @@ void FamilyApiClient::refreshHome()
           [this, revision](const QVariant& data, const QString& error) {
     if (revision != m_sessionRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
-    m_libraries = items(data);
+    m_libraries.clear();
+    for (const auto& value : items(data)) {
+      const auto library = value.toMap();
+      const auto kind = library.value(QStringLiteral("CollectionType")).toString().toLower();
+      if (kind == QStringLiteral("music") || kind == QStringLiteral("musicvideos")
+          || kind == QStringLiteral("livetv")) continue;
+      m_libraries.append(library);
+    }
     m_libraryRows.clear();
     emit homeChanged();
     for (const auto& value : m_libraries) {
@@ -148,14 +157,22 @@ void FamilyApiClient::refreshHome()
       const QString id = library.value(QStringLiteral("Id")).toString();
       const QString name = library.value(QStringLiteral("Name")).toString();
       if (id.isEmpty()) continue;
+      m_libraryRows.append(QVariantMap{
+        { QStringLiteral("Id"), id }, { QStringLiteral("Name"), name },
+        { QStringLiteral("Items"), QVariantList{} }
+      });
       request("GET", QStringLiteral("Users/%1/Items/Latest").arg(m_userId),
               { { QStringLiteral("ParentId"), id }, { QStringLiteral("Limit"), 12 },
                 { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode,Movie,Series") } }, {},
-              [this, revision, name](const QVariant& recent, const QString& recentError) {
+              [this, revision, id](const QVariant& recent, const QString& recentError) {
         if (revision != m_sessionRevision || !recentError.isEmpty()) return;
-        m_libraryRows.append(QVariantMap{
-          { QStringLiteral("Name"), name }, { QStringLiteral("Items"), items(recent) }
-        });
+        for (int index = 0; index < m_libraryRows.size(); ++index) {
+          auto row = m_libraryRows[index].toMap();
+          if (row.value(QStringLiteral("Id")).toString() != id) continue;
+          row.insert(QStringLiteral("Items"), items(recent));
+          m_libraryRows[index] = row;
+          break;
+        }
         emit homeChanged();
       });
     }

@@ -8,10 +8,23 @@ FocusScope {
     signal clicked()
     width: 160
     height: 48
+    activeFocusOnTab: true
+
+    function moveAmongSiblings(direction) {
+        if (!parent) return
+        const actions = parent.children.filter(item => item && item.clicked !== undefined && item.visible)
+        const index = actions.indexOf(action)
+        const next = actions[index + direction]
+        if (next) next.forceActiveFocus()
+    }
 
     Keys.onReturnPressed: clicked()
     Keys.onEnterPressed: clicked()
     Keys.onSpacePressed: clicked()
+    Keys.onUpPressed: moveAmongSiblings(-1)
+    Keys.onDownPressed: moveAmongSiblings(1)
+    Keys.onLeftPressed: moveAmongSiblings(-1)
+    Keys.onRightPressed: moveAmongSiblings(1)
 
     Rectangle {
         anchors.fill: parent
