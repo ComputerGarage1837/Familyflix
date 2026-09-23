@@ -76,6 +76,7 @@ Window {
     property bool homeCardFocused: false
     property string watchlistMode: "personal"
     property var playlistTarget: ({})
+    property string selectedPlaylistName: ""
     property int tvCategoryBand: 1
     property double tvStartMs: 0
     property string tvRequestedKey: ""
@@ -199,6 +200,13 @@ Window {
         const item = playbackQueue[playbackQueueIndex]
         familyApi.openItem(item.Id)
         playItem(item, "playlist")
+    }
+
+    function renameSelectedPlaylist() {
+        const name = playlistNameInput.text.trim()
+        if (!name) { notice = "Enter a playlist name"; noticeTimer.restart(); return }
+        selectedPlaylistName = name
+        familyApi.renamePlaylist(familyApi.selectedPlaylistId, name)
     }
 
     function playItem(item, returnPage) {
@@ -1733,6 +1741,7 @@ Window {
                                     familyApi.addToPlaylist(modelData.Id, window.playlistTarget)
                                     page = "detail"
                                 } else {
+                                    window.selectedPlaylistName = modelData.Name || "Playlist"
                                     familyApi.openPlaylist(modelData.Id)
                                     page = "playlist"
                                 }
@@ -1761,10 +1770,25 @@ Window {
                     onClicked: window.playPlaylistFrom(0)
                 }
             }
+            Row {
+                spacing: 10
+                TextField {
+                    id: playlistNameInput
+                    width: Math.min(380, window.width - 290)
+                    height: 48
+                    text: window.selectedPlaylistName
+                    placeholderText: "Playlist name"
+                    onAccepted: window.renameSelectedPlaylist()
+                }
+                NativeAction {
+                    text: "Rename Playlist"
+                    onClicked: window.renameSelectedPlaylist()
+                }
+            }
             ScrollView {
                 id: playlistScroll
                 width: parent.width
-                height: parent.height - 75
+                height: parent.height - 135
                 Column {
                     width: Math.max(700, window.width - 90)
                     spacing: 8

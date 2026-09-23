@@ -2010,6 +2010,23 @@ void FamilyApiClient::createPlaylist(const QString& name)
     });
 }
 
+void FamilyApiClient::renamePlaylist(const QString& playlistId, const QString& name)
+{
+  if (!signedIn() || playlistId.isEmpty() || name.trimmed().isEmpty()) return;
+  const quint64 revision = m_sessionRevision;
+  const QVariantMap command{ { QStringLiteral("Name"), name.trimmed() } };
+  requestWithStatus("POST", QStringLiteral("Playlists/%1").arg(playlistId), {},
+    QJsonDocument(QJsonObject::fromVariantMap(command)).toJson(QJsonDocument::Compact),
+    [this, revision](const QVariant&, const QString& error, int status) {
+      if (revision != m_sessionRevision) return;
+      if (!error.isEmpty() || status < 200 || status >= 300) {
+        emit errorOccurred(QStringLiteral("Playlist could not be renamed."));
+        return;
+      }
+      refreshPlaylists();
+    });
+}
+
 void FamilyApiClient::addPlayableIdsToPlaylist(const QString& playlistId, const QStringList& ids)
 {
   if (!signedIn() || playlistId.isEmpty() || ids.isEmpty()) return;
