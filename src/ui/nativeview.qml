@@ -49,6 +49,7 @@ Window {
         return matches
     }
     property var focusedItem: ({})
+    property string backgroundRandomId: ""
     property var playingItem: ({})
     property string playbackReturnPage: "detail"
     property var selectedSeries: ({})
@@ -82,6 +83,19 @@ Window {
             if (row.Items && row.Items.length) rows.push({ title: row.Name, items: row.Items })
         }
         return rows
+    }
+
+    function cycleBackground() {
+        const choices = []
+        for (const row of familyApi.libraryRows) {
+            for (const item of (row.Items || [])) if (item.Id) choices.push(item.Id)
+        }
+        for (const item of familyApi.continueItems) if (item.Id) choices.push(item.Id)
+        for (const item of familyApi.deckItems) if (item.Id) choices.push(item.Id)
+        if (!choices.length) return
+        const alternatives = choices.filter(function(id) { return id !== backgroundRandomId })
+        const pool = alternatives.length ? alternatives : choices
+        backgroundRandomId = pool[Math.floor(Math.random() * pool.length)]
     }
 
     function showItem(item, returnPage) {
@@ -328,6 +342,9 @@ Window {
             }
             window.requestTvGuide()
         }
+        function onHomeChanged() {
+            if (!window.backgroundRandomId) Qt.callLater(window.cycleBackground)
+        }
     }
     Connections {
         target: components.player
@@ -382,13 +399,21 @@ Window {
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
     Timer { interval: 500; repeat: true; running: window.page === "player" && !window.playerIsLive; onTriggered: window.checkSkipSegment() }
     Timer { id: skipPromptTimer; interval: 8000; onTriggered: window.activeSkipSegment = ({}) }
+    Timer { interval: 60000; repeat: true; running: window.page !== "player"; onTriggered: window.cycleBackground() }
 
     // The desktop shell and cards are Qt Quick controls, not the Jellyfin web client.
     Image {
+        id: pageBackdrop
         anchors.fill: parent
-        source: page === "player" ? "" : familyApi.imageUrl(focusedItem.Id || "", "Backdrop")
+        property string artworkId: page === "detail"
+            ? (familyApi.selectedItem.Id || focusedItem.Id || "")
+            : (page === "home" && focusedItem.Id ? focusedItem.Id : backgroundRandomId)
+        property bool backdropFailed: false
+        onArtworkIdChanged: backdropFailed = false
+        source: page === "player" ? "" : familyApi.imageUrl(artworkId, backdropFailed ? "Thumb" : "Backdrop")
+        onStatusChanged: if (status === Image.Error && !backdropFailed) backdropFailed = true
         fillMode: Image.PreserveAspectCrop
-        opacity: page === "home" || page === "detail" ? 0.32 : 0
+        opacity: page === "player" ? 0 : 0.32
     }
     Rectangle {
         anchors.fill: parent
@@ -660,7 +685,7 @@ Window {
                     text: window.sidebarExpanded ? "Home" : "☰"
                     selected: true
                     focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) window.sidebarExpanded = true
+                    onActiveFocusChanged: if (activeFocus) { window.sidebarExpanded = true; window.focusedItem = ({}) }
                     upAction: function() { profileButton.forceActiveFocus() }
                     rightAction: function() { window.focusCard(0, 0) }
                     onClicked: homeScroll.contentY = 0
@@ -672,16 +697,17 @@ Window {
                         visible: window.sidebarExpanded
                         text: modelData.Name || "Library"
                         focusScroll: sidebarScroll
+                        onActiveFocusChanged: if (activeFocus) window.focusedItem = ({})
                         rightAction: function() { window.focusCard(0, 0) }
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: page = "allLibraries" }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll; onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: window.openLiveTv() }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onClicked: page = "settings" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: page = "allLibraries" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: window.openLiveTv() }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onActiveFocusChanged: if (activeFocus) window.focusedItem = ({}); onClicked: page = "settings" }
               }
             }
         }
@@ -702,6 +728,7 @@ Window {
             anchors.right: parent.right
             anchors.margins: 16
             text: familyApi.watchingTogether ? familyApi.coWatchLabel : familyApi.userName
+            onActiveFocusChanged: if (activeFocus) window.focusedItem = ({})
             downAction: function() { homeButton.forceActiveFocus() }
             onClicked: {
                 chosenUser = ""
@@ -775,6 +802,7 @@ Window {
                                             window.lastHomeRow = section.index
                                             window.lastHomeCard = card.index
                                             window.sidebarExpanded = false
+                                            window.focusedItem = card.modelData
                                         }
                                         Image {
                                             anchors.fill: parent
