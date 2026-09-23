@@ -640,10 +640,10 @@ Window {
         anchors.fill: parent
         purpose: "backdrop"
         item: page === "detail"
-            ? (familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
+            ? (familyApi.selectedItem.Id === focusedItem.Id ? familyApi.selectedItem : focusedItem)
+            : (page === "season" && selectedSeries.Id ? selectedSeries
             : (page === "nextEpisode" && nextEpisode.Id ? nextEpisode
-            : (page === "home" && focusedItem.Id ? focusedItem : backgroundRandomItem)
-              )
+            : (page === "home" && focusedItem.Id ? focusedItem : backgroundRandomItem)))
         opacity: page === "player" || !familyApi.backdropEnabled ? 0 : 0.65
     }
     Rectangle {
@@ -654,6 +654,18 @@ Window {
         }
         opacity: 0.50
         visible: page !== "player"
+    }
+    Text {
+        z: 50
+        anchors.top: parent.top
+        anchors.topMargin: 22
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: page !== "home" && page !== "liveTv" && page !== "player" && page !== "login"
+            && (familyApi.clockBehavior === "ALWAYS" || familyApi.clockBehavior === "IN_MENUS")
+        text: Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP")
+        color: familyApi.themeText
+        font.pixelSize: 18
+        Timer { interval: 30000; running: parent.visible; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP") }
     }
 
     MpvVideoItem {
