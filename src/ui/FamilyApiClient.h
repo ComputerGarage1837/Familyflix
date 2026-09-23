@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QDateTime>
 #include <QNetworkAccessManager>
 #include <QSettings>
 #include <QStringList>
@@ -28,6 +29,9 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList playlists READ playlists NOTIFY playlistsChanged)
   Q_PROPERTY(QVariantList playlistItems READ playlistItems NOTIFY playlistsChanged)
   Q_PROPERTY(QString selectedPlaylistId READ selectedPlaylistId NOTIFY playlistsChanged)
+  Q_PROPERTY(QVariantList tvCategories READ tvCategories NOTIFY liveTvChanged)
+  Q_PROPERTY(QVariantList tvChannels READ tvChannels NOTIFY liveTvChanged)
+  Q_PROPERTY(QVariantList tvPrograms READ tvPrograms NOTIFY liveTvChanged)
 
 public:
   explicit FamilyApiClient(QObject* parent = nullptr);
@@ -48,6 +52,9 @@ public:
   QVariantList playlists() const { return m_playlists; }
   QVariantList playlistItems() const { return m_playlistItems; }
   QString selectedPlaylistId() const { return m_selectedPlaylistId; }
+  QVariantList tvCategories() const { return m_tvCategories; }
+  QVariantList tvChannels() const { return m_tvChannels; }
+  QVariantList tvPrograms() const { return m_tvPrograms; }
 
   Q_INVOKABLE void refreshPublicUsers();
   Q_INVOKABLE void signIn(const QString& userName, const QString& password);
@@ -64,6 +71,10 @@ public:
   Q_INVOKABLE void addToPlaylist(const QString& playlistId, const QVariantMap& item);
   Q_INVOKABLE void removePlaylistEntry(const QString& playlistId, const QString& playlistItemId);
   Q_INVOKABLE void movePlaylistEntry(const QString& playlistId, const QString& playlistItemId, int newIndex);
+  Q_INVOKABLE void refreshLiveTv();
+  Q_INVOKABLE QVariantList tvChannelsForBand(int band) const;
+  Q_INVOKABLE QVariantList tvProgramsForChannel(const QString& channelId) const;
+  Q_INVOKABLE void refreshTvGuide(int band, const QDateTime& startUtc);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE void refreshWatchlist();
@@ -85,6 +96,7 @@ signals:
   void watchlistChanged();
   void seriesChanged();
   void playlistsChanged();
+  void liveTvChanged();
   void errorOccurred(const QString& message);
 
 private:
@@ -129,6 +141,10 @@ private:
   QVariantList m_playlists;
   QVariantList m_playlistItems;
   QString m_selectedPlaylistId;
+  QVariantList m_tvCategories;
+  QVariantList m_tvChannels;
+  QVariantList m_tvPrograms;
+  quint64 m_tvGuideRevision = 0;
   qlonglong m_watchlistRevision = 0;
   qlonglong m_householdWatchlistRevision = 0;
   quint64 m_sessionRevision = 0;

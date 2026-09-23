@@ -15,7 +15,7 @@ check against the same Jellyfin server and user profiles before release.
 | Family Night and household voting | Not yet ported to native UI | Port Android picker and voting behavior |
 | Backdrops, themes and detail actions | Native details, backdrop and show/season/episode navigation coded | Port all Android actions, themes and remote focus rules |
 | Intro, recap, preview and outro prompts | Not yet ported to native playback | Port Android Ask/Auto/Off and per-series choices |
-| Live TV guide, preview, categories and time shifting | Native player available; guide not yet ported | Port Android two-hour guide, preview/fullscreen and buffer controls |
+| Live TV guide, preview, categories and time shifting | Native categories, channel list, two-hour viewport/scrolling timeline, preview/fullscreen selection coded | Test live playback, guide timing, category/disabled-channel handling, pause/seek and buffer controls |
 | Movie/show and Live TV one-hour buffers | Separate up-to-one-hour native settings with memory-first and temporary-disk fallback | Test long VOD and live playback, storage cap and seek behavior; actual hour depends on bitrate and stream seekability |
 | Issues, broken-media warnings and admin Health Centre | Server plugin exists; native views not yet ported | Show warnings and reports in native details/playback |
 | Settings sync and updates | Windows release check and download prompt coded; native session persisted | Port Android-like settings screens and preserve them through installs |

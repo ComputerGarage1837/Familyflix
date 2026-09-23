@@ -28,6 +28,14 @@ bool untouchedEpisode(const QVariantMap& episode)
   return !state.value(QStringLiteral("Played")).toBool()
       && state.value(QStringLiteral("PlaybackPositionTicks")).toLongLong() == 0;
 }
+
+int channelBand(const QVariantMap& channel)
+{
+  bool ok = false;
+  const double number = channel.value(QStringLiteral("Number")).toString().toDouble(&ok);
+  if (!ok) return -1;
+  return int(number / (number >= 600000.0 ? 100000.0 : 1000.0));
+}
 }
 
 FamilyApiClient::FamilyApiClient(QObject* parent)
@@ -300,6 +308,8 @@ void FamilyApiClient::signOut()
   m_libraryRows.clear(); m_selectedItem.clear();
   m_seasons.clear(); m_episodes.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
+  m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
+  ++m_tvGuideRevision;
   m_watchlistEntries.clear(); m_watchlistRevision = 0;
   m_householdWatchlistEntries.clear(); m_householdWatchlistRevision = 0;
   m_settings.remove(QStringLiteral("token"));
@@ -311,6 +321,7 @@ void FamilyApiClient::signOut()
   emit watchlistChanged();
   emit seriesChanged();
   emit playlistsChanged();
+  emit liveTvChanged();
   refreshPublicUsers();
 }
 
@@ -808,6 +819,95 @@ void FamilyApiClient::movePlaylistEntry(const QString& playlistId, const QString
       return;
     }
     openPlaylist(playlistId);
+  });
+}
+
+void FamilyApiClient::refreshLiveTv()
+{
+  if (!signedIn()) return;
+  const quint64 session = m_sessionRevision;
+  request("GET", QStringLiteral("FamilyFlix/Iptv/Categories"), {}, {},
+          [this, session](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    QVariantList categories;
+    if (error.isEmpty() && data.toMap().value(QStringLiteral("schema")).toInt() == 1) {
+      for (const auto& value : data.toMap().value(QStringLiteral("categories")).toList()) {
+        const auto category = value.toMap();
+        if (category.value(QStringLiteral("enabled")).toBool()
+            && category.value(QStringLiteral("band")).toInt() > 0) categories.append(value);
+      }
+    }
+    if (categories.isEmpty()) {
+      categories = {
+        QVariantMap{ { QStringLiteral("name"), QStringLiteral("General Channels") }, { QStringLiteral("band"), 1 } },
+        QVariantMap{ { QStringLiteral("name"), QStringLiteral("Kids") }, { QStringLiteral("band"), 2 } },
+        QVariantMap{ { QStringLiteral("name"), QStringLiteral("News") }, { QStringLiteral("band"), 3 } },
+        QVariantMap{ { QStringLiteral("name"), QStringLiteral("Movies") }, { QStringLiteral("band"), 4 } },
+        QVariantMap{ { QStringLiteral("name"), QStringLiteral("Sports") }, { QStringLiteral("band"), 5 } }
+      };
+    }
+    m_tvCategories = categories;
+    m_tvCategories.append(QVariantMap{
+      { QStringLiteral("name"), QStringLiteral("All Channels") }, { QStringLiteral("band"), 0 }
+    });
+    emit liveTvChanged();
+  });
+  request("GET", QStringLiteral("LiveTv/Channels"),
+          { { QStringLiteral("AddCurrentProgram"), true },
+            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+            { QStringLiteral("Limit"), 10000 } }, {},
+          [this, session](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Live TV channels could not load.")); return; }
+    m_tvChannels = items(data);
+    emit liveTvChanged();
+  });
+}
+
+QVariantList FamilyApiClient::tvChannelsForBand(int band) const
+{
+  if (band == 0) return m_tvChannels;
+  QVariantList result;
+  for (const auto& value : m_tvChannels) {
+    if (channelBand(value.toMap()) == band) result.append(value);
+  }
+  return result;
+}
+
+QVariantList FamilyApiClient::tvProgramsForChannel(const QString& channelId) const
+{
+  QVariantList result;
+  for (const auto& value : m_tvPrograms) {
+    if (value.toMap().value(QStringLiteral("ChannelId")).toString() == channelId)
+      result.append(value);
+  }
+  return result;
+}
+
+void FamilyApiClient::refreshTvGuide(int band, const QDateTime& startUtc)
+{
+  if (!signedIn() || !startUtc.isValid()) return;
+  QStringList channelIds;
+  for (const auto& value : tvChannelsForBand(band)) {
+    const QString id = value.toMap().value(QStringLiteral("Id")).toString();
+    if (!id.isEmpty()) channelIds.append(id);
+  }
+  if (channelIds.isEmpty()) { m_tvPrograms.clear(); emit liveTvChanged(); return; }
+  const quint64 session = m_sessionRevision;
+  const quint64 guide = ++m_tvGuideRevision;
+  request("GET", QStringLiteral("LiveTv/Programs"),
+          { { QStringLiteral("ChannelIds"), channelIds.join(QLatin1Char(',')) },
+            { QStringLiteral("MinEndDate"), startUtc.toUTC().toString(Qt::ISODate) },
+            { QStringLiteral("MaxStartDate"), startUtc.addSecs(6 * 3600).toUTC().toString(Qt::ISODate) },
+            { QStringLiteral("SortBy"), QStringLiteral("StartDate") },
+            { QStringLiteral("EnableImages"), false },
+            { QStringLiteral("Limit"), 10000 } }, {},
+          [this, session, guide](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || guide != m_tvGuideRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("TV guide could not load.")); return; }
+    m_tvPrograms = items(data);
+    emit liveTvChanged();
   });
 }
 

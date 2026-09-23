@@ -27,6 +27,12 @@ Window {
     property int lastHomeCard: 0
     property string watchlistMode: "personal"
     property var playlistTarget: ({})
+    property int tvCategoryBand: 1
+    property double tvStartMs: 0
+    property string tvRequestedKey: ""
+    property var livePreviewChannel: ({})
+    property bool livePreviewActive: false
+    property bool playerIsLive: false
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
@@ -76,12 +82,50 @@ Window {
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
+            playerIsLive = false
             page = "player"
+        }
+    }
+
+    function openLiveTv() {
+        tvStartMs = Math.floor(Date.now() / 1800000) * 1800000
+        tvRequestedKey = ""
+        tvCategoryBand = 1
+        familyApi.refreshLiveTv()
+        page = "liveTv"
+    }
+
+    function requestTvGuide() {
+        if (familyApi.tvChannels.length === 0) return
+        const key = tvCategoryBand + ":" + tvStartMs
+        if (tvRequestedKey === key) return
+        tvRequestedKey = key
+        familyApi.refreshTvGuide(tvCategoryBand, new Date(tvStartMs))
+    }
+
+    function selectLiveChannel(channel) {
+        if (!channel.Id) return
+        if (livePreviewActive && livePreviewChannel.Id === channel.Id) {
+            page = "player"
+            return
+        }
+        const stream = familyApi.streamUrl(channel.Id)
+        if (!stream) return
+        const metadata = { type: "video", metadata: channel,
+            headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
+        if (components.player.load(stream, { autoplay: true }, metadata, 1, -1)) {
+            playerIsLive = true
+            livePreviewChannel = channel
+            livePreviewActive = true
         }
     }
 
     function goBack() {
         if (page === "player") {
+            if (playerIsLive) {
+                page = "liveTv"
+                return
+            }
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             components.player.stop()
             page = "detail"
@@ -95,6 +139,11 @@ Window {
             page = "detail"
         } else if (page === "playlist") {
             page = "playlists"
+        } else if (page === "liveTv") {
+            if (livePreviewActive) components.player.stop()
+            livePreviewActive = false
+            playerIsLive = false
+            page = "home"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -151,32 +200,55 @@ Window {
             window.notice = message
             noticeTimer.restart()
         }
+        function onLiveTvChanged() {
+            if (window.page !== "liveTv") return
+            if (familyApi.tvCategories.length) {
+                let bandAvailable = false
+                for (const category of familyApi.tvCategories) {
+                    if (Number(category.band) === window.tvCategoryBand) bandAvailable = true
+                }
+                if (!bandAvailable) window.tvCategoryBand = Number(familyApi.tvCategories[0].band)
+            }
+            window.requestTvGuide()
+        }
     }
     Connections {
         target: components.player
         function onPlaying() {
-            if (window.page === "player") {
+            if (window.page === "player" && !window.playerIsLive) {
                 window.playerPaused = false
                 familyApi.reportPlaybackStart(familyApi.selectedItem, components.player.getPosition() * 1000)
             }
         }
         function onPaused() {
-            if (window.page === "player") {
+            if (window.page === "player" && !window.playerIsLive) {
                 window.playerPaused = true
                 familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, true)
             }
         }
         function onFinished() {
+            if (window.playerIsLive) {
+                window.livePreviewActive = false
+                if (window.page === "player") window.page = "liveTv"
+                return
+            }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             window.page = "detail"
         }
         function onCanceled() {
+            if (window.playerIsLive) { window.livePreviewActive = false; return }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             window.page = "detail"
         }
         function onError(message) {
+            if (window.playerIsLive) {
+                window.livePreviewActive = false
+                window.notice = message
+                if (window.page === "player") window.page = "liveTv"
+                return
+            }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             window.notice = message
@@ -187,7 +259,7 @@ Window {
         interval: 10000
         repeat: true
         running: window.page === "player"
-        onTriggered: familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, false)
+        onTriggered: if (!window.playerIsLive) familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, false)
     }
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
     Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
@@ -211,8 +283,11 @@ Window {
     MpvVideoItem {
         id: video
         objectName: "video"
-        anchors.fill: parent
-        visible: page === "player"
+        x: page === "liveTv" ? 220 : 0
+        y: page === "liveTv" ? 84 : 0
+        width: page === "liveTv" ? 270 : window.width
+        height: page === "liveTv" ? 150 : window.height
+        visible: page === "player" || (page === "liveTv" && livePreviewActive)
     }
 
     Item {
@@ -326,7 +401,7 @@ Window {
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: notice = "Library browser is being ported" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: notice = "TV guide is being ported" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: window.openLiveTv() }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onClicked: page = "settings" }
               }
             }
@@ -543,6 +618,157 @@ Window {
                             }
                             NativeAction { width: 70; text: "↑"; onClicked: familyApi.moveLibrary(modelData.Id, -1) }
                             NativeAction { width: 70; text: "↓"; onClicked: familyApi.moveLibrary(modelData.Id, 1) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "liveTv"
+        property real programWidth: Math.max(500, width - 445)
+        NativeAction {
+            x: 20; y: 18; width: 180
+            text: "← Return Home"
+            onClicked: window.goBack()
+        }
+        Text {
+            x: 225; y: 19
+            text: "TV Guide"
+            color: "white"; font.pixelSize: 31; font.bold: true
+        }
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 24
+            y: 25
+            color: "white"; font.pixelSize: 18
+            text: Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP")
+            Timer { interval: 30000; running: window.page === "liveTv"; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP") }
+        }
+        Rectangle {
+            x: 214; y: 78; width: 282; height: 162
+            radius: 8; color: window.livePreviewActive ? "transparent" : "#172635"; border.color: "#69849c"
+            Text {
+                anchors.centerIn: parent
+                visible: !window.livePreviewActive
+                text: "Select a channel to preview"
+                color: "#cad7e3"; font.pixelSize: 15
+            }
+        }
+        Text {
+            x: 515; y: 98; width: Math.max(280, parent.width - 545)
+            text: livePreviewChannel.Name || "Choose a channel below"
+            color: "white"; font.pixelSize: 26; font.bold: true
+            elide: Text.ElideRight
+        }
+        Text {
+            x: 515; y: 140; width: Math.max(280, parent.width - 545)
+            text: livePreviewActive ? "Select this channel again for fullscreen" : "One selection previews; a second opens fullscreen"
+            color: "#c5d5e6"; font.pixelSize: 16; wrapMode: Text.WordWrap
+        }
+        Row {
+            x: 22; y: 258; spacing: 8
+            NativeAction {
+                width: 88; height: 38; text: "← 2h"
+                onClicked: {
+                    window.tvStartMs -= 7200000
+                    window.requestTvGuide()
+                }
+            }
+            NativeAction {
+                width: 88; height: 38; text: "Now"
+                onClicked: {
+                    window.tvStartMs = Math.floor(Date.now() / 1800000) * 1800000
+                    window.requestTvGuide()
+                }
+            }
+        }
+        Text { x: 213; y: 264; text: "Channel"; color: "#c4d4e2"; font.pixelSize: 18; font.bold: true }
+        Flickable {
+            id: timelineScroll
+            x: 395; y: 252
+            width: parent.programWidth
+            height: 48
+            contentWidth: width * 3
+            contentHeight: height
+            clip: true
+            Row {
+                Repeater {
+                    model: 12
+                    Rectangle {
+                        width: timelineScroll.width / 4
+                        height: 45
+                        color: index % 2 ? "#1b2e40" : "#24394d"
+                        border.color: "#526f89"
+                        Text {
+                            anchors.centerIn: parent
+                            text: Qt.formatTime(new Date(window.tvStartMs + index * 1800000), "h:mm AP")
+                            color: "white"; font.pixelSize: 16
+                        }
+                    }
+                }
+            }
+        }
+        Flickable {
+            x: 18; y: 310; width: 184; height: Math.max(180, parent.height - 330)
+            contentWidth: width; contentHeight: categoryColumn.height
+            clip: true
+            Column {
+                id: categoryColumn
+                width: 184
+                spacing: 7
+                Repeater {
+                    model: familyApi.tvCategories
+                    NativeAction {
+                        width: categoryColumn.width
+                        height: 50
+                        text: modelData.name || "Category"
+                        selected: Number(modelData.band) === window.tvCategoryBand
+                        onClicked: {
+                            window.tvCategoryBand = Number(modelData.band)
+                            window.requestTvGuide()
+                        }
+                    }
+                }
+            }
+        }
+        ListView {
+            id: guideChannels
+            x: 213; y: 310
+            width: Math.max(650, parent.width - 235)
+            height: Math.max(180, parent.height - 330)
+            clip: true
+            spacing: 4
+            model: familyApi.tvChannelsForBand(window.tvCategoryBand)
+            delegate: Row {
+                id: channelRow
+                required property var modelData
+                spacing: 7
+                height: 60
+                NativeAction {
+                    width: 175; height: 58
+                    text: (modelData.Number ? modelData.Number + "  " : "") + (modelData.Name || "Channel")
+                    onClicked: window.selectLiveChannel(modelData)
+                }
+                Item {
+                    width: guideChannels.width - 185
+                    height: 58
+                    clip: true
+                    Repeater {
+                        model: familyApi.tvProgramsForChannel(modelData.Id)
+                        NativeAction {
+                            property double startMs: new Date(modelData.StartDate).getTime()
+                            property double endMs: new Date(modelData.EndDate).getTime()
+                            x: (Math.max(startMs, window.tvStartMs) - window.tvStartMs) / 7200000 * timelineScroll.width - timelineScroll.contentX
+                            width: Math.max(80, (Math.min(endMs, window.tvStartMs + 21600000)
+                                - Math.max(startMs, window.tvStartMs)) / 7200000 * timelineScroll.width - 3)
+                            height: 58
+                            visible: endMs > window.tvStartMs && startMs < window.tvStartMs + 21600000
+                                     && x + width > 0 && x < guideChannels.width - 185
+                            text: modelData.Name || "No program information"
+                            onClicked: window.selectLiveChannel(channelRow.modelData)
                         }
                     }
                 }
