@@ -55,6 +55,9 @@ Window {
     property string backgroundRandomId: ""
     property var playingItem: ({})
     property var nextEpisode: ({})
+    property var playbackQueue: []
+    property int playbackQueueIndex: -1
+    property int kidsQueuedEpisodes: 0
     property string playbackReturnPage: "detail"
     property var selectedSeries: ({})
     property var selectedSeason: ({})
@@ -155,7 +158,22 @@ Window {
     }
 
     function playSelected() {
+        playbackQueue = []
+        playbackQueueIndex = -1
         playItem(familyApi.selectedItem, "detail")
+    }
+
+    function playPlaylistFrom(startIndex) {
+        const playable = familyApi.playlistItems.filter(function(item) {
+            return item.Type === "Movie" || item.Type === "Episode" || item.Type === "Video"
+        })
+        if (!playable.length) { notice = "This playlist has no playable videos"; noticeTimer.restart(); return }
+        playbackQueue = playable
+        playbackQueueIndex = Math.max(0, Math.min(startIndex, playable.length - 1))
+        kidsQueuedEpisodes = 0
+        const item = playbackQueue[playbackQueueIndex]
+        familyApi.openItem(item.Id)
+        playItem(item, "playlist")
     }
 
     function playItem(item, returnPage) {
@@ -171,6 +189,7 @@ Window {
         const metadata = { type: "video", metadata: item,
             headers: { "User-Agent": "FamilyFlixWindows" }, media: {} }
         if (components.player.load(stream, { autoplay: true, startMilliseconds: resume }, metadata, 1, -1)) {
+            if (item.Type === "Episode" && playbackQueueIndex >= 0) kidsQueuedEpisodes++
             playingItem = item
             playbackReturnPage = returnPage || "detail"
             playerIsLive = false
@@ -227,6 +246,8 @@ Window {
             }
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             components.player.stop()
+            playbackQueue = []
+            playbackQueueIndex = -1
             page = playbackReturnPage
         } else if (page === "detail") {
             page = detailReturnPage
@@ -353,6 +374,8 @@ Window {
         target: familyApi
         function onSessionChanged() {
             window.issueReportPending = false
+            window.playbackQueue = []
+            window.playbackQueueIndex = -1
             window.page = familyApi.signedIn ? "home" : "login"
             if (!familyApi.signedIn) {
                 window.chosenUser = ""
@@ -432,7 +455,24 @@ Window {
             }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
-            if (window.playingItem.Type === "Episode" && familyApi.nextUpMode !== "Off") {
+            if (window.playbackQueueIndex >= 0) {
+                const nextIndex = window.playbackQueueIndex + 1
+                const nextItem = window.playbackQueue[nextIndex]
+                const limitReached = familyApi.kidsModeEnabled && familyApi.kidsEpisodeLimit > 0
+                    && window.kidsQueuedEpisodes >= familyApi.kidsEpisodeLimit
+                    && nextItem && nextItem.Type === "Episode"
+                if (nextItem && !limitReached) {
+                    window.playbackQueueIndex = nextIndex
+                    familyApi.openItem(nextItem.Id)
+                    window.playItem(nextItem, "playlist")
+                    return
+                }
+                window.playbackQueue = []
+                window.playbackQueueIndex = -1
+                if (limitReached) { window.notice = "Kids Mode episode limit reached"; noticeTimer.restart() }
+                familyApi.openPlaylist(familyApi.selectedPlaylistId)
+                window.page = "playlist"
+            } else if (window.playingItem.Type === "Episode" && familyApi.nextUpMode !== "Off") {
                 window.nextEpisode = ({})
                 window.page = "nextEpisode"
                 familyApi.resolveNextEpisode(window.playingItem)
@@ -442,6 +482,8 @@ Window {
             if (window.playerIsLive) { window.livePreviewActive = false; return }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.playbackQueue = []
+            window.playbackQueueIndex = -1
             window.page = window.playbackReturnPage
         }
         function onError(message) {
@@ -453,6 +495,8 @@ Window {
             }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.playbackQueue = []
+            window.playbackQueueIndex = -1
             window.notice = message
             window.page = window.playbackReturnPage
         }
@@ -1660,6 +1704,11 @@ Window {
                 spacing: 18
                 NativeAction { text: "← Playlists"; onClicked: page = "playlists" }
                 Text { text: "Playlist"; color: "white"; font.pixelSize: 32; font.bold: true }
+                NativeAction {
+                    text: "▶ Play all"
+                    enabled: familyApi.playlistItems.length > 0
+                    onClicked: window.playPlaylistFrom(0)
+                }
             }
             ScrollView {
                 width: parent.width
@@ -1674,10 +1723,22 @@ Window {
                             required property int index
                             spacing: 8
                             NativeAction {
-                                width: Math.max(450, window.width - 510)
+                                width: Math.max(360, window.width - 690)
                                 height: 62
                                 text: (modelData.SeriesName ? modelData.SeriesName + " — " : "") + (modelData.Name || "Video")
                                 onClicked: window.showItem(modelData, "playlist")
+                            }
+                            NativeAction {
+                                width: 170
+                                height: 62
+                                text: "▶ Play from here"
+                                enabled: modelData.Type === "Movie" || modelData.Type === "Episode" || modelData.Type === "Video"
+                                onClicked: {
+                                    const playableIndex = familyApi.playlistItems.slice(0, index).filter(function(item) {
+                                        return item.Type === "Movie" || item.Type === "Episode" || item.Type === "Video"
+                                    }).length
+                                    window.playPlaylistFrom(playableIndex)
+                                }
                             }
                             NativeAction {
                                 width: 65
