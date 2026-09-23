@@ -99,6 +99,7 @@ public:
   
   Q_INVOKABLE virtual void setAudioStream(const QVariant& audioStream);
   Q_INVOKABLE virtual void setSubtitleStream(const QVariant& subtitleStream);
+  Q_INVOKABLE QVariantList getPlaybackTracks() const;
 
   Q_INVOKABLE virtual void setAudioDelay(qint64 milliseconds);
   Q_INVOKABLE virtual void setSubtitleDelay(qint64 milliseconds);

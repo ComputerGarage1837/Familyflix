@@ -1102,6 +1102,19 @@ void PlayerComponent::setSubtitleStream(const QVariant &subtitleStream)
   reselectStream(m_currentSubtitleStream, MediaType::Subtitle);
 }
 
+QVariantList PlayerComponent::getPlaybackTracks() const
+{
+  if (!m_mpv) return {};
+  QVariantList result;
+  for (const auto& value : m_mpv->getProperty("track-list").toList()) {
+    const auto track = value.toMap();
+    const QString type = track.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("audio") || type == QStringLiteral("sub"))
+      result.append(track);
+  }
+  return result;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 void PlayerComponent::setAudioStream(const QVariant &audioStream)
 {

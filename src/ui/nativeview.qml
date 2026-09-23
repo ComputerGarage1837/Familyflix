@@ -22,6 +22,8 @@ Window {
     property string notice: ""
     property bool playerControlsVisible: false
     property bool playerPaused: false
+    property bool trackMenuVisible: false
+    property var availableTracks: []
     property bool sidebarExpanded: true
     property int lastHomeRow: 0
     property int lastHomeCard: 0
@@ -192,6 +194,8 @@ Window {
         if (page === "player") {
             playerControlsVisible = false
             playerPaused = false
+            trackMenuVisible = false
+            availableTracks = []
             playerPanel.forceActiveFocus()
         }
     }
@@ -1218,6 +1222,7 @@ Window {
         Keys.onBackPressed: window.goBack()
         Keys.onPressed: function(event) {
             if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) return
+            if (window.trackMenuVisible) return
             window.playerControlsVisible = true
             controlsTimer.restart()
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -1272,12 +1277,86 @@ Window {
                 }
                 NativeAction { text: "−10 sec"; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - 10000)); controlsTimer.restart() } }
                 NativeAction { text: "+10 sec"; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + 10000); controlsTimer.restart() } }
+                NativeAction {
+                    text: "Audio / Subs"
+                    width: 145
+                    onClicked: {
+                        window.availableTracks = components.player.getPlaybackTracks()
+                        window.trackMenuVisible = true
+                        window.playerControlsVisible = true
+                        controlsTimer.stop()
+                        tracksCloseButton.forceActiveFocus()
+                    }
+                }
                 Text {
                     text: Qt.formatDateTime(new Date(), "h:mm AP")
                     color: "white"
                     font.pixelSize: 18
                     anchors.verticalCenter: parent.verticalCenter
                     Timer { interval: 30000; running: window.page === "player"; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "h:mm AP") }
+                }
+            }
+        }
+        Rectangle {
+            id: tracksPanel
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 620)
+            height: Math.min(parent.height - 100, 560)
+            color: familyApi.themeScreen
+            border.color: familyApi.themeAccent
+            border.width: 2
+            radius: 12
+            visible: window.trackMenuVisible
+            focus: visible
+            Keys.onEscapePressed: { window.trackMenuVisible = false; playerPanel.forceActiveFocus(); controlsTimer.restart() }
+            Keys.onBackPressed: { window.trackMenuVisible = false; playerPanel.forceActiveFocus(); controlsTimer.restart() }
+            Column {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 10
+                Row {
+                    spacing: 12
+                    NativeAction {
+                        id: tracksCloseButton
+                        width: 105; text: "← Close"
+                        onClicked: { window.trackMenuVisible = false; playerPanel.forceActiveFocus(); controlsTimer.restart() }
+                    }
+                    Text { text: "Audio and subtitles"; color: familyApi.themeText; font.pixelSize: 26; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
+                }
+                ScrollView {
+                    width: parent.width
+                    height: parent.height - 75
+                    Column {
+                        width: tracksPanel.width - 45
+                        spacing: 7
+                        Text { text: "Audio"; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
+                        Repeater {
+                            model: window.availableTracks.filter(function(track) { return track.type === "audio" })
+                            NativeAction {
+                                width: parent.width
+                                height: 45
+                                text: (modelData.selected ? "✓  " : "") + (modelData.title || modelData.lang || "Audio track") + " · " + modelData.id
+                                onClicked: {
+                                    components.player.setAudioStream(Number(modelData.id))
+                                    window.availableTracks = components.player.getPlaybackTracks()
+                                }
+                            }
+                        }
+                        Text { text: "Subtitles"; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
+                        NativeAction { width: parent.width; height: 45; text: "Off"; onClicked: { components.player.setSubtitleStream(-1); window.availableTracks = components.player.getPlaybackTracks() } }
+                        Repeater {
+                            model: window.availableTracks.filter(function(track) { return track.type === "sub" })
+                            NativeAction {
+                                width: parent.width
+                                height: 45
+                                text: (modelData.selected ? "✓  " : "") + (modelData.title || modelData.lang || "Subtitle track") + " · " + modelData.id
+                                onClicked: {
+                                    components.player.setSubtitleStream(Number(modelData.id))
+                                    window.availableTracks = components.player.getPlaybackTracks()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
