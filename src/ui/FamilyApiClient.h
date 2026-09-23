@@ -147,6 +147,7 @@ public:
   Q_INVOKABLE bool isWatchlisted(const QString& itemId) const;
   Q_INVOKABLE bool isHouseholdWatchlisted(const QString& itemId) const;
   Q_INVOKABLE void toggleWatchlist(const QVariantMap& item);
+  Q_INVOKABLE void setPlayed(const QVariantMap& item, bool played);
   Q_INVOKABLE void toggleHouseholdWatchlist(const QVariantMap& item);
   Q_INVOKABLE void voteHouseholdWatchlistItem(const QString& itemId, bool voted);
   Q_INVOKABLE void reportPlaybackStart(const QVariantMap& item, qlonglong positionMilliseconds);

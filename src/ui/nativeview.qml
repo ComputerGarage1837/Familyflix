@@ -1456,28 +1456,29 @@ Window {
             }
             Row {
                 spacing: 8
-                NativeAction { text: "Back"; onClicked: window.goBack() }
+                NativeAction { width: 68; text: "Back"; onClicked: window.goBack() }
                 NativeAction {
+                    width: 68
                     text: "Play"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
                     onClicked: window.playSelected()
                 }
                 NativeAction {
                     text: familyApi.isWatchlisted(familyApi.selectedItem.Id || "")
-                        ? "Remove from Watchlist" : "Add to Watchlist"
-                    width: 215
+                        ? "− Watchlist" : "+ Watchlist"
+                    width: 132
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                     onClicked: familyApi.toggleWatchlist(familyApi.selectedItem)
                 }
                 NativeAction {
                     text: familyApi.isHouseholdWatchlisted(familyApi.selectedItem.Id || "")
-                        ? "Remove from Family List" : "Add to Family List"
-                    width: 210
+                        ? "− Family List" : "+ Family List"
+                    width: 135
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                     onClicked: familyApi.toggleHouseholdWatchlist(familyApi.selectedItem)
                 }
                 NativeAction {
-                    width: 110
+                    width: 74
                     text: {
                         const entry = window.householdEntry(familyApi.selectedItem.Id || "")
                         return entry && entry.currentUserVoted ? "Unvote" : "Vote"
@@ -1489,8 +1490,8 @@ Window {
                     }
                 }
                 NativeAction {
-                    width: 180
-                    text: "Add to Playlist"
+                    width: 130
+                    text: "+ Playlist"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
                           || familyApi.selectedItem.Type === "Episode"
                     onClicked: {
@@ -1500,10 +1501,19 @@ Window {
                     }
                 }
                 NativeAction {
-                    width: 120
-                    text: "Report issue"
+                    width: 82
+                    text: "Report"
                     visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode"
                     onClicked: { window.issueCategory = "noAudio"; window.issueReportPending = false; page = "issueReport" }
+                }
+                NativeAction {
+                    width: 124
+                    text: familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.Played
+                        ? "Mark unwatched" : "Mark watched"
+                    visible: familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Series"
+                          || familyApi.selectedItem.Type === "Episode" || familyApi.selectedItem.Type === "Season"
+                    onClicked: familyApi.setPlayed(familyApi.selectedItem,
+                        !(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.Played))
                 }
             }
             Flickable {

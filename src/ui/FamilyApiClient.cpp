@@ -1267,6 +1267,24 @@ void FamilyApiClient::toggleWatchlist(const QVariantMap& item)
   writeWatchlistMembership(session, present, entry, operationId, m_watchlistRevision, 0);
 }
 
+void FamilyApiClient::setPlayed(const QVariantMap& item, bool played)
+{
+  if (!signedIn()) return;
+  const QString itemId = item.value(QStringLiteral("Id")).toString();
+  if (itemId.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  request(played ? "POST" : "DELETE",
+          QStringLiteral("Users/%1/PlayedItems/%2").arg(m_userId, itemId), {}, {},
+          [this, session, itemId](const QVariant&, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Watch status did not save.")); return; }
+    if (m_selectedItem.value(QStringLiteral("Id")).toString() == itemId) openItem(itemId);
+    refreshHome();
+    refreshWatchlist();
+    refreshHouseholdWatchlist();
+  });
+}
+
 void FamilyApiClient::writeWatchlistMembership(quint64 session, bool present,
                                                 const QVariantMap& entry, const QString& operationId,
                                                 qlonglong expected, int retries)
