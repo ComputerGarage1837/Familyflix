@@ -66,6 +66,25 @@ bool untouchedEpisode(const QVariantMap& episode)
       && state.value(QStringLiteral("PlaybackPositionTicks")).toLongLong() == 0;
 }
 
+bool watchlistEntryMatchesItem(const QVariantMap& entry, const QVariantMap& item)
+{
+  const QString expectedType = entry.value(QStringLiteral("itemType")).toString().toLower();
+  if (item.value(QStringLiteral("Type")).toString().toLower() != expectedType) return false;
+  if (entry.value(QStringLiteral("itemId")).toString().compare(
+        item.value(QStringLiteral("Id")).toString(), Qt::CaseInsensitive) == 0) return true;
+  const auto expected = entry.value(QStringLiteral("providerIds")).toMap();
+  const auto actual = item.value(QStringLiteral("ProviderIds")).toMap();
+  for (auto wanted = expected.cbegin(); wanted != expected.cend(); ++wanted) {
+    if (wanted.value().toString().isEmpty()) continue;
+    for (auto found = actual.cbegin(); found != actual.cend(); ++found) {
+      if (wanted.key().compare(found.key(), Qt::CaseInsensitive) == 0
+          && wanted.value().toString().compare(found.value().toString(), Qt::CaseInsensitive) == 0)
+        return true;
+    }
+  }
+  return false;
+}
+
 int channelBand(const QVariantMap& channel)
 {
   bool ok = false;
@@ -738,12 +757,15 @@ void FamilyApiClient::refreshFamilyNightCandidates()
       if (!error.isEmpty()) { (*finish)(); return; }
       load->anySuccess = true;
       QStringList ids;
+      QHash<QString, QVariantMap> entriesById;
       for (const auto& value : data.toMap().value(QStringLiteral("entries")).toList()) {
         const auto entry = value.toMap();
         const QString kind = entry.value(QStringLiteral("itemType")).toString().toLower();
         const QString id = entry.value(QStringLiteral("itemId")).toString();
-        if ((kind == QStringLiteral("movie") || kind == QStringLiteral("series"))
-            && !id.isEmpty() && !ids.contains(id)) ids.append(id);
+        if ((kind == QStringLiteral("movie") || kind == QStringLiteral("series")) && !id.isEmpty()) {
+          if (!entriesById.contains(id)) ids.append(id);
+          entriesById.insert(id, entry);
+        }
       }
       for (int offset = 0; offset < ids.size(); offset += 40) {
         const QStringList chunk = ids.mid(offset, 40);
@@ -752,22 +774,62 @@ void FamilyApiClient::refreshFamilyNightCandidates()
                   { { QStringLiteral("Ids"), chunk.join(QLatin1Char(',')) },
                     { QStringLiteral("EnableUserData"), true },
                     { QStringLiteral("Limit"), 40 } }, {}, token, userId,
-                  [this, load, finish, session, revision, userName]
+                  [this, load, finish, session, revision, userName, userId, token, chunk, entriesById]
                   (const QVariant& response, const QString& itemError, int) {
           if (session != m_sessionRevision || revision != m_familyNightRevision) return;
+          QSet<QString> resolved;
+          const auto merge = [load, userName](QVariantMap candidate) {
+            const QString id = candidate.value(QStringLiteral("Id")).toString();
+            if (id.isEmpty()) return;
+            const QString key = id.toLower();
+            if (load->merged.contains(key)) candidate = load->merged.value(key);
+            auto sources = candidate.value(QStringLiteral("SourceProfiles")).toStringList();
+            if (!sources.contains(userName)) sources.append(userName);
+            candidate.insert(QStringLiteral("SourceProfiles"), sources);
+            load->merged.insert(key, candidate);
+          };
           if (itemError.isEmpty()) {
             for (const auto& value : items(response)) {
               auto candidate = value.toMap();
               const QString id = candidate.value(QStringLiteral("Id")).toString();
               const QString kind = candidate.value(QStringLiteral("Type")).toString();
               if (id.isEmpty() || (kind != QStringLiteral("Movie") && kind != QStringLiteral("Series"))) continue;
-              const QString key = id.toLower();
-              if (load->merged.contains(key)) candidate = load->merged.value(key);
-              auto sources = candidate.value(QStringLiteral("SourceProfiles")).toStringList();
-              if (!sources.contains(userName)) sources.append(userName);
-              candidate.insert(QStringLiteral("SourceProfiles"), sources);
-              load->merged.insert(key, candidate);
+              for (const auto& entryId : chunk) {
+                if (!watchlistEntryMatchesItem(entriesById.value(entryId), candidate)) continue;
+                resolved.insert(entryId);
+                merge(candidate);
+              }
             }
+          }
+          for (const auto& entryId : chunk) {
+            if (resolved.contains(entryId)) continue;
+            const auto entry = entriesById.value(entryId);
+            const QString title = entry.value(QStringLiteral("title")).toString().trimmed();
+            if (title.isEmpty()) continue;
+            ++load->pending;
+            requestAs("GET", QStringLiteral("Users/%1/Items").arg(userId),
+                      { { QStringLiteral("SearchTerm"), title },
+                        { QStringLiteral("Recursive"), true },
+                        { QStringLiteral("IncludeItemTypes"),
+                          entry.value(QStringLiteral("itemType")).toString().compare(
+                            QStringLiteral("movie"), Qt::CaseInsensitive) == 0
+                            ? QStringLiteral("Movie") : QStringLiteral("Series") },
+                        { QStringLiteral("Fields"), QStringLiteral("ProviderIds,Genres,OfficialRating") },
+                        { QStringLiteral("EnableUserData"), true },
+                        { QStringLiteral("Limit"), 25 } }, {}, token, userId,
+                      [this, load, finish, session, revision, entry, merge]
+                      (const QVariant& searched, const QString& searchError, int) {
+              if (session != m_sessionRevision || revision != m_familyNightRevision) return;
+              if (searchError.isEmpty()) {
+                for (const auto& value : items(searched)) {
+                  const auto candidate = value.toMap();
+                  if (!watchlistEntryMatchesItem(entry, candidate)) continue;
+                  merge(candidate);
+                  break;
+                }
+              }
+              (*finish)();
+            });
           }
           (*finish)();
         });
