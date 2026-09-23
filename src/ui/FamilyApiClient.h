@@ -54,6 +54,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList seasonCast READ seasonCast NOTIFY seriesChanged)
   Q_PROPERTY(QVariantList playlists READ playlists NOTIFY playlistsChanged)
   Q_PROPERTY(QVariantList playlistItems READ playlistItems NOTIFY playlistsChanged)
+  Q_PROPERTY(bool playlistLoading READ playlistLoading NOTIFY playlistsChanged)
   Q_PROPERTY(QString selectedPlaylistId READ selectedPlaylistId NOTIFY playlistsChanged)
   Q_PROPERTY(QVariantList tvCategories READ tvCategories NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvChannels READ tvChannels NOTIFY liveTvChanged)
@@ -109,6 +110,7 @@ public:
   QVariantList seasonCast() const { return m_seasonCast; }
   QVariantList playlists() const { return m_playlists; }
   QVariantList playlistItems() const { return m_playlistItems; }
+  bool playlistLoading() const { return m_playlistLoading; }
   QString selectedPlaylistId() const { return m_selectedPlaylistId; }
   QVariantList tvCategories() const { return m_tvCategories; }
   QVariantList tvChannels() const { return m_tvChannels; }
@@ -252,6 +254,7 @@ private:
   void sendCoWatchStop(const std::shared_ptr<CoWatchPlaybackState>& state,
                        const QVariantMap& target, qlonglong positionMilliseconds);
   void addPlayableIdsToPlaylist(const QString& playlistId, const QStringList& ids);
+  void loadPlaylistPage(const QString& playlistId, int startIndex, quint64 session, quint64 loadRevision);
   void activateSession(const QString& token, const QString& userId, const QString& userName);
   void loadCoWatchParty();
   void saveCoWatchParty();
@@ -315,6 +318,8 @@ private:
   QVariantList m_playlists;
   QVariantList m_playlistItems;
   QString m_selectedPlaylistId;
+  bool m_playlistLoading = false;
+  quint64 m_playlistLoadRevision = 0;
   QVariantList m_tvCategories;
   QVariantList m_tvChannels;
   QVariantList m_tvPrograms;

@@ -1272,6 +1272,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear(); m_playlists.clear(); m_playlistItems.clear();
+  m_playlistLoading = false; ++m_playlistLoadRevision;
   m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear(); m_watchlistEntries.clear(); m_householdWatchlistEntries.clear();
   m_watchlistRevision = 0; m_householdWatchlistRevision = 0;
@@ -1332,6 +1333,7 @@ void FamilyApiClient::signOut()
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
+  m_playlistLoading = false; ++m_playlistLoadRevision;
   m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear();
   ++m_tvGuideRevision;
@@ -1974,15 +1976,36 @@ void FamilyApiClient::openPlaylist(const QString& playlistId)
   if (!signedIn() || playlistId.isEmpty()) return;
   m_selectedPlaylistId = playlistId;
   m_playlistItems.clear();
+  m_playlistLoading = true;
   emit playlistsChanged();
-  const quint64 revision = m_sessionRevision;
+  loadPlaylistPage(playlistId, 0, m_sessionRevision, ++m_playlistLoadRevision);
+}
+
+void FamilyApiClient::loadPlaylistPage(const QString& playlistId, int startIndex,
+                                       quint64 session, quint64 loadRevision)
+{
+  constexpr int pageSize = 200;
   request("GET", QStringLiteral("Playlists/%1/Items").arg(playlistId),
-          { { QStringLiteral("UserId"), m_userId }, { QStringLiteral("Limit"), 500 } }, {},
-          [this, revision, playlistId](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision || playlistId != m_selectedPlaylistId) return;
-    if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Playlist items could not load.")); return; }
-    m_playlistItems = items(data);
+          { { QStringLiteral("UserId"), m_userId }, { QStringLiteral("StartIndex"), startIndex },
+            { QStringLiteral("Limit"), pageSize } }, {},
+          [this, session, loadRevision, playlistId, startIndex, pageSize](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || loadRevision != m_playlistLoadRevision
+        || playlistId != m_selectedPlaylistId) return;
+    if (!error.isEmpty()) {
+      m_playlistLoading = false;
+      emit playlistsChanged();
+      emit errorOccurred(QStringLiteral("Playlist items could not load."));
+      return;
+    }
+    const QVariantList page = items(data);
+    m_playlistItems.append(page);
+    const int total = data.toMap().value(QStringLiteral("TotalRecordCount"), -1).toInt();
+    const bool more = !page.isEmpty() && (total >= 0 ? m_playlistItems.size() < total
+                                                      : page.size() == pageSize)
+                      && m_playlistItems.size() < 10000;
+    if (!more) m_playlistLoading = false;
     emit playlistsChanged();
+    if (more) loadPlaylistPage(playlistId, startIndex + page.size(), session, loadRevision);
   });
 }
 

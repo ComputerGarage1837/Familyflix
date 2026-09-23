@@ -1769,8 +1769,8 @@ Window {
                 NativeAction { text: "← Playlists"; onClicked: page = "playlists" }
                 Text { text: "Playlist"; color: "white"; font.pixelSize: 32; font.bold: true }
                 NativeAction {
-                    text: "▶ Play all"
-                    enabled: familyApi.playlistItems.length > 0
+                    text: familyApi.playlistLoading ? "Loading…" : "▶ Play all"
+                    enabled: !familyApi.playlistLoading && familyApi.playlistItems.length > 0
                     onClicked: window.playPlaylistFrom(0)
                 }
             }
@@ -1789,10 +1789,16 @@ Window {
                     onClicked: window.renameSelectedPlaylist()
                 }
             }
+            Text {
+                visible: familyApi.playlistLoading
+                height: visible ? 22 : 0
+                text: "Loading " + familyApi.playlistItems.length + " playlist items…"
+                color: familyApi.themeText; font.pixelSize: 15
+            }
             ScrollView {
                 id: playlistScroll
                 width: parent.width
-                height: parent.height - 135
+                height: parent.height - (familyApi.playlistLoading ? 160 : 135)
                 Column {
                     width: Math.max(700, window.width - 90)
                     spacing: 8
@@ -1832,7 +1838,7 @@ Window {
                                 width: 170
                                 height: 62
                                 text: "▶ Play from here"
-                                enabled: modelData.Type === "Movie" || modelData.Type === "Episode" || modelData.Type === "Video"
+                                enabled: !familyApi.playlistLoading && (modelData.Type === "Movie" || modelData.Type === "Episode" || modelData.Type === "Video")
                                 focusScroll: playlistScroll
                                 upAction: function() { playlistRow.focusNeighbor(-1, 1) }
                                 downAction: function() { playlistRow.focusNeighbor(1, 1) }
