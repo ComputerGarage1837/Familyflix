@@ -62,6 +62,8 @@ public:
   Q_INVOKABLE void openPlaylist(const QString& playlistId);
   Q_INVOKABLE void createPlaylist(const QString& name);
   Q_INVOKABLE void addToPlaylist(const QString& playlistId, const QVariantMap& item);
+  Q_INVOKABLE void removePlaylistEntry(const QString& playlistId, const QString& playlistItemId);
+  Q_INVOKABLE void movePlaylistEntry(const QString& playlistId, const QString& playlistItemId, int newIndex);
   Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE void refreshWatchlist();

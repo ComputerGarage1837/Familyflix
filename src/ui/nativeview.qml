@@ -634,11 +634,36 @@ Window {
                     spacing: 8
                     Repeater {
                         model: familyApi.playlistItems
-                        NativeAction {
-                            width: parent.width
-                            height: 62
-                            text: (modelData.SeriesName ? modelData.SeriesName + " — " : "") + (modelData.Name || "Video")
-                            onClicked: window.showItem(modelData, "playlist")
+                        Row {
+                            required property var modelData
+                            required property int index
+                            spacing: 8
+                            NativeAction {
+                                width: Math.max(450, window.width - 510)
+                                height: 62
+                                text: (modelData.SeriesName ? modelData.SeriesName + " — " : "") + (modelData.Name || "Video")
+                                onClicked: window.showItem(modelData, "playlist")
+                            }
+                            NativeAction {
+                                width: 65
+                                height: 62
+                                text: "↑"
+                                visible: index > 0
+                                onClicked: familyApi.movePlaylistEntry(familyApi.selectedPlaylistId, modelData.PlaylistItemId, index - 1)
+                            }
+                            NativeAction {
+                                width: 65
+                                height: 62
+                                text: "↓"
+                                visible: index < familyApi.playlistItems.length - 1
+                                onClicked: familyApi.movePlaylistEntry(familyApi.selectedPlaylistId, modelData.PlaylistItemId, index + 1)
+                            }
+                            NativeAction {
+                                width: 210
+                                height: 62
+                                text: "Remove from Playlist"
+                                onClicked: familyApi.removePlaylistEntry(familyApi.selectedPlaylistId, modelData.PlaylistItemId)
+                            }
                         }
                     }
                 }

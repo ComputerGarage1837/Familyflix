@@ -80,7 +80,8 @@ void FamilyApiClient::requestWithStatus(const QByteArray& method, const QString&
                                                 QStringLiteral("application/json"));
   QNetworkReply* reply = method == "POST" ? m_network.post(networkRequest, body)
                        : method == "PUT" ? m_network.put(networkRequest, body)
-                                         : m_network.get(networkRequest);
+                       : method == "DELETE" ? m_network.sendCustomRequest(networkRequest, "DELETE", body)
+                                            : m_network.get(networkRequest);
   connect(reply, &QNetworkReply::finished, this, [reply, handler = std::move(handler)] {
     const QByteArray bytes = reply->readAll();
     const auto parsed = QJsonDocument::fromJson(bytes);
@@ -775,6 +776,38 @@ void FamilyApiClient::addToPlaylist(const QString& playlistId, const QVariantMap
     }
     if (ids.isEmpty()) emit errorOccurred(QStringLiteral("This show has no playable episodes."));
     else addPlayableIdsToPlaylist(playlistId, ids);
+  });
+}
+
+void FamilyApiClient::removePlaylistEntry(const QString& playlistId, const QString& playlistItemId)
+{
+  if (!signedIn() || playlistId.isEmpty() || playlistItemId.isEmpty()) return;
+  const quint64 revision = m_sessionRevision;
+  requestWithStatus("DELETE", QStringLiteral("Playlists/%1/Items").arg(playlistId),
+                    { { QStringLiteral("EntryIds"), playlistItemId } }, {},
+                    [this, revision, playlistId](const QVariant&, const QString& error, int status) {
+    if (revision != m_sessionRevision) return;
+    if (!error.isEmpty() || status < 200 || status >= 300) {
+      emit errorOccurred(QStringLiteral("Could not remove playlist entry."));
+      return;
+    }
+    openPlaylist(playlistId);
+  });
+}
+
+void FamilyApiClient::movePlaylistEntry(const QString& playlistId, const QString& playlistItemId, int newIndex)
+{
+  if (!signedIn() || playlistId.isEmpty() || playlistItemId.isEmpty() || newIndex < 0) return;
+  const quint64 revision = m_sessionRevision;
+  requestWithStatus("POST", QStringLiteral("Playlists/%1/Items/%2/Move/%3")
+                    .arg(playlistId, playlistItemId, QString::number(newIndex)), {}, {},
+                    [this, revision, playlistId](const QVariant&, const QString& error, int status) {
+    if (revision != m_sessionRevision) return;
+    if (!error.isEmpty() || status < 200 || status >= 300) {
+      emit errorOccurred(QStringLiteral("Could not reorder playlist."));
+      return;
+    }
+    openPlaylist(playlistId);
   });
 }
 
