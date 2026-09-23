@@ -20,6 +20,8 @@ Window {
     property var selectedSeries: ({})
     property string detailReturnPage: "home"
     property string notice: ""
+    property bool playerControlsVisible: false
+    property bool playerPaused: false
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
@@ -80,6 +82,14 @@ Window {
         }
     }
 
+    onPageChanged: {
+        if (page === "player") {
+            playerControlsVisible = false
+            playerPaused = false
+            playerPanel.forceActiveFocus()
+        }
+    }
+
     function scrollToSection(name) {
         for (let section of rowColumn.children) {
             if (section.sectionTitle === name) {
@@ -123,12 +133,16 @@ Window {
     Connections {
         target: components.player
         function onPlaying() {
-            if (window.page === "player")
+            if (window.page === "player") {
+                window.playerPaused = false
                 familyApi.reportPlaybackStart(familyApi.selectedItem, components.player.getPosition() * 1000)
+            }
         }
         function onPaused() {
-            if (window.page === "player")
+            if (window.page === "player") {
+                window.playerPaused = true
                 familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, true)
+            }
         }
         function onFinished() {
             if (window.page !== "player") return
@@ -154,6 +168,7 @@ Window {
         onTriggered: familyApi.reportPlaybackProgress(components.player.getPosition() * 1000, false)
     }
     Timer { id: noticeTimer; interval: 6000; onTriggered: window.notice = "" }
+    Timer { id: controlsTimer; interval: 6000; onTriggered: window.playerControlsVisible = false }
 
     // The desktop shell and cards are Qt Quick controls, not the Jellyfin web client.
     Image {
@@ -180,7 +195,7 @@ Window {
 
     Item {
         anchors.fill: parent
-        visible: page === "login"
+        visible: page === "login" || page === "profile"
         Column {
             anchors.centerIn: parent
             width: Math.min(parent.width - 120, 800)
@@ -232,6 +247,13 @@ Window {
                 visible: !!chosenUser
                 NativeAction { text: "Back"; onClicked: { chosenUser = ""; password.clear() } }
                 NativeAction { text: "Sign in"; onClicked: familyApi.signIn(chosenUser, password.text) }
+            }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 12
+                visible: page === "profile" && !chosenUser
+                NativeAction { text: "Back to Home"; onClicked: page = "home" }
+                NativeAction { text: "Sign out"; onClicked: familyApi.signOut() }
             }
         }
     }
@@ -292,7 +314,12 @@ Window {
             anchors.margins: 16
             text: familyApi.userName
             downAction: function() { homeButton.forceActiveFocus() }
-            onClicked: familyApi.signOut()
+            onClicked: {
+                chosenUser = ""
+                password.clear()
+                familyApi.refreshPublicUsers()
+                page = "profile"
+            }
         }
         Flickable {
             id: homeScroll
@@ -528,17 +555,61 @@ Window {
     }
 
     Item {
+        id: playerPanel
         anchors.fill: parent
         visible: page === "player"
         focus: visible
         Keys.onEscapePressed: window.goBack()
         Keys.onBackPressed: window.goBack()
-        NativeAction {
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Escape || event.key === Qt.Key_Back) return
+            window.playerControlsVisible = true
+            controlsTimer.restart()
+            if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                if (window.playerPaused) components.player.play()
+                else components.player.pause()
+                window.playerPaused = !window.playerPaused
+                event.accepted = true
+            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                const delta = event.key === Qt.Key_Left ? -10000 : 10000
+                components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 + delta))
+                event.accepted = true
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            onClicked: { window.playerControlsVisible = true; controlsTimer.restart(); playerPanel.forceActiveFocus() }
+        }
+        Rectangle {
             anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 24
-            text: "Back to details"
-            onClicked: window.goBack()
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 106
+            color: "#df08121d"
+            visible: window.playerControlsVisible
+            Row {
+                anchors.centerIn: parent
+                spacing: 14
+                NativeAction { text: "Back"; onClicked: window.goBack() }
+                NativeAction {
+                    text: window.playerPaused ? "Play" : "Pause"
+                    onClicked: {
+                        if (window.playerPaused) components.player.play()
+                        else components.player.pause()
+                        window.playerPaused = !window.playerPaused
+                        controlsTimer.restart()
+                    }
+                }
+                NativeAction { text: "−10 sec"; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - 10000)); controlsTimer.restart() } }
+                NativeAction { text: "+10 sec"; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + 10000); controlsTimer.restart() } }
+                Text {
+                    text: Qt.formatDateTime(new Date(), "h:mm AP")
+                    color: "white"
+                    font.pixelSize: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    Timer { interval: 30000; running: window.page === "player"; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "h:mm AP") }
+                }
+            }
         }
     }
 

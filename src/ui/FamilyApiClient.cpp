@@ -389,27 +389,28 @@ void FamilyApiClient::reportPlaybackStart(const QVariantMap& item, qlonglong pos
     { QStringLiteral("PlaySessionId"), playSession },
     { QStringLiteral("MediaSourceId"), m_mediaSourceId }
   };
+  const QString seriesId = item.value(QStringLiteral("SeriesId")).toString();
   request("POST", QStringLiteral("Sessions/Playing"), {},
           QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
-          [this, revision, playSession](const QVariant&, const QString& error) {
+          [this, revision, playSession, itemId, seriesId](const QVariant&, const QString& error) {
     if (revision != m_sessionRevision || playSession != m_playSessionId) return;
     if (!error.isEmpty()) {
       emit errorOccurred(QStringLiteral("Playback status could not sync with Jellyfin."));
       return;
     }
     m_playbackStartConfirmed = true;
+    // Match Android's watchlist rule only after Jellyfin accepts the playback start.
+    for (const auto& value : m_watchlistEntries) {
+      const auto entry = value.toMap();
+      const QString listed = entry.value(QStringLiteral("itemId")).toString();
+      if (listed.compare(itemId, Qt::CaseInsensitive) != 0
+          && (seriesId.isEmpty() || listed.compare(seriesId, Qt::CaseInsensitive) != 0)) continue;
+      writeWatchlistMembership(revision, false, entry,
+        QUuid::createUuid().toString(QUuid::WithoutBraces), m_watchlistRevision, 0);
+      break;
+    }
     if (m_pendingStopMilliseconds >= 0) sendPlaybackStopped(m_pendingStopMilliseconds);
   });
-  const QString seriesId = item.value(QStringLiteral("SeriesId")).toString();
-  for (const auto& value : m_watchlistEntries) {
-    const auto entry = value.toMap();
-    const QString listed = entry.value(QStringLiteral("itemId")).toString();
-    if (listed.compare(itemId, Qt::CaseInsensitive) != 0
-        && (seriesId.isEmpty() || listed.compare(seriesId, Qt::CaseInsensitive) != 0)) continue;
-    writeWatchlistMembership(revision, false, entry,
-      QUuid::createUuid().toString(QUuid::WithoutBraces), m_watchlistRevision, 0);
-    break;
-  }
 }
 
 void FamilyApiClient::reportPlaybackProgress(qlonglong positionMilliseconds, bool paused)
