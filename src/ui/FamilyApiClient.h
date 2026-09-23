@@ -82,6 +82,7 @@ private:
                          const QByteArray& body, StatusHandler handler);
   static QVariantList items(const QVariant& response);
   static QVariantList untouchedDeck(const QVariantList& response);
+  void correctDeckFromRecent();
   void writeWatchlistMembership(quint64 session, bool present, const QVariantMap& entry,
                                 const QString& operationId, qlonglong expected, int retries);
   void writeHouseholdMembership(quint64 session, bool present, const QVariantMap& entry,
@@ -100,6 +101,10 @@ private:
   QVariantList m_libraries;
   QVariantList m_continueItems;
   QVariantList m_deckItems;
+  QVariantList m_recentDeckActivity;
+  bool m_deckFallbackReady = false;
+  bool m_recentDeckActivityReady = false;
+  bool m_deckCorrectionStarted = false;
   QVariantList m_libraryRows;
   QVariantMap m_selectedItem;
   QVariantList m_watchlistEntries;

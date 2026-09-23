@@ -8,7 +8,7 @@ check against the same Jellyfin server and user profiles before release.
 | --- | --- | --- |
 | Fixed server URL and visible-user sign in | Native API client and visible-user sign-in screen coded | Verify passwordless/password accounts, profile switch and persisted sign-in |
 | Native playback, audio and subtitle tracks, resume | Native libmpv launch, basic audio selection, resume and session reporting coded | Test representative x265 movies, older TV audio, subtitles, resume, seek and watched-status sync; build full controls |
-| Home libraries, preferred order, hidden libraries, Continue Watching and Deck | Native Qt home loads libraries and rows; local per-user library order and rail visibility controls are coded | Verify ordering/visibility persistence, add focus restoration and Android active-older-season Deck correction |
+| Home libraries, preferred order, hidden libraries, Continue Watching and Deck | Native Qt home loads libraries and rows; per-user library order, rail visibility, focus restoration and active-older-season Deck correction are coded | Verify ordering/visibility persistence and Deck against watched older seasons on real profiles |
 | Personal and family Watchlists | Native personal and family Watchlist read, display, membership and voting coded | Test cross-device sync, revision conflicts and playback auto-removal |
 | Mixed movie/show/episode playlists | Not yet ported to native UI | Port Android playlist controls and verify mixed playback order |
 | Profile switch and Watch Together | Native visible-user profile chooser exists; Watching Together not yet ported | Test password-protected/passwordless switching; port Android presets, selected home feed, participant reporting and exit flow |

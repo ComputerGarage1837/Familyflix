@@ -14,6 +14,20 @@
 
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
+
+QString deckSeriesId(const QVariantMap& episode)
+{
+  const QString id = episode.value(QStringLiteral("SeriesId")).toString();
+  if (!id.isEmpty()) return id;
+  return episode.value(QStringLiteral("SeriesName")).toString().trimmed().toLower();
+}
+
+bool untouchedEpisode(const QVariantMap& episode)
+{
+  const auto state = episode.value(QStringLiteral("UserData")).toMap();
+  return !state.value(QStringLiteral("Played")).toBool()
+      && state.value(QStringLiteral("PlaybackPositionTicks")).toLongLong() == 0;
+}
 }
 
 FamilyApiClient::FamilyApiClient(QObject* parent)
@@ -91,16 +105,87 @@ QVariantList FamilyApiClient::untouchedDeck(const QVariantList& response)
   QSet<QString> seen;
   for (const auto& value : response) {
     const auto item = value.toMap();
-    const auto userData = item.value(QStringLiteral("UserData")).toMap();
-    const QString series = item.value(QStringLiteral("SeriesId")).toString();
-    if (userData.value(QStringLiteral("Played")).toBool()
-        || userData.value(QStringLiteral("PlaybackPositionTicks")).toLongLong() > 0
-        || series.isEmpty() || seen.contains(series)) continue;
+    const QString series = deckSeriesId(item);
+    if (!untouchedEpisode(item) || series.isEmpty() || seen.contains(series)) continue;
     seen.insert(series);
     result.append(item);
     if (result.size() == 15) break;
   }
   return result;
+}
+
+void FamilyApiClient::correctDeckFromRecent()
+{
+  if (!m_deckFallbackReady || !m_recentDeckActivityReady || m_deckCorrectionStarted) return;
+  m_deckCorrectionStarted = true;
+  const quint64 session = m_sessionRevision;
+  const quint64 home = m_homeRevision;
+  QSet<QString> handled;
+  int checked = 0;
+  // DatePlayed descending makes the first qualified row the active playback anchor.
+  for (const auto& value : m_recentDeckActivity) {
+    const auto latest = value.toMap();
+    const QString series = deckSeriesId(latest);
+    const int seasonNumber = latest.value(QStringLiteral("ParentIndexNumber")).toInt();
+    const int episodeNumber = latest.value(QStringLiteral("IndexNumberEnd"),
+                                           latest.value(QStringLiteral("IndexNumber"))).toInt();
+    const auto state = latest.value(QStringLiteral("UserData")).toMap();
+    if (series.isEmpty() || handled.contains(series) || seasonNumber <= 0 || episodeNumber <= 0
+        || state.value(QStringLiteral("LastPlayedDate")).toString().isEmpty()) continue;
+    int fallbackIndex = -1;
+    for (int index = 0; index < m_deckItems.size(); ++index) {
+      if (deckSeriesId(m_deckItems[index].toMap()) == series) {
+        fallbackIndex = index;
+        break;
+      }
+    }
+    if (fallbackIndex < 0) continue;
+    handled.insert(series);
+    if (++checked > 8) break;
+    if (!state.value(QStringLiteral("Played")).toBool()
+        && state.value(QStringLiteral("PlaybackPositionTicks")).toLongLong() > 0) {
+      m_deckItems.removeAt(fallbackIndex);
+      emit homeChanged();
+      continue;
+    }
+    const int firstEligible = episodeNumber + (state.value(QStringLiteral("Played")).toBool() ? 1 : 0);
+    const auto fallback = m_deckItems[fallbackIndex].toMap();
+    if (fallback.value(QStringLiteral("ParentIndexNumber")).toInt() == seasonNumber
+        && fallback.value(QStringLiteral("IndexNumber")).toInt() == firstEligible) continue;
+    const QString seasonId = latest.value(QStringLiteral("SeasonId")).toString();
+    if (seasonId.isEmpty()) continue;
+    request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+            { { QStringLiteral("ParentId"), seasonId },
+              { QStringLiteral("Recursive"), true },
+              { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+              { QStringLiteral("IsPlayed"), false },
+              { QStringLiteral("IsMissing"), false },
+              { QStringLiteral("SortBy"), QStringLiteral("IndexNumber") },
+              { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+              { QStringLiteral("EnableUserData"), true },
+              { QStringLiteral("Limit"), 250 } }, {},
+            [this, session, home, series, seasonNumber, firstEligible](const QVariant& response, const QString& error) {
+      if (session != m_sessionRevision || home != m_homeRevision || !error.isEmpty()) return;
+      QVariantMap replacement;
+      for (const auto& value : items(response)) {
+        const auto candidate = value.toMap();
+        if (deckSeriesId(candidate) != series
+            || candidate.value(QStringLiteral("ParentIndexNumber")).toInt() != seasonNumber
+            || candidate.value(QStringLiteral("IndexNumber")).toInt() < firstEligible
+            || !untouchedEpisode(candidate)) continue;
+        if (replacement.isEmpty()
+            || candidate.value(QStringLiteral("IndexNumber")).toInt()
+                < replacement.value(QStringLiteral("IndexNumber")).toInt()) replacement = candidate;
+      }
+      if (replacement.isEmpty()) return;
+      for (int index = 0; index < m_deckItems.size(); ++index) {
+        if (deckSeriesId(m_deckItems[index].toMap()) != series) continue;
+        m_deckItems[index] = replacement;
+        emit homeChanged();
+        break;
+      }
+    });
+  }
 }
 
 QVariantList FamilyApiClient::railLibraries() const
@@ -209,6 +294,8 @@ void FamilyApiClient::signOut()
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear();
+  m_recentDeckActivity.clear();
+  m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   m_libraryRows.clear(); m_selectedItem.clear();
   m_seasons.clear(); m_episodes.clear();
   m_watchlistEntries.clear(); m_watchlistRevision = 0;
@@ -229,6 +316,8 @@ void FamilyApiClient::refreshHome()
   if (!signedIn()) return;
   const quint64 revision = m_sessionRevision;
   const quint64 homeRevision = ++m_homeRevision;
+  m_recentDeckActivity.clear();
+  m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   request("GET", QStringLiteral("Users/%1/Views").arg(m_userId), {}, {},
           [this, revision, homeRevision](const QVariant& data, const QString& error) {
     if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
@@ -310,6 +399,24 @@ void FamilyApiClient::refreshHome()
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_deckItems = untouchedDeck(items(data));
     emit homeChanged();
+    m_deckFallbackReady = true;
+    correctDeckFromRecent();
+  });
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
+            { QStringLiteral("SortBy"), QStringLiteral("DatePlayed") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Descending") },
+            { QStringLiteral("EnableUserData"), true },
+            { QStringLiteral("EnableImages"), false },
+            { QStringLiteral("EnableTotalRecordCount"), false },
+            { QStringLiteral("Limit"), 60 } }, {},
+          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
+    if (!error.isEmpty()) return; // Keep the safe untouched Next Up fallback.
+    m_recentDeckActivity = items(data);
+    m_recentDeckActivityReady = true;
+    correctDeckFromRecent();
   });
 }
 
