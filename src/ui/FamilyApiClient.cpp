@@ -364,8 +364,7 @@ void FamilyApiClient::setTheme(const QString& name)
   m_themeName = name;
   m_settings.setValue(QStringLiteral("users/%1/theme").arg(m_userId), name);
   emit themeChanged();
-  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("app_theme"), androidTheme(name));
-  else refreshProfileSettings();
+  changeProfileSetting(QStringLiteral("app_theme"), androidTheme(name));
 }
 
 QString FamilyApiClient::mediaSegmentAction(const QString& type) const
@@ -529,13 +528,26 @@ void FamilyApiClient::setMediaSegmentAction(const QString& type, const QString& 
   if (m_userId.isEmpty() || !supported.contains(type) || !actions.contains(action)) return;
   m_settings.setValue(QStringLiteral("users/%1/segments/%2").arg(m_userId, type), action);
   emit mediaSegmentsChanged();
-  if (!m_profileSettingsReady) { refreshProfileSettings(); return; }
+  if (!m_profileSettingsReady) {
+    m_pendingSegmentActions.insert(type, action);
+    refreshProfileSettings();
+    return;
+  }
   QStringList entries = m_profileSettingsValues.value(QStringLiteral("media_segment_actions")).toString()
     .split(',', Qt::SkipEmptyParts);
-  const QString prefix = type + '=';
-  entries.removeIf([&prefix](const QString& entry) { return entry.startsWith(prefix); });
-  entries.append(prefix + (action == QStringLiteral("Ask") ? QStringLiteral("ASK_TO_SKIP")
-    : action == QStringLiteral("Auto") ? QStringLiteral("SKIP") : QStringLiteral("NOTHING")));
+  const QStringList types{ QStringLiteral("Intro"), QStringLiteral("Outro"),
+    QStringLiteral("Preview"), QStringLiteral("Recap"), QStringLiteral("Commercial") };
+  entries.removeIf([&types](const QString& entry) {
+    return types.contains(entry.section('=', 0, 0));
+  });
+  for (const QString& segmentType : types) {
+    const QString fallback = segmentType == QStringLiteral("Intro") || segmentType == QStringLiteral("Outro")
+      ? QStringLiteral("Ask") : QStringLiteral("Off");
+    const QString selected = m_settings.value(QStringLiteral("users/%1/segments/%2").arg(m_userId, segmentType),
+      fallback).toString();
+    entries.append(segmentType + '=' + (selected == QStringLiteral("Ask") ? QStringLiteral("ASK_TO_SKIP")
+      : selected == QStringLiteral("Auto") ? QStringLiteral("SKIP") : QStringLiteral("NOTHING")));
+  }
   changeProfileSetting(QStringLiteral("media_segment_actions"), entries.join(','));
 }
 
@@ -551,7 +563,26 @@ void FamilyApiClient::refreshProfileSettings()
     if (!error.isEmpty() || !decodeProfileSettings(data.toMap(), document)) return;
     m_profileSettingsValues = document.value(QStringLiteral("values")).toMap();
     m_profileSettingsReady = true;
-    applyProfileSettings(m_profileSettingsValues);
+    QVariantMap visibleValues = m_profileSettingsValues;
+    for (auto it = m_pendingProfileSettings.cbegin(); it != m_pendingProfileSettings.cend(); ++it)
+      visibleValues.insert(it.key(), it.value());
+    applyProfileSettings(visibleValues);
+    if (!m_pendingSegmentActions.isEmpty()) {
+      const QVariantMap pendingSegments = m_pendingSegmentActions;
+      m_pendingSegmentActions.clear();
+      QStringList entries = m_profileSettingsValues.value(QStringLiteral("media_segment_actions")).toString()
+        .split(',', Qt::SkipEmptyParts);
+      for (auto it = pendingSegments.cbegin(); it != pendingSegments.cend(); ++it) {
+        const QString prefix = it.key() + '=';
+        entries.removeIf([&prefix](const QString& entry) { return entry.startsWith(prefix); });
+        const QString action = it.value().toString();
+        entries.append(prefix + (action == QStringLiteral("Ask") ? QStringLiteral("ASK_TO_SKIP")
+          : action == QStringLiteral("Auto") ? QStringLiteral("SKIP") : QStringLiteral("NOTHING")));
+        m_settings.setValue(QStringLiteral("users/%1/segments/%2").arg(m_userId, it.key()), action);
+      }
+      emit mediaSegmentsChanged();
+      changeProfileSetting(QStringLiteral("media_segment_actions"), entries.join(','));
+    }
     flushProfileSetting();
   });
 }
@@ -636,6 +667,8 @@ void FamilyApiClient::flushProfileSetting()
     if (session != m_sessionRevision) return;
     if (!error.isEmpty() || !decodeProfileSettings(data.toMap(), document)) {
       m_profileSettingsWriteActive = false;
+      for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        if (!m_pendingProfileSettings.contains(it.key())) m_pendingProfileSettings.insert(it.key(), it.value());
       emit errorOccurred(QStringLiteral("Profile settings could not be synced."));
       return;
     }
@@ -663,13 +696,18 @@ void FamilyApiClient::flushProfileSetting()
     preferences.insert(QStringLiteral("CustomPrefs"), custom);
     request("POST", profileSettingsPath, profileSettingsQuery,
             QJsonDocument(QJsonObject::fromVariantMap(preferences)).toJson(QJsonDocument::Compact),
-            [this, session, updated](const QVariant&, const QString& writeError) {
+            [this, session, pending, updated](const QVariant&, const QString& writeError) {
       if (session != m_sessionRevision) return;
       m_profileSettingsWriteActive = false;
       if (writeError.isEmpty()) {
         m_profileSettingsValues = updated;
         applyProfileSettings(updated);
-      } else emit errorOccurred(QStringLiteral("Profile settings could not be saved."));
+      } else {
+        for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+          if (!m_pendingProfileSettings.contains(it.key())) m_pendingProfileSettings.insert(it.key(), it.value());
+        emit errorOccurred(QStringLiteral("Profile settings could not be saved."));
+        return;
+      }
       flushProfileSetting();
     });
   });
@@ -1342,9 +1380,8 @@ void FamilyApiClient::cycleNextUpMode()
     : QStringLiteral("Extended");
   m_settings.setValue(QStringLiteral("users/%1/nextUpMode").arg(m_userId), m_nextUpMode);
   emit nextUpModeChanged();
-  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("next_up_behavior"),
+  changeProfileSetting(QStringLiteral("next_up_behavior"),
     m_nextUpMode == QStringLiteral("Off") ? QStringLiteral("DISABLED") : m_nextUpMode.toUpper());
-  else refreshProfileSettings();
 }
 
 void FamilyApiClient::toggleBackdropEnabled()
@@ -1352,9 +1389,8 @@ void FamilyApiClient::toggleBackdropEnabled()
   if (!signedIn()) return;
   m_backdropEnabled = !m_backdropEnabled;
   emit profileAppearanceChanged();
-  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("pref_show_backdrop"),
+  changeProfileSetting(QStringLiteral("pref_show_backdrop"),
     m_backdropEnabled ? QStringLiteral("true") : QStringLiteral("false"));
-  else refreshProfileSettings();
 }
 
 void FamilyApiClient::cycleClockBehavior()
@@ -1364,8 +1400,7 @@ void FamilyApiClient::cycleClockBehavior()
     QStringLiteral("IN_VIDEO"), QStringLiteral("NEVER") };
   m_clockBehavior = choices[(choices.indexOf(m_clockBehavior) + 1) % choices.size()];
   emit profileAppearanceChanged();
-  if (m_profileSettingsReady) changeProfileSetting(QStringLiteral("pref_clock_behavior"), m_clockBehavior);
-  else refreshProfileSettings();
+  changeProfileSetting(QStringLiteral("pref_clock_behavior"), m_clockBehavior);
 }
 
 QString FamilyApiClient::temporaryStorageGiB() const
@@ -1908,6 +1943,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_profileSettingsWriteActive = false;
   m_profileSettingsValues.clear();
   m_pendingProfileSettings.clear();
+  m_pendingSegmentActions.clear();
   m_libraryMenuPrefsReady = false;
   m_libraryMenuWriteActive = false;
   m_libraryMenuPrefsValues.clear();
@@ -1994,6 +2030,7 @@ void FamilyApiClient::signOut()
   m_profileSettingsWriteActive = false;
   m_profileSettingsValues.clear();
   m_pendingProfileSettings.clear();
+  m_pendingSegmentActions.clear();
   m_libraryMenuPrefsReady = false;
   m_libraryMenuWriteActive = false;
   m_libraryMenuPrefsValues.clear();

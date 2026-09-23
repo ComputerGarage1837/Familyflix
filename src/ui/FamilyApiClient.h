@@ -361,6 +361,7 @@ private:
   QString m_clockBehavior = QStringLiteral("ALWAYS");
   QVariantMap m_profileSettingsValues;
   QVariantMap m_pendingProfileSettings;
+  QVariantMap m_pendingSegmentActions;
   bool m_profileSettingsWriteActive = false;
   bool m_profileSettingsReady = false;
   quint64 m_profileSettingsRevision = 0;
