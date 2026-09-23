@@ -175,7 +175,8 @@ Window {
         property int candidateIndex: 0
         onCandidatesChanged: candidateIndex = 0
         source: candidateIndex < candidates.length
-            ? familyApi.imageUrl(candidates[candidateIndex].id, candidates[candidateIndex].kind) : ""
+            ? familyApi.imageUrl(candidates[candidateIndex].id, candidates[candidateIndex].kind,
+                                 purpose === "backdrop" ? Math.max(1280, window.width) : 640) : ""
         onStatusChanged: if (status === Image.Error && candidateIndex + 1 < candidates.length)
             candidateIndex++
         asynchronous: true

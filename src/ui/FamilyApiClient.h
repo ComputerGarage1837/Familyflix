@@ -185,7 +185,8 @@ public:
   Q_INVOKABLE void setMediaSegmentAction(const QString& type, const QString& action);
   Q_INVOKABLE void reportIssue(const QString& itemId, const QString& category, const QString& note);
   Q_INVOKABLE void setTheme(const QString& name);
-  Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary")) const;
+  Q_INVOKABLE QString imageUrl(const QString& itemId, const QString& kind = QStringLiteral("Primary"),
+                               int maxWidth = 640) const;
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE QString temporaryStorageGiB() const;
   Q_INVOKABLE void checkWindowsUpdate(bool manual = false);

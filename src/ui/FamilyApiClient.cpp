@@ -2457,12 +2457,12 @@ void FamilyApiClient::refreshTvGuide(int band, const QDateTime& startUtc)
   });
 }
 
-QString FamilyApiClient::imageUrl(const QString& itemId, const QString& kind) const
+QString FamilyApiClient::imageUrl(const QString& itemId, const QString& kind, int maxWidth) const
 {
   if (itemId.isEmpty()) return {};
   QUrl url = server.resolved(QUrl(QStringLiteral("Items/%1/Images/%2").arg(itemId, kind)));
   QUrlQuery query;
-  query.addQueryItem(QStringLiteral("maxWidth"), QStringLiteral("640"));
+  query.addQueryItem(QStringLiteral("maxWidth"), QString::number(qBound(160, maxWidth, 2560)));
   query.addQueryItem(QStringLiteral("quality"), QStringLiteral("85"));
   if (!m_token.isEmpty()) query.addQueryItem(QStringLiteral("api_key"), m_token);
   url.setQuery(query);
