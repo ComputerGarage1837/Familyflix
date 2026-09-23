@@ -232,6 +232,54 @@ bool decodeSeriesPreferenceDocument(const QVariantMap& preferences, QVariantMap&
     && document.value(QStringLiteral("revision")).toLongLong() >= 0
     && document.value(QStringLiteral("values")).canConvert<QVariantMap>();
 }
+
+QString plainLibraryId(QString id)
+{
+  id.remove('-'); id.remove('{'); id.remove('}');
+  static const QRegularExpression valid(QStringLiteral("^[0-9a-fA-F]{32}$"));
+  return valid.match(id).hasMatch() ? id.toLower() : QString();
+}
+
+QStringList decodeLibraryIds(const QString& csv)
+{
+  QStringList result;
+  for (const QString& part : csv.split(',', Qt::SkipEmptyParts)) {
+    const QString id = plainLibraryId(part.trimmed());
+    if (!id.isEmpty() && !result.contains(id)) result.append(id);
+  }
+  return result;
+}
+
+QString encodeLibraryIds(const QStringList& ids)
+{
+  QStringList result;
+  QSet<QString> seen;
+  for (const QString& value : ids) {
+    const QString id = plainLibraryId(value);
+    if (id.isEmpty() || seen.contains(id)) continue;
+    seen.insert(id);
+    result.append(id.mid(0, 8) + '-' + id.mid(8, 4) + '-' + id.mid(12, 4)
+      + '-' + id.mid(16, 4) + '-' + id.mid(20, 12));
+  }
+  return result.join(',');
+}
+
+QStringList decodeHomeRows(const QString& encoded)
+{
+  QStringList rows;
+  for (const QString& part : encoded.split('|', Qt::SkipEmptyParts)) {
+    const QString value = part.trimmed();
+    QString row;
+    if (value == QStringLiteral("continue") || value == QStringLiteral("deck")
+        || value == QStringLiteral("watchlist")) row = value;
+    else if (value.startsWith(QStringLiteral("latest:"))) {
+      const QString id = plainLibraryId(value.mid(7));
+      if (!id.isEmpty()) row = QStringLiteral("latest:") + encodeLibraryIds(QStringList{ id });
+    }
+    if (!row.isEmpty() && !rows.contains(row)) rows.append(row);
+  }
+  return rows;
+}
 }
 
 FamilyApiClient::FamilyApiClient(QObject* parent)
@@ -252,7 +300,9 @@ FamilyApiClient::FamilyApiClient(QObject* parent)
   if (!m_userId.isEmpty())
     m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                    QStringLiteral("Ocean")).toString();
-  if (!m_userId.isEmpty()) { loadCoWatchParty(); loadKidsSettings(); refreshProfileSettings(); }
+  if (!m_userId.isEmpty()) {
+    loadCoWatchParty(); loadKidsSettings(); refreshProfileSettings(); refreshLibraryMenuPreferences();
+  }
 }
 
 QColor FamilyApiClient::themeScreen() const { return QColor(QLatin1String(paletteFor(m_themeName).screen)); }
@@ -806,10 +856,175 @@ QVariantList FamilyApiClient::railLibraries() const
   return visible;
 }
 
+QString FamilyApiClient::homeRowIdForLibrary(const QString& libraryId) const
+{
+  const QString id = plainLibraryId(libraryId);
+  return id.isEmpty() ? QString() : QStringLiteral("latest:") + encodeLibraryIds(QStringList{ id });
+}
+
+QVariantList FamilyApiClient::homeLayoutRows() const
+{
+  QVariantList result;
+  QStringList available{ QStringLiteral("continue"), QStringLiteral("deck"), QStringLiteral("watchlist") };
+  QHash<QString, QString> labels{
+    { QStringLiteral("continue"), QStringLiteral("Continue Watching") },
+    { QStringLiteral("deck"), QStringLiteral("The Deck") },
+    { QStringLiteral("watchlist"), QStringLiteral("Watchlist") }
+  };
+  for (const auto& value : m_libraries) {
+    const auto library = value.toMap();
+    const QString id = homeRowIdForLibrary(library.value(QStringLiteral("Id")).toString());
+    if (id.isEmpty() || available.contains(id)) continue;
+    available.append(id);
+    labels.insert(id, QStringLiteral("Latest in %1").arg(library.value(QStringLiteral("Name")).toString()));
+  }
+  QStringList order;
+  for (const QString& id : m_homeRowOrder)
+    if (available.contains(id) && !order.contains(id)) order.append(id);
+  for (const QString& id : available)
+    if (!order.contains(id)) order.append(id);
+  for (const QString& id : order)
+    result.append(QVariantMap{ { QStringLiteral("id"), id },
+      { QStringLiteral("label"), labels.value(id) },
+      { QStringLiteral("visible"), !m_hiddenHomeRows.contains(id) } });
+  return result;
+}
+
+void FamilyApiClient::setHomeRowVisible(const QString& rowId, bool visible)
+{
+  if (!signedIn()) return;
+  bool available = false;
+  for (const auto& value : homeLayoutRows())
+    if (value.toMap().value(QStringLiteral("id")).toString() == rowId) { available = true; break; }
+  if (!available) return;
+  m_hiddenHomeRows.removeAll(rowId);
+  if (!visible) m_hiddenHomeRows.append(rowId);
+  emit homeChanged();
+  changeLibraryMenuPreference(QStringLiteral("familyTvHiddenHomeRowsV1"), m_hiddenHomeRows.join('|'));
+}
+
+void FamilyApiClient::moveHomeRow(const QString& rowId, int offset)
+{
+  if (!signedIn() || offset == 0) return;
+  QStringList order;
+  for (const auto& value : homeLayoutRows())
+    order.append(value.toMap().value(QStringLiteral("id")).toString());
+  const int from = order.indexOf(rowId);
+  if (from < 0) return;
+  const int to = qBound(0, from + offset, int(order.size()) - 1);
+  if (to == from) return;
+  order.move(from, to);
+  m_homeRowOrder = order;
+  emit homeChanged();
+  changeLibraryMenuPreference(QStringLiteral("familyTvHomeRowOrderV1"), m_homeRowOrder.join('|'));
+}
+
+void FamilyApiClient::refreshLibraryMenuPreferences()
+{
+  if (!signedIn()) return;
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = ++m_libraryMenuPrefsRevision;
+  request("GET", QStringLiteral("DisplayPreferences/usersettings"),
+          { { QStringLiteral("client"), QStringLiteral("emby") } }, {},
+          [this, session, revision](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || revision != m_libraryMenuPrefsRevision || !error.isEmpty()) return;
+    m_libraryMenuPrefsValues = data.toMap().value(QStringLiteral("CustomPrefs")).toMap();
+    m_libraryMenuPrefsReady = true;
+    if (m_libraryMenuPending.isEmpty()) applyLibraryMenuPreferences(m_libraryMenuPrefsValues);
+    else flushLibraryMenuPreferences();
+  });
+}
+
+void FamilyApiClient::applyLibraryMenuPreferences(const QVariantMap& customPrefs)
+{
+  if (!signedIn()) return;
+  const QStringList order = decodeLibraryIds(
+    customPrefs.value(QStringLiteral("familyTvLibraryMenuOrderV1")).toString());
+  const QStringList hidden = decodeLibraryIds(
+    customPrefs.value(QStringLiteral("familyTvHiddenLibrariesV1")).toString());
+  const QStringList homeOrder = decodeHomeRows(
+    customPrefs.value(QStringLiteral("familyTvHomeRowOrderV1")).toString());
+  const QStringList homeHidden = decodeHomeRows(
+    customPrefs.value(QStringLiteral("familyTvHiddenHomeRowsV1")).toString());
+  const QString orderKey = QStringLiteral("users/%1/libraryMenuOrder").arg(m_userId);
+  const QString hiddenKey = QStringLiteral("users/%1/hiddenLibraryIds").arg(m_userId);
+  const bool changed = m_settings.value(orderKey).toStringList() != order
+    || m_settings.value(hiddenKey).toStringList() != hidden;
+  const bool layoutChanged = m_homeRowOrder != homeOrder || m_hiddenHomeRows != homeHidden;
+  m_settings.setValue(orderKey, order);
+  m_settings.setValue(hiddenKey, hidden);
+  m_homeRowOrder = homeOrder;
+  m_hiddenHomeRows = homeHidden;
+  if (changed) refreshHome();
+  else if (layoutChanged) emit homeChanged();
+}
+
+void FamilyApiClient::changeLibraryMenuPreference(const QString& key, const QString& value)
+{
+  if (!signedIn()) return;
+  m_libraryMenuPending.insert(key, value);
+  if (m_libraryMenuPrefsReady) flushLibraryMenuPreferences();
+  else refreshLibraryMenuPreferences();
+}
+
+void FamilyApiClient::flushLibraryMenuPreferences()
+{
+  if (!m_libraryMenuPrefsReady || m_libraryMenuWriteActive || m_libraryMenuPending.isEmpty()) return;
+  m_libraryMenuWriteActive = true;
+  const quint64 session = m_sessionRevision;
+  const QVariantMap pending = m_libraryMenuPending;
+  const QVariantMap base = m_libraryMenuPrefsValues;
+  m_libraryMenuPending.clear();
+  const QString path = QStringLiteral("DisplayPreferences/usersettings");
+  const QVariantMap query{ { QStringLiteral("client"), QStringLiteral("emby") } };
+  request("GET", path, query, {}, [this, session, pending, base, path, query]
+          (const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) {
+      for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+        if (!m_libraryMenuPending.contains(it.key())) m_libraryMenuPending.insert(it.key(), it.value());
+      m_libraryMenuWriteActive = false;
+      emit errorOccurred(QStringLiteral("Library menu choices could not be synced."));
+      return;
+    }
+    QVariantMap preferences = data.toMap();
+    QVariantMap remote = preferences.value(QStringLiteral("CustomPrefs")).toMap();
+    QVariantMap updated = remote;
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+      if (remote.value(it.key()).toString() == base.value(it.key()).toString())
+        updated.insert(it.key(), it.value());
+      else emit errorOccurred(QStringLiteral("A newer library menu choice from another device was kept."));
+    }
+    if (updated == remote) {
+      m_libraryMenuPrefsValues = remote;
+      m_libraryMenuWriteActive = false;
+      if (m_libraryMenuPending.isEmpty()) applyLibraryMenuPreferences(remote);
+      else flushLibraryMenuPreferences();
+      return;
+    }
+    preferences.insert(QStringLiteral("CustomPrefs"), updated);
+    request("POST", path, query,
+            QJsonDocument(QJsonObject::fromVariantMap(preferences)).toJson(QJsonDocument::Compact),
+            [this, session, pending, updated](const QVariant&, const QString& writeError) {
+      if (session != m_sessionRevision) return;
+      m_libraryMenuWriteActive = false;
+      if (!writeError.isEmpty()) {
+        for (auto it = pending.cbegin(); it != pending.cend(); ++it)
+          if (!m_libraryMenuPending.contains(it.key())) m_libraryMenuPending.insert(it.key(), it.value());
+        emit errorOccurred(QStringLiteral("Library menu choice could not be saved."));
+        return;
+      }
+      m_libraryMenuPrefsValues = updated;
+      if (m_libraryMenuPending.isEmpty()) applyLibraryMenuPreferences(updated);
+      else flushLibraryMenuPreferences();
+    });
+  });
+}
+
 bool FamilyApiClient::libraryVisibleInRail(const QString& libraryId) const
 {
   const auto hidden = m_settings.value(QStringLiteral("users/%1/hiddenLibraryIds").arg(m_userId)).toStringList();
-  return !hidden.contains(libraryId, Qt::CaseInsensitive);
+  return !hidden.contains(plainLibraryId(libraryId));
 }
 
 void FamilyApiClient::setLibraryVisibleInRail(const QString& libraryId, bool visible)
@@ -817,10 +1032,13 @@ void FamilyApiClient::setLibraryVisibleInRail(const QString& libraryId, bool vis
   if (m_userId.isEmpty() || libraryId.isEmpty()) return;
   const QString key = QStringLiteral("users/%1/hiddenLibraryIds").arg(m_userId);
   QStringList hidden = m_settings.value(key).toStringList();
-  hidden.removeAll(libraryId);
-  if (!visible) hidden.append(libraryId);
+  const QString normalized = plainLibraryId(libraryId);
+  if (normalized.isEmpty()) return;
+  hidden.removeAll(normalized);
+  if (!visible) hidden.append(normalized);
   m_settings.setValue(key, hidden);
   emit homeChanged();
+  changeLibraryMenuPreference(QStringLiteral("familyTvHiddenLibrariesV1"), encodeLibraryIds(hidden));
 }
 
 void FamilyApiClient::moveLibrary(const QString& libraryId, int offset)
@@ -840,7 +1058,10 @@ void FamilyApiClient::moveLibrary(const QString& libraryId, int offset)
   QStringList order;
   for (const auto& value : m_libraries)
     order.append(value.toMap().value(QStringLiteral("Id")).toString());
-  m_settings.setValue(QStringLiteral("users/%1/libraryMenuOrder").arg(m_userId), order);
+  QStringList normalizedOrder;
+  for (const QString& id : order) normalizedOrder.append(plainLibraryId(id));
+  m_settings.setValue(QStringLiteral("users/%1/libraryMenuOrder").arg(m_userId), normalizedOrder);
+  changeLibraryMenuPreference(QStringLiteral("familyTvLibraryMenuOrderV1"), encodeLibraryIds(order));
   QVariantList reorderedRows;
   for (const auto& value : m_libraries) {
     const QString id = value.toMap().value(QStringLiteral("Id")).toString();
@@ -1633,10 +1854,17 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_coWatchPlayback.reset();
   ++m_sessionRevision;
   ++m_profileSettingsRevision;
+  ++m_libraryMenuPrefsRevision;
   m_profileSettingsReady = false;
   m_profileSettingsWriteActive = false;
   m_profileSettingsValues.clear();
   m_pendingProfileSettings.clear();
+  m_libraryMenuPrefsReady = false;
+  m_libraryMenuWriteActive = false;
+  m_libraryMenuPrefsValues.clear();
+  m_libraryMenuPending.clear();
+  m_homeRowOrder.clear();
+  m_hiddenHomeRows.clear();
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
@@ -1665,7 +1893,10 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear(); m_playlists.clear(); m_playlistItems.clear();
   m_playlistLoading = false; ++m_playlistLoadRevision;
   m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
-  m_mediaSegments.clear(); m_watchlistEntries.clear(); m_householdWatchlistEntries.clear();
+  m_mediaSegments.clear(); m_watchlistEntries.clear(); m_watchlistItems.clear();
+  m_householdWatchlistEntries.clear(); m_householdWatchlistItems.clear();
+  ++m_watchlistItemsRevision;
+  ++m_householdWatchlistItemsRevision;
   m_watchlistRevision = 0; m_householdWatchlistRevision = 0;
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   m_token = token;
@@ -1689,6 +1920,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
   emit seriesPlaybackPreferencesChanged();
   refreshProfileSettings();
+  refreshLibraryMenuPreferences();
   refreshHome();
   refreshWatchlist();
   refreshHouseholdWatchlist();
@@ -1702,10 +1934,17 @@ void FamilyApiClient::signOut()
   ++m_profileAttemptRevision;
   ++m_sessionRevision;
   ++m_profileSettingsRevision;
+  ++m_libraryMenuPrefsRevision;
   m_profileSettingsReady = false;
   m_profileSettingsWriteActive = false;
   m_profileSettingsValues.clear();
   m_pendingProfileSettings.clear();
+  m_libraryMenuPrefsReady = false;
+  m_libraryMenuWriteActive = false;
+  m_libraryMenuPrefsValues.clear();
+  m_libraryMenuPending.clear();
+  m_homeRowOrder.clear();
+  m_hiddenHomeRows.clear();
   ++m_homeRevision;
   ++m_libraryBrowseRevision;
   ++m_itemRevision;
@@ -1748,8 +1987,10 @@ void FamilyApiClient::signOut()
   m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear();
   ++m_tvGuideRevision;
-  m_watchlistEntries.clear(); m_watchlistRevision = 0;
-  m_householdWatchlistEntries.clear(); m_householdWatchlistRevision = 0;
+  m_watchlistEntries.clear(); m_watchlistItems.clear(); m_watchlistRevision = 0;
+  ++m_watchlistItemsRevision;
+  m_householdWatchlistEntries.clear(); m_householdWatchlistItems.clear(); m_householdWatchlistRevision = 0;
+  ++m_householdWatchlistItemsRevision;
   m_settings.remove(QStringLiteral("token"));
   m_settings.remove(QStringLiteral("userId"));
   m_settings.remove(QStringLiteral("userName"));
@@ -1810,7 +2051,7 @@ void FamilyApiClient::refreshHome()
     QVariantList ordered;
     for (const QString& id : order) {
       for (const auto& value : m_libraries) {
-        if (value.toMap().value(QStringLiteral("Id")).toString() == id) {
+        if (plainLibraryId(value.toMap().value(QStringLiteral("Id")).toString()) == plainLibraryId(id)) {
           ordered.append(value);
           break;
         }
@@ -1818,7 +2059,7 @@ void FamilyApiClient::refreshHome()
     }
     for (const auto& value : m_libraries) {
       const QString id = value.toMap().value(QStringLiteral("Id")).toString();
-      if (!order.contains(id)) ordered.append(value);
+      if (!order.contains(plainLibraryId(id))) ordered.append(value);
     }
     m_libraries = ordered;
     const QVariantList previousRows = m_libraryRows;
@@ -2057,14 +2298,48 @@ void FamilyApiClient::refreshWatchlist()
 {
   if (!signedIn()) return;
   const quint64 revision = m_sessionRevision;
+  const quint64 itemsRevision = ++m_watchlistItemsRevision;
   request("GET", QStringLiteral("FamilyFlix/Watchlists/personal"), {}, {},
-          [this, revision](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision) return;
+          [this, revision, itemsRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || itemsRevision != m_watchlistItemsRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Watchlist could not load.")); return; }
     const auto document = data.toMap();
     m_watchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
     m_watchlistEntries = document.value(QStringLiteral("entries")).toList();
+    m_watchlistItems.clear();
     emit watchlistChanged();
+    QStringList ids;
+    for (const auto& value : m_watchlistEntries) {
+      const QString id = value.toMap().value(QStringLiteral("itemId")).toString();
+      if (!id.isEmpty() && !ids.contains(id, Qt::CaseInsensitive)) ids.append(id);
+      if (ids.size() == 100) break;
+    }
+    if (ids.isEmpty()) {
+      m_watchlistItems.clear();
+      emit watchlistChanged();
+      return;
+    }
+    request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+            { { QStringLiteral("Ids"), ids.join(',') },
+              { QStringLiteral("EnableUserData"), true },
+              { QStringLiteral("EnableImages"), true },
+              { QStringLiteral("Limit"), ids.size() } }, {},
+            [this, revision, itemsRevision](const QVariant& metadata, const QString& metadataError) {
+      if (revision != m_sessionRevision || itemsRevision != m_watchlistItemsRevision) return;
+      if (!metadataError.isEmpty()) return;
+      QHash<QString, QVariantMap> byId;
+      for (const auto& value : items(metadata)) {
+        const QVariantMap item = value.toMap();
+        byId.insert(item.value(QStringLiteral("Id")).toString().toLower(), item);
+      }
+      QVariantList ordered;
+      for (const auto& value : m_watchlistEntries) {
+        const QString id = value.toMap().value(QStringLiteral("itemId")).toString().toLower();
+        if (byId.contains(id)) ordered.append(byId.value(id));
+      }
+      m_watchlistItems = ordered;
+      emit watchlistChanged();
+    });
   });
 }
 
@@ -2072,14 +2347,48 @@ void FamilyApiClient::refreshHouseholdWatchlist()
 {
   if (!signedIn()) return;
   const quint64 revision = m_sessionRevision;
+  const quint64 itemsRevision = ++m_householdWatchlistItemsRevision;
   request("GET", QStringLiteral("FamilyFlix/Watchlists/household"), {}, {},
-          [this, revision](const QVariant& data, const QString& error) {
-    if (revision != m_sessionRevision) return;
+          [this, revision, itemsRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || itemsRevision != m_householdWatchlistItemsRevision) return;
     if (!error.isEmpty()) { emit errorOccurred(QStringLiteral("Family watchlist could not load.")); return; }
     const auto document = data.toMap();
     m_householdWatchlistRevision = document.value(QStringLiteral("revision")).toLongLong();
     m_householdWatchlistEntries = document.value(QStringLiteral("entries")).toList();
+    m_householdWatchlistItems.clear();
     emit watchlistChanged();
+    QStringList ids;
+    for (const auto& value : m_householdWatchlistEntries) {
+      const QString id = value.toMap().value(QStringLiteral("itemId")).toString();
+      if (!id.isEmpty() && !ids.contains(id, Qt::CaseInsensitive)) ids.append(id);
+      if (ids.size() == 100) break;
+    }
+    if (ids.isEmpty()) {
+      m_householdWatchlistItems.clear();
+      emit watchlistChanged();
+      return;
+    }
+    request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+            { { QStringLiteral("Ids"), ids.join(',') },
+              { QStringLiteral("EnableUserData"), true },
+              { QStringLiteral("EnableImages"), true },
+              { QStringLiteral("Limit"), ids.size() } }, {},
+            [this, revision, itemsRevision](const QVariant& metadata, const QString& metadataError) {
+      if (revision != m_sessionRevision || itemsRevision != m_householdWatchlistItemsRevision) return;
+      if (!metadataError.isEmpty()) return;
+      QHash<QString, QVariantMap> byId;
+      for (const auto& value : items(metadata)) {
+        const QVariantMap item = value.toMap();
+        byId.insert(item.value(QStringLiteral("Id")).toString().toLower(), item);
+      }
+      QVariantList ordered;
+      for (const auto& value : m_householdWatchlistEntries) {
+        const QString id = value.toMap().value(QStringLiteral("itemId")).toString().toLower();
+        if (byId.contains(id)) ordered.append(byId.value(id));
+      }
+      m_householdWatchlistItems = ordered;
+      emit watchlistChanged();
+    });
   });
 }
 

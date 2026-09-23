@@ -43,6 +43,9 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList deckItems READ deckItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList libraryRows READ libraryRows NOTIFY homeChanged)
+  Q_PROPERTY(QStringList homeRowOrder READ homeRowOrder NOTIFY homeChanged)
+  Q_PROPERTY(QStringList hiddenHomeRows READ hiddenHomeRows NOTIFY homeChanged)
+  Q_PROPERTY(QVariantList homeLayoutRows READ homeLayoutRows NOTIFY homeChanged)
   Q_PROPERTY(QVariantMap selectedLibrary READ selectedLibrary NOTIFY libraryBrowseChanged)
   Q_PROPERTY(QVariantList libraryItems READ libraryItems NOTIFY libraryBrowseChanged)
   Q_PROPERTY(bool libraryHasMore READ libraryHasMore NOTIFY libraryBrowseChanged)
@@ -51,7 +54,9 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList selectedCast READ selectedCast NOTIFY selectedCastChanged)
   Q_PROPERTY(QVariantMap selectedIssueSummary READ selectedIssueSummary NOTIFY selectedIssueSummaryChanged)
   Q_PROPERTY(QVariantList watchlistEntries READ watchlistEntries NOTIFY watchlistChanged)
+  Q_PROPERTY(QVariantList watchlistItems READ watchlistItems NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList householdWatchlistEntries READ householdWatchlistEntries NOTIFY watchlistChanged)
+  Q_PROPERTY(QVariantList householdWatchlistItems READ householdWatchlistItems NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList seasons READ seasons NOTIFY seriesChanged)
   Q_PROPERTY(QVariantList episodes READ episodes NOTIFY seriesChanged)
   Q_PROPERTY(QVariantList seasonCast READ seasonCast NOTIFY seriesChanged)
@@ -107,6 +112,9 @@ public:
   QVariantList continueItems() const { return m_continueItems; }
   QVariantList deckItems() const { return m_deckItems; }
   QVariantList libraryRows() const { return m_libraryRows; }
+  QStringList homeRowOrder() const { return m_homeRowOrder; }
+  QStringList hiddenHomeRows() const { return m_hiddenHomeRows; }
+  QVariantList homeLayoutRows() const;
   QVariantMap selectedLibrary() const { return m_selectedLibrary; }
   QVariantList libraryItems() const { return m_libraryItems; }
   bool libraryHasMore() const { return m_libraryHasMore; }
@@ -115,7 +123,9 @@ public:
   QVariantList selectedCast() const { return m_selectedCast; }
   QVariantMap selectedIssueSummary() const { return m_selectedIssueSummary; }
   QVariantList watchlistEntries() const { return m_watchlistEntries; }
+  QVariantList watchlistItems() const { return m_watchlistItems; }
   QVariantList householdWatchlistEntries() const { return m_householdWatchlistEntries; }
+  QVariantList householdWatchlistItems() const { return m_householdWatchlistItems; }
   QVariantList seasons() const { return m_seasons; }
   QVariantList episodes() const { return m_episodes; }
   QVariantList seasonCast() const { return m_seasonCast; }
@@ -178,6 +188,9 @@ public:
   Q_INVOKABLE bool libraryVisibleInRail(const QString& libraryId) const;
   Q_INVOKABLE void setLibraryVisibleInRail(const QString& libraryId, bool visible);
   Q_INVOKABLE void moveLibrary(const QString& libraryId, int offset);
+  Q_INVOKABLE QString homeRowIdForLibrary(const QString& libraryId) const;
+  Q_INVOKABLE void setHomeRowVisible(const QString& rowId, bool visible);
+  Q_INVOKABLE void moveHomeRow(const QString& rowId, int offset);
   Q_INVOKABLE void openItem(const QString& itemId);
   Q_INVOKABLE void openSeason(const QString& seasonId);
   Q_INVOKABLE void refreshPlaylists();
@@ -286,6 +299,10 @@ private:
   void refreshGroupDeck(quint64 session, quint64 homeRevision);
   void loadKidsSettings();
   void saveKidsSettings();
+  void refreshLibraryMenuPreferences();
+  void applyLibraryMenuPreferences(const QVariantMap& customPrefs);
+  void changeLibraryMenuPreference(const QString& key, const QString& value);
+  void flushLibraryMenuPreferences();
   void refreshProfileSettings();
   void applyProfileSettings(const QVariantMap& values);
   void changeProfileSetting(const QString& key, const QString& value);
@@ -329,6 +346,11 @@ private:
   quint64 m_familyNightRevision = 0;
   QVariantList m_publicUsers;
   QVariantList m_libraries;
+  QVariantMap m_libraryMenuPrefsValues;
+  QVariantMap m_libraryMenuPending;
+  bool m_libraryMenuPrefsReady = false;
+  bool m_libraryMenuWriteActive = false;
+  quint64 m_libraryMenuPrefsRevision = 0;
   QVariantList m_continueItems;
   QVariantList m_deckItems;
   QVariantList m_recentDeckActivity;
@@ -336,6 +358,8 @@ private:
   bool m_recentDeckActivityReady = false;
   bool m_deckCorrectionStarted = false;
   QVariantList m_libraryRows;
+  QStringList m_homeRowOrder;
+  QStringList m_hiddenHomeRows;
   QVariantMap m_selectedLibrary;
   QVariantList m_libraryItems;
   bool m_libraryHasMore = false;
@@ -345,7 +369,11 @@ private:
   QVariantList m_selectedCast;
   QVariantMap m_selectedIssueSummary;
   QVariantList m_watchlistEntries;
+  QVariantList m_watchlistItems;
+  quint64 m_watchlistItemsRevision = 0;
   QVariantList m_householdWatchlistEntries;
+  QVariantList m_householdWatchlistItems;
+  quint64 m_householdWatchlistItemsRevision = 0;
   QVariantList m_seasons;
   QVariantList m_episodes;
   QVariantList m_seasonCast;

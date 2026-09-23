@@ -94,12 +94,30 @@ Window {
     property var activeSkipSegment: ({})
     property string lastSkipSegmentKey: ""
     property var homeRows: {
-        let rows = []
-        if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
-        if (familyApi.groupDeckItems.length) rows.push({ title: "The Deck · Watching Together", items: familyApi.groupDeckItems })
-        if (familyApi.deckItems.length) rows.push({ title: "The Deck", items: familyApi.deckItems })
+        const buckets = {}
+        if (familyApi.continueItems.length)
+            buckets.continue = [{ title: "Continue Watching", items: familyApi.continueItems }]
+        const deck = []
+        if (familyApi.groupDeckItems.length)
+            deck.push({ title: "The Deck · Watching Together", items: familyApi.groupDeckItems })
+        if (familyApi.deckItems.length) deck.push({ title: "The Deck", items: familyApi.deckItems })
+        if (deck.length) buckets.deck = deck
+        if (familyApi.watchlistItems.length)
+            buckets.watchlist = [{ title: "Watchlist", items: familyApi.watchlistItems }]
+        const defaults = ["continue", "deck", "watchlist"]
         for (let row of familyApi.libraryRows) {
-            if (row.Items && row.Items.length) rows.push({ title: row.Name, items: row.Items })
+            const key = familyApi.homeRowIdForLibrary(row.Id)
+            if (!key) continue
+            defaults.push(key)
+            if (row.Items && row.Items.length) buckets[key] = [{ title: row.Name, items: row.Items }]
+        }
+        const rows = []
+        const seen = []
+        for (const key of familyApi.homeRowOrder.concat(defaults)) {
+            if (seen.includes(key)) continue
+            seen.push(key)
+            if (familyApi.hiddenHomeRows.includes(key)) continue
+            for (const row of (buckets[key] || [])) rows.push(row)
         }
         return rows
     }
@@ -111,6 +129,7 @@ Window {
         }
         for (const item of familyApi.continueItems) if (item.Id) choices.push(item)
         for (const item of familyApi.deckItems) if (item.Id) choices.push(item)
+        for (const item of familyApi.watchlistItems) if (item.Id) choices.push(item)
         const valid = choices.filter(function(item) { return artworkChoices(item, "backdrop").length > 0 })
         if (!valid.length) return
         const alternatives = valid.filter(function(item) {
@@ -206,10 +225,16 @@ Window {
     }
 
     function watchlistOfType(type) {
-        const result = []
         const entries = watchlistMode === "household" ? familyApi.householdWatchlistEntries : familyApi.watchlistEntries
+        const resolved = watchlistMode === "household" ? familyApi.householdWatchlistItems : familyApi.watchlistItems
+        const result = []
         for (const entry of entries) {
-            if (entry.itemType === type) result.push(entry)
+            if (entry.itemType !== type) continue
+            const item = resolved.find(function(candidate) {
+                return String(candidate.Id || "").toLowerCase() === String(entry.itemId || "").toLowerCase()
+            })
+            result.push(item || { Id: entry.itemId, Name: entry.title,
+                Type: type === "series" ? "Series" : "Movie" })
         }
         return result
     }
@@ -478,6 +503,11 @@ Window {
             Qt.callLater(function() { libraryItemsGrid.forceActiveFocus() })
         } else if (page === "seriesOptions") {
             Qt.callLater(function() { seriesOptionsBack.forceActiveFocus() })
+        } else if (page === "watchlist") {
+            Qt.callLater(function() {
+                const first = movieWatchlistRepeater.itemAt(0) || showWatchlistRepeater.itemAt(0)
+                if (first) first.forceActiveFocus()
+            })
         }
     }
 
@@ -598,6 +628,11 @@ Window {
             window.requestTvGuide()
         }
         function onHomeChanged() {
+            if (!window.backgroundRandomId) Qt.callLater(window.cycleBackground)
+            if (window.page === "home" && window.homeCardFocused)
+                Qt.callLater(window.focusHomeItem)
+        }
+        function onWatchlistChanged() {
             if (!window.backgroundRandomId) Qt.callLater(window.cycleBackground)
             if (window.page === "home" && window.homeCardFocused)
                 Qt.callLater(window.focusHomeItem)
@@ -1398,6 +1433,7 @@ Window {
             }
             Text { text: "Movies"; color: "white"; font.pixelSize: 24; font.bold: true }
             Flickable {
+                id: movieWatchlistScroll
                 width: parent.width
                 height: 190
                 contentWidth: movieRow.width
@@ -1406,18 +1442,56 @@ Window {
                     id: movieRow
                     spacing: 12
                     Repeater {
+                        id: movieWatchlistRepeater
                         model: window.watchlistOfType("movie")
-                        NativeAction {
+                        Rectangle {
+                            id: movieWatchlistCard
+                            required property var modelData
+                            required property int index
                             width: 225
                             height: 160
-                            text: (modelData.title || "Movie") + (watchlistMode === "household" ? "  ·  " + (modelData.voteCount || 0) + " votes" : "")
-                            onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
+                            radius: 8
+                            color: familyApi.themeSurface
+                            border.width: activeFocus ? 3 : 1
+                            border.color: activeFocus ? familyApi.themeAccent : familyApi.themeAccentSecondary
+                            activeFocusOnTab: true
+                            onActiveFocusChanged: if (activeFocus) {
+                                if (x < movieWatchlistScroll.contentX)
+                                    movieWatchlistScroll.contentX = Math.max(0, x - 8)
+                                else if (x + width > movieWatchlistScroll.contentX + movieWatchlistScroll.width)
+                                    movieWatchlistScroll.contentX = x + width - movieWatchlistScroll.width + 8
+                            }
+                            Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
+                            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
+                            Text {
+                                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                anchors.margins: 8
+                                text: (modelData.Name || "Movie") + (watchlistMode === "household"
+                                    ? " · " + Number((window.householdEntry(modelData.Id) || {}).voteCount || 0) + " votes" : "")
+                                color: "white"; font.pixelSize: 16; font.bold: true; elide: Text.ElideRight
+                            }
+                            Keys.onReturnPressed: window.showItem(modelData, "watchlist")
+                            Keys.onEnterPressed: window.showItem(modelData, "watchlist")
+                            Keys.onLeftPressed: {
+                                const other = movieWatchlistRepeater.itemAt(index - 1)
+                                if (other) other.forceActiveFocus()
+                            }
+                            Keys.onRightPressed: {
+                                const other = movieWatchlistRepeater.itemAt(index + 1)
+                                if (other) other.forceActiveFocus()
+                            }
+                            Keys.onDownPressed: {
+                                const other = showWatchlistRepeater.itemAt(Math.min(index, showWatchlistRepeater.count - 1))
+                                if (other) other.forceActiveFocus()
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: { movieWatchlistCard.forceActiveFocus(); window.showItem(modelData, "watchlist") } }
                         }
                     }
                 }
             }
             Text { text: "Shows"; color: "white"; font.pixelSize: 24; font.bold: true }
             Flickable {
+                id: showWatchlistScroll
                 width: parent.width
                 height: 190
                 contentWidth: showRow.width
@@ -1426,12 +1500,49 @@ Window {
                     id: showRow
                     spacing: 12
                     Repeater {
+                        id: showWatchlistRepeater
                         model: window.watchlistOfType("series")
-                        NativeAction {
+                        Rectangle {
+                            id: showWatchlistCard
+                            required property var modelData
+                            required property int index
                             width: 225
                             height: 160
-                            text: (modelData.title || "Show") + (watchlistMode === "household" ? "  ·  " + (modelData.voteCount || 0) + " votes" : "")
-                            onClicked: window.showItem({ Id: modelData.itemId, Name: modelData.title }, "watchlist")
+                            radius: 8
+                            color: familyApi.themeSurface
+                            border.width: activeFocus ? 3 : 1
+                            border.color: activeFocus ? familyApi.themeAccent : familyApi.themeAccentSecondary
+                            activeFocusOnTab: true
+                            onActiveFocusChanged: if (activeFocus) {
+                                if (x < showWatchlistScroll.contentX)
+                                    showWatchlistScroll.contentX = Math.max(0, x - 8)
+                                else if (x + width > showWatchlistScroll.contentX + showWatchlistScroll.width)
+                                    showWatchlistScroll.contentX = x + width - showWatchlistScroll.width + 8
+                            }
+                            Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
+                            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
+                            Text {
+                                anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                anchors.margins: 8
+                                text: (modelData.Name || "Show") + (watchlistMode === "household"
+                                    ? " · " + Number((window.householdEntry(modelData.Id) || {}).voteCount || 0) + " votes" : "")
+                                color: "white"; font.pixelSize: 16; font.bold: true; elide: Text.ElideRight
+                            }
+                            Keys.onReturnPressed: window.showItem(modelData, "watchlist")
+                            Keys.onEnterPressed: window.showItem(modelData, "watchlist")
+                            Keys.onLeftPressed: {
+                                const other = showWatchlistRepeater.itemAt(index - 1)
+                                if (other) other.forceActiveFocus()
+                            }
+                            Keys.onRightPressed: {
+                                const other = showWatchlistRepeater.itemAt(index + 1)
+                                if (other) other.forceActiveFocus()
+                            }
+                            Keys.onUpPressed: {
+                                const other = movieWatchlistRepeater.itemAt(Math.min(index, movieWatchlistRepeater.count - 1))
+                                if (other) other.forceActiveFocus()
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: { showWatchlistCard.forceActiveFocus(); window.showItem(modelData, "watchlist") } }
                         }
                     }
                 }
@@ -1603,6 +1714,36 @@ Window {
                             NativeAction { width: 70; text: "↑"; onClicked: familyApi.moveLibrary(modelData.Id, -1) }
                             NativeAction { width: 70; text: "↓"; onClicked: familyApi.moveLibrary(modelData.Id, 1) }
                         }
+                }
+            }
+            Text { text: "Home rows"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
+            Text {
+                text: "These choices are shared with your Android app."
+                color: familyApi.themeText; font.pixelSize: 16
+            }
+            Column {
+                width: parent.width
+                spacing: 8
+                Repeater {
+                    model: familyApi.homeLayoutRows
+                    Row {
+                        required property var modelData
+                        spacing: 12
+                        Text {
+                            width: Math.max(250, window.width - 500)
+                            height: 55
+                            verticalAlignment: Text.AlignVCenter
+                            text: modelData.label
+                            color: familyApi.themeText; font.pixelSize: 19
+                        }
+                        NativeAction {
+                            width: 110
+                            text: modelData.visible ? "Hide" : "Show"
+                            onClicked: familyApi.setHomeRowVisible(modelData.id, !modelData.visible)
+                        }
+                        NativeAction { width: 70; text: "↑"; onClicked: familyApi.moveHomeRow(modelData.id, -1) }
+                        NativeAction { width: 70; text: "↓"; onClicked: familyApi.moveHomeRow(modelData.id, 1) }
+                    }
                 }
             }
             }
@@ -2573,6 +2714,10 @@ Window {
                                     window.explicitAudioSelection = true
                                     components.player.setAudioStream(Number(modelData.id))
                                     window.availableTracks = components.player.getPlaybackTracks()
+                                    if (window.playingItem.Type === "Episode" && modelData.lang
+                                        && familyApi.activeSeriesPlaybackValues.audioMode === "REMEMBER_LAST_SELECTION")
+                                        familyApi.setActiveSeriesPlaybackPreference(
+                                            "preferredAudioLanguage", String(modelData.lang).toLowerCase())
                                 }
                             }
                         }
