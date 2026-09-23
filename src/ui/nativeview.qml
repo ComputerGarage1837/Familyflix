@@ -1762,21 +1762,31 @@ Window {
                 }
             }
             ScrollView {
+                id: playlistScroll
                 width: parent.width
                 height: parent.height - 75
                 Column {
                     width: Math.max(700, window.width - 90)
                     spacing: 8
                     Repeater {
+                        id: playlistRows
                         model: familyApi.playlistItems
                         Row {
+                            id: playlistRow
                             required property var modelData
                             required property int index
                             spacing: 8
+                            function focusNeighbor(delta, column) {
+                                const row = playlistRows.itemAt(index + delta)
+                                if (row && row.children[column]) row.children[column].forceActiveFocus()
+                            }
                             NativeAction {
-                                width: Math.max(360, window.width - 690)
+                                width: Math.max(300, window.width - 720)
                                 height: 62
                                 text: (modelData.SeriesName ? modelData.SeriesName + " — " : "") + (modelData.Name || "Video")
+                                focusScroll: playlistScroll
+                                upAction: function() { playlistRow.focusNeighbor(-1, 0) }
+                                downAction: function() { playlistRow.focusNeighbor(1, 0) }
                                 onClicked: window.showItem(modelData, "playlist")
                             }
                             NativeAction {
@@ -1784,6 +1794,9 @@ Window {
                                 height: 62
                                 text: "▶ Play from here"
                                 enabled: modelData.Type === "Movie" || modelData.Type === "Episode" || modelData.Type === "Video"
+                                focusScroll: playlistScroll
+                                upAction: function() { playlistRow.focusNeighbor(-1, 1) }
+                                downAction: function() { playlistRow.focusNeighbor(1, 1) }
                                 onClicked: {
                                     const playableIndex = familyApi.playlistItems.slice(0, index).filter(function(item) {
                                         return item.Type === "Movie" || item.Type === "Episode" || item.Type === "Video"
@@ -1796,6 +1809,9 @@ Window {
                                 height: 62
                                 text: "↑"
                                 visible: index > 0
+                                focusScroll: playlistScroll
+                                upAction: function() { playlistRow.focusNeighbor(-1, 2) }
+                                downAction: function() { playlistRow.focusNeighbor(1, 2) }
                                 onClicked: familyApi.movePlaylistEntry(familyApi.selectedPlaylistId, modelData.PlaylistItemId, index - 1)
                             }
                             NativeAction {
@@ -1803,12 +1819,18 @@ Window {
                                 height: 62
                                 text: "↓"
                                 visible: index < familyApi.playlistItems.length - 1
+                                focusScroll: playlistScroll
+                                upAction: function() { playlistRow.focusNeighbor(-1, 3) }
+                                downAction: function() { playlistRow.focusNeighbor(1, 3) }
                                 onClicked: familyApi.movePlaylistEntry(familyApi.selectedPlaylistId, modelData.PlaylistItemId, index + 1)
                             }
                             NativeAction {
                                 width: 210
                                 height: 62
                                 text: "Remove from Playlist"
+                                focusScroll: playlistScroll
+                                upAction: function() { playlistRow.focusNeighbor(-1, 4) }
+                                downAction: function() { playlistRow.focusNeighbor(1, 4) }
                                 onClicked: familyApi.removePlaylistEntry(familyApi.selectedPlaylistId, modelData.PlaylistItemId)
                             }
                         }
