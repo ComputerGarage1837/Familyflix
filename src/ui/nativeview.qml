@@ -643,7 +643,7 @@ Window {
             : (page === "nextEpisode" && nextEpisode.Id ? nextEpisode
             : (page === "home" && focusedItem.Id ? focusedItem : backgroundRandomItem)
               )
-        opacity: page === "player" ? 0 : 0.32
+        opacity: page === "player" || !familyApi.backdropEnabled ? 0 : 0.65
     }
     Rectangle {
         anchors.fill: parent
@@ -651,7 +651,7 @@ Window {
             GradientStop { position: 0; color: familyApi.themeAccentSecondary }
             GradientStop { position: 1; color: familyApi.themeScreen }
         }
-        opacity: 0.78
+        opacity: 0.50
         visible: page !== "player"
     }
 
@@ -1068,6 +1068,7 @@ Window {
         }
         Text {
             text: Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP")
+            visible: familyApi.clockBehavior === "ALWAYS" || familyApi.clockBehavior === "IN_MENUS"
             anchors.top: parent.top
             anchors.topMargin: 22
             anchors.horizontalCenter: parent.horizontalCenter
@@ -1439,10 +1440,14 @@ Window {
     Item {
         anchors.fill: parent
         visible: page === "settings"
-        Column {
+        ScrollView {
+            id: settingsView
             anchors.fill: parent
             anchors.margins: 40
-            spacing: 16
+            clip: true
+            Column {
+              width: settingsView.availableWidth
+              spacing: 16
             Row {
                 spacing: 18
                 NativeAction { text: "← Home"; onClicked: page = "home" }
@@ -1452,6 +1457,8 @@ Window {
             NativeAction { text: "Intro, recap and outro skipping"; width: 325; onClicked: page = "skipSettings" }
             NativeAction { text: "Playback buffers"; width: 325; onClicked: page = "bufferSettings" }
             NativeAction { text: "Next episode screen: " + familyApi.nextUpMode; width: 325; onClicked: familyApi.cycleNextUpMode() }
+            NativeAction { text: "Background images: " + (familyApi.backdropEnabled ? "On" : "Off"); width: 325; onClicked: familyApi.toggleBackdropEnabled() }
+            NativeAction { text: "Clock: " + familyApi.clockBehavior.replace(/_/g, " "); width: 325; onClicked: familyApi.cycleClockBehavior() }
             NativeAction { text: "Check Windows updates"; width: 325; onClicked: familyApi.checkWindowsUpdate(true) }
             Flickable {
                 width: parent.width
@@ -1480,13 +1487,10 @@ Window {
                 text: "Hidden libraries stay on Home. Move changes both menu and Home order."
                 color: "#c8d5e3"; font.pixelSize: 16
             }
-            ScrollView {
+            Column {
                 width: parent.width
-                height: parent.height - 260
-                Column {
-                    width: Math.max(800, window.width - 90)
-                    spacing: 8
-                    Repeater {
+                spacing: 8
+                Repeater {
                         model: familyApi.libraries
                         Row {
                             required property var modelData
@@ -1506,8 +1510,8 @@ Window {
                             NativeAction { width: 70; text: "↑"; onClicked: familyApi.moveLibrary(modelData.Id, -1) }
                             NativeAction { width: 70; text: "↓"; onClicked: familyApi.moveLibrary(modelData.Id, 1) }
                         }
-                    }
                 }
+            }
             }
         }
     }
@@ -1619,6 +1623,7 @@ Window {
             anchors.right: parent.right
             anchors.rightMargin: 24
             y: 25
+            visible: familyApi.clockBehavior === "ALWAYS" || familyApi.clockBehavior === "IN_MENUS"
             color: "white"; font.pixelSize: 18
             text: Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP")
             Timer { interval: 30000; running: window.page === "liveTv"; repeat: true; onTriggered: parent.text = Qt.formatDateTime(new Date(), "ddd MMM d  •  h:mm AP") }
@@ -2334,6 +2339,7 @@ Window {
                 }
                 Text {
                     text: Qt.formatDateTime(new Date(), "h:mm AP")
+                    visible: familyApi.clockBehavior === "ALWAYS" || familyApi.clockBehavior === "IN_VIDEO"
                     color: "white"
                     font.pixelSize: 18
                     anchors.verticalCenter: parent.verticalCenter

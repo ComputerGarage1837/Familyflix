@@ -32,6 +32,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(int kidsBedtimeStart READ kidsBedtimeStart NOTIFY kidsSettingsChanged)
   Q_PROPERTY(bool kidsHasPin READ kidsHasPin NOTIFY kidsSettingsChanged)
   Q_PROPERTY(QString nextUpMode READ nextUpMode NOTIFY nextUpModeChanged)
+  Q_PROPERTY(bool backdropEnabled READ backdropEnabled NOTIFY profileAppearanceChanged)
+  Q_PROPERTY(QString clockBehavior READ clockBehavior NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
   Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
@@ -88,6 +90,8 @@ public:
   int kidsBedtimeStart() const { return m_kidsBedtimeStart; }
   bool kidsHasPin() const { return !m_kidsPinSalt.isEmpty() && !m_kidsPinHash.isEmpty(); }
   QString nextUpMode() const { return m_nextUpMode; }
+  bool backdropEnabled() const { return m_backdropEnabled; }
+  QString clockBehavior() const { return m_clockBehavior; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
   bool familyNightLoading() const { return m_familyNightLoading; }
@@ -143,6 +147,8 @@ public:
   Q_INVOKABLE bool kidsPlaybackAllowed() const;
   Q_INVOKABLE bool kidsSpoilerHidden(const QVariantMap& item) const;
   Q_INVOKABLE void cycleNextUpMode();
+  Q_INVOKABLE void toggleBackdropEnabled();
+  Q_INVOKABLE void cycleClockBehavior();
   Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void refreshCoWatchPresets();
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
@@ -202,6 +208,7 @@ signals:
   void coWatchChanged();
   void kidsSettingsChanged();
   void nextUpModeChanged();
+  void profileAppearanceChanged();
   void coWatchPresetsChanged();
   void familyNightChanged();
   void firstUnwatchedEpisodeReady(const QString& seriesId, const QVariantMap& episode);
@@ -263,6 +270,10 @@ private:
   void refreshGroupDeck(quint64 session, quint64 homeRevision);
   void loadKidsSettings();
   void saveKidsSettings();
+  void refreshProfileSettings();
+  void applyProfileSettings(const QVariantMap& values);
+  void changeProfileSetting(const QString& key, const QString& value);
+  void flushProfileSetting();
 
   QNetworkAccessManager m_network;
   QSettings m_settings;
@@ -282,6 +293,13 @@ private:
   QByteArray m_kidsPinSalt;
   QByteArray m_kidsPinHash;
   QString m_nextUpMode = QStringLiteral("Extended");
+  bool m_backdropEnabled = true;
+  QString m_clockBehavior = QStringLiteral("ALWAYS");
+  QVariantMap m_profileSettingsValues;
+  QVariantMap m_pendingProfileSettings;
+  bool m_profileSettingsWriteActive = false;
+  bool m_profileSettingsReady = false;
+  quint64 m_profileSettingsRevision = 0;
   QString m_homeFeedUserId;
   QString m_homeFeedToken;
   QVariantList m_coWatchPresets;
