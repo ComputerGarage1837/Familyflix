@@ -91,6 +91,7 @@ FamilyApiClient::FamilyApiClient(QObject* parent)
   if (!m_userId.isEmpty())
     m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                    QStringLiteral("Ocean")).toString();
+  if (!m_userId.isEmpty()) loadCoWatchParty();
 }
 
 QColor FamilyApiClient::themeScreen() const { return QColor(QLatin1String(paletteFor(m_themeName).screen)); }
@@ -202,6 +203,14 @@ void FamilyApiClient::requestWithStatus(const QByteArray& method, const QString&
                                         const QVariantMap& query, const QByteArray& body,
                                         StatusHandler handler)
 {
+  requestAs(method, path, query, body, m_token, m_userId, std::move(handler));
+}
+
+void FamilyApiClient::requestAs(const QByteArray& method, const QString& path,
+                                const QVariantMap& query, const QByteArray& body,
+                                const QString& token, const QString& userId,
+                                StatusHandler handler)
+{
   QUrl url = server.resolved(QUrl(path));
   QUrlQuery parameters;
   for (auto it = query.cbegin(); it != query.cend(); ++it)
@@ -211,12 +220,14 @@ void FamilyApiClient::requestWithStatus(const QByteArray& method, const QString&
   networkRequest.setRawHeader("Accept", "application/json");
   const bool publicRequest = path == QStringLiteral("Users/Public")
                           || path == QStringLiteral("Users/AuthenticateByName");
+  const QString deviceId = userId.isEmpty() || userId == m_userId
+    ? m_deviceId : QStringLiteral("%1-%2").arg(m_deviceId, userId.left(8));
   QString authorization = QStringLiteral(
     "MediaBrowser Client=\"Family Flix Windows\", Device=\"Windows\", "
-    "DeviceId=\"%1\", Version=\"0.1\"").arg(m_deviceId);
-  if (!publicRequest && !m_token.isEmpty()) {
-    authorization += QStringLiteral(", Token=\"%1\"").arg(m_token);
-    networkRequest.setRawHeader("X-Emby-Token", m_token.toUtf8());
+    "DeviceId=\"%1\", Version=\"0.1\"").arg(deviceId);
+  if (!publicRequest && !token.isEmpty()) {
+    authorization += QStringLiteral(", Token=\"%1\"").arg(token);
+    networkRequest.setRawHeader("X-Emby-Token", token.toUtf8());
   }
   networkRequest.setRawHeader("Authorization", authorization.toUtf8());
   networkRequest.setRawHeader("X-Emby-Authorization", authorization.toUtf8());
@@ -265,6 +276,8 @@ void FamilyApiClient::correctDeckFromRecent()
   m_deckCorrectionStarted = true;
   const quint64 session = m_sessionRevision;
   const quint64 home = m_homeRevision;
+  const QString feedUserId = m_homeFeedUserId;
+  const QString feedToken = m_homeFeedToken;
   QSet<QString> handled;
   int checked = 0;
   // DatePlayed descending makes the first qualified row the active playback anchor.
@@ -299,7 +312,7 @@ void FamilyApiClient::correctDeckFromRecent()
         && fallback.value(QStringLiteral("IndexNumber")).toInt() == firstEligible) continue;
     const QString seasonId = latest.value(QStringLiteral("SeasonId")).toString();
     if (seasonId.isEmpty()) continue;
-    request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+    requestAs("GET", QStringLiteral("Users/%1/Items").arg(feedUserId),
             { { QStringLiteral("ParentId"), seasonId },
               { QStringLiteral("Recursive"), true },
               { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
@@ -308,8 +321,8 @@ void FamilyApiClient::correctDeckFromRecent()
               { QStringLiteral("SortBy"), QStringLiteral("IndexNumber") },
               { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
               { QStringLiteral("EnableUserData"), true },
-              { QStringLiteral("Limit"), 250 } }, {},
-            [this, session, home, series, seasonNumber, firstEligible](const QVariant& response, const QString& error) {
+              { QStringLiteral("Limit"), 250 } }, {}, feedToken, feedUserId,
+            [this, session, home, series, seasonNumber, firstEligible](const QVariant& response, const QString& error, int) {
       if (session != m_sessionRevision || home != m_homeRevision || !error.isEmpty()) return;
       QVariantMap replacement;
       for (const auto& value : items(response)) {
@@ -397,7 +410,126 @@ void FamilyApiClient::refreshPublicUsers()
   request("GET", QStringLiteral("Users/Public"), {}, {}, [this](const QVariant& data, const QString& error) {
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_publicUsers = items(data);
+    reconcileCoWatchParty();
     emit publicUsersChanged();
+  });
+}
+
+QVariantList FamilyApiClient::coWatchProfiles() const
+{
+  if (m_userId.isEmpty()) return {};
+  QVariantList result{ QVariantMap{
+    { QStringLiteral("Id"), m_userId }, { QStringLiteral("Name"), m_userName },
+    { QStringLiteral("IsCurrent"), true } } };
+  for (const auto& value : m_publicUsers) {
+    const auto profile = value.toMap();
+    if (m_coWatchUserIds.contains(profile.value(QStringLiteral("Id")).toString()))
+      result.append(profile);
+  }
+  return result;
+}
+
+QString FamilyApiClient::coWatchLabel() const
+{
+  QStringList names;
+  for (const auto& value : coWatchProfiles())
+    names.append(value.toMap().value(QStringLiteral("Name")).toString());
+  return names.join(QLatin1Char('/'));
+}
+
+void FamilyApiClient::loadCoWatchParty()
+{
+  m_coWatchUserIds = m_settings.value(QStringLiteral("users/%1/coWatchUsers").arg(m_userId)).toStringList();
+  m_coWatchUserIds.removeAll(m_userId);
+  m_coWatchUserIds.removeDuplicates();
+  m_homeFeedOwnerId = m_settings.value(QStringLiteral("users/%1/coWatchFeedOwner").arg(m_userId),
+                                      m_userId).toString();
+  if (m_coWatchUserIds.isEmpty() || (m_homeFeedOwnerId != m_userId
+      && !m_coWatchUserIds.contains(m_homeFeedOwnerId))) m_homeFeedOwnerId = m_userId;
+  emit coWatchChanged();
+}
+
+void FamilyApiClient::saveCoWatchParty()
+{
+  if (m_userId.isEmpty()) return;
+  m_settings.setValue(QStringLiteral("users/%1/coWatchUsers").arg(m_userId), m_coWatchUserIds);
+  m_settings.setValue(QStringLiteral("users/%1/coWatchFeedOwner").arg(m_userId), m_homeFeedOwnerId);
+  emit coWatchChanged();
+}
+
+void FamilyApiClient::reconcileCoWatchParty()
+{
+  if (m_userId.isEmpty()) return;
+  QStringList allowed;
+  for (const auto& id : m_coWatchUserIds) {
+    if (hasSavedProfile(id) && id != m_userId) allowed.append(id);
+  }
+  if (allowed == m_coWatchUserIds) return;
+  m_coWatchUserIds = allowed;
+  if (m_homeFeedOwnerId != m_userId && !allowed.contains(m_homeFeedOwnerId))
+    m_homeFeedOwnerId = m_userId;
+  saveCoWatchParty();
+  refreshHome();
+}
+
+bool FamilyApiClient::setCoWatchProfile(const QString& userId, bool selected)
+{
+  if (!signedIn() || userId == m_userId || !hasSavedProfile(userId)) return false;
+  if (selected && !m_coWatchUserIds.contains(userId)) m_coWatchUserIds.append(userId);
+  else if (!selected) m_coWatchUserIds.removeAll(userId);
+  if (m_homeFeedOwnerId != m_userId && !m_coWatchUserIds.contains(m_homeFeedOwnerId))
+    m_homeFeedOwnerId = m_userId;
+  saveCoWatchParty();
+  refreshHome();
+  return true;
+}
+
+void FamilyApiClient::setHomeFeedOwner(const QString& userId)
+{
+  if (!signedIn() || (userId != m_userId && !m_coWatchUserIds.contains(userId))
+      || userId == m_homeFeedOwnerId) return;
+  m_homeFeedOwnerId = userId;
+  saveCoWatchParty();
+  refreshHome();
+}
+
+void FamilyApiClient::stopWatchingTogether()
+{
+  if (!signedIn() || m_coWatchUserIds.isEmpty()) return;
+  m_coWatchUserIds.clear();
+  m_homeFeedOwnerId = m_userId;
+  saveCoWatchParty();
+  refreshHome();
+}
+
+void FamilyApiClient::authenticateParticipant(const QString& userId, const QString& password)
+{
+  if (!signedIn() || userId.isEmpty() || userId == m_userId) return;
+  QString name;
+  for (const auto& value : m_publicUsers) {
+    const auto profile = value.toMap();
+    if (profile.value(QStringLiteral("Id")).toString() == userId)
+      name = profile.value(QStringLiteral("Name")).toString();
+  }
+  if (name.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  const QByteArray body = QJsonDocument(QJsonObject{
+    { QStringLiteral("Username"), name }, { QStringLiteral("Pw"), password }
+  }).toJson(QJsonDocument::Compact);
+  request("POST", QStringLiteral("Users/AuthenticateByName"), {}, body,
+          [this, session, userId](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    const auto login = data.toMap();
+    if (!error.isEmpty() || login.value(QStringLiteral("User")).toMap()
+        .value(QStringLiteral("Id")).toString() != userId) {
+      emit errorOccurred(QStringLiteral("That profile could not sign in."));
+      return;
+    }
+    const QString token = login.value(QStringLiteral("AccessToken")).toString();
+    if (token.isEmpty()) { emit errorOccurred(QStringLiteral("That profile could not sign in.")); return; }
+    m_settings.setValue(QStringLiteral("profiles/%1/token").arg(userId), token);
+    emit coWatchChanged();
+    setCoWatchProfile(userId, true);
   });
 }
 
@@ -485,6 +617,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_token = token;
   m_userId = userId;
   m_userName = userName;
+  loadCoWatchParty();
   m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                  QStringLiteral("Ocean")).toString();
   m_settings.setValue(QStringLiteral("token"), m_token);
@@ -497,6 +630,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   refreshHome();
   refreshWatchlist();
   refreshHouseholdWatchlist();
+  refreshPublicUsers();
 }
 
 void FamilyApiClient::signOut()
@@ -511,6 +645,7 @@ void FamilyApiClient::signOut()
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
+  m_coWatchUserIds.clear(); m_homeFeedOwnerId.clear(); m_homeFeedUserId.clear(); m_homeFeedToken.clear();
   m_themeName = QStringLiteral("Ocean");
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear();
   m_recentDeckActivity.clear();
@@ -528,6 +663,7 @@ void FamilyApiClient::signOut()
   m_settings.remove(QStringLiteral("userId"));
   m_settings.remove(QStringLiteral("userName"));
   emit sessionChanged();
+  emit coWatchChanged();
   emit themeChanged();
   emit homeChanged();
   emit libraryBrowseChanged();
@@ -546,6 +682,14 @@ void FamilyApiClient::refreshHome()
   if (!signedIn()) return;
   const quint64 revision = m_sessionRevision;
   const quint64 homeRevision = ++m_homeRevision;
+  m_homeFeedUserId = m_userId;
+  m_homeFeedToken = m_token;
+  if (watchingTogether() && m_homeFeedOwnerId != m_userId && hasSavedProfile(m_homeFeedOwnerId)) {
+    m_homeFeedUserId = m_homeFeedOwnerId;
+    m_homeFeedToken = m_settings.value(QStringLiteral("profiles/%1/token").arg(m_homeFeedOwnerId)).toString();
+  }
+  const QString feedUserId = m_homeFeedUserId;
+  const QString feedToken = m_homeFeedToken;
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   request("GET", QStringLiteral("Users/%1/Views").arg(m_userId), {}, {},
@@ -613,26 +757,34 @@ void FamilyApiClient::refreshHome()
     m_libraryRows = nextRows;
     emit homeChanged();
   });
-  request("GET", QStringLiteral("Users/%1/Items/Resume").arg(m_userId),
+  requestAs("GET", QStringLiteral("Users/%1/Items/Resume").arg(feedUserId),
           { { QStringLiteral("Limit"), 15 }, { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode,Movie") } }, {},
-          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+          feedToken, feedUserId,
+          [this, revision, homeRevision, feedUserId](const QVariant& data, const QString& error, int status) {
     if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
+    if (status == 401 || status == 403) {
+      if (feedUserId != m_userId) { setHomeFeedOwner(m_userId); return; }
+    }
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_continueItems = items(data);
     emit homeChanged();
   });
-  request("GET", QStringLiteral("Shows/NextUp"),
-          { { QStringLiteral("UserId"), m_userId }, { QStringLiteral("Limit"), 30 },
+  requestAs("GET", QStringLiteral("Shows/NextUp"),
+          { { QStringLiteral("UserId"), feedUserId }, { QStringLiteral("Limit"), 30 },
             { QStringLiteral("EnableResumable"), false }, { QStringLiteral("EnableRewatching"), true } }, {},
-          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+          feedToken, feedUserId,
+          [this, revision, homeRevision, feedUserId](const QVariant& data, const QString& error, int status) {
     if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
+    if ((status == 401 || status == 403) && feedUserId != m_userId) {
+      setHomeFeedOwner(m_userId); return;
+    }
     if (!error.isEmpty()) { emit errorOccurred(error); return; }
     m_deckItems = untouchedDeck(items(data));
     emit homeChanged();
     m_deckFallbackReady = true;
     correctDeckFromRecent();
   });
-  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+  requestAs("GET", QStringLiteral("Users/%1/Items").arg(feedUserId),
           { { QStringLiteral("Recursive"), true },
             { QStringLiteral("IncludeItemTypes"), QStringLiteral("Episode") },
             { QStringLiteral("SortBy"), QStringLiteral("DatePlayed") },
@@ -640,9 +792,12 @@ void FamilyApiClient::refreshHome()
             { QStringLiteral("EnableUserData"), true },
             { QStringLiteral("EnableImages"), false },
             { QStringLiteral("EnableTotalRecordCount"), false },
-            { QStringLiteral("Limit"), 60 } }, {},
-          [this, revision, homeRevision](const QVariant& data, const QString& error) {
+            { QStringLiteral("Limit"), 60 } }, {}, feedToken, feedUserId,
+          [this, revision, homeRevision, feedUserId](const QVariant& data, const QString& error, int status) {
     if (revision != m_sessionRevision || homeRevision != m_homeRevision) return;
+    if ((status == 401 || status == 403) && feedUserId != m_userId) {
+      setHomeFeedOwner(m_userId); return;
+    }
     if (!error.isEmpty()) return; // Keep the safe untouched Next Up fallback.
     m_recentDeckActivity = items(data);
     m_recentDeckActivityReady = true;

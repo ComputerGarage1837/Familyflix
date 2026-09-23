@@ -17,6 +17,10 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool signedIn READ signedIn NOTIFY sessionChanged)
   Q_PROPERTY(QString userName READ userName NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList publicUsers READ publicUsers NOTIFY publicUsersChanged)
+  Q_PROPERTY(QVariantList coWatchProfiles READ coWatchProfiles NOTIFY coWatchChanged)
+  Q_PROPERTY(bool watchingTogether READ watchingTogether NOTIFY coWatchChanged)
+  Q_PROPERTY(QString coWatchLabel READ coWatchLabel NOTIFY coWatchChanged)
+  Q_PROPERTY(QString homeFeedOwnerId READ homeFeedOwnerId NOTIFY coWatchChanged)
   Q_PROPERTY(QVariantList libraries READ libraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList railLibraries READ railLibraries NOTIFY homeChanged)
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
@@ -54,6 +58,10 @@ public:
   bool signedIn() const { return !m_token.isEmpty() && !m_userId.isEmpty(); }
   QString userName() const { return m_userName; }
   QVariantList publicUsers() const { return m_publicUsers; }
+  QVariantList coWatchProfiles() const;
+  bool watchingTogether() const { return !m_coWatchUserIds.isEmpty(); }
+  QString coWatchLabel() const;
+  QString homeFeedOwnerId() const { return m_homeFeedOwnerId; }
   QVariantList libraries() const { return m_libraries; }
   QVariantList railLibraries() const;
   QVariantList continueItems() const { return m_continueItems; }
@@ -89,6 +97,10 @@ public:
   Q_INVOKABLE void signIn(const QString& userName, const QString& password);
   Q_INVOKABLE bool hasSavedProfile(const QString& userId) const;
   Q_INVOKABLE void useSavedProfile(const QString& userId);
+  Q_INVOKABLE void authenticateParticipant(const QString& userId, const QString& password);
+  Q_INVOKABLE bool setCoWatchProfile(const QString& userId, bool selected);
+  Q_INVOKABLE void setHomeFeedOwner(const QString& userId);
+  Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
   Q_INVOKABLE void openLibrary(const QVariantMap& library);
@@ -129,6 +141,7 @@ public:
 signals:
   void sessionChanged();
   void publicUsersChanged();
+  void coWatchChanged();
   void homeChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
@@ -149,6 +162,9 @@ private:
                const QByteArray& body, ReplyHandler handler);
   void requestWithStatus(const QByteArray& method, const QString& path, const QVariantMap& query,
                          const QByteArray& body, StatusHandler handler);
+  void requestAs(const QByteArray& method, const QString& path, const QVariantMap& query,
+                 const QByteArray& body, const QString& token, const QString& userId,
+                 StatusHandler handler);
   static QVariantList items(const QVariant& response);
   static QVariantList untouchedDeck(const QVariantList& response);
   void correctDeckFromRecent();
@@ -161,6 +177,9 @@ private:
   void sendPlaybackStopped(qlonglong positionMilliseconds);
   void addPlayableIdsToPlaylist(const QString& playlistId, const QStringList& ids);
   void activateSession(const QString& token, const QString& userId, const QString& userName);
+  void loadCoWatchParty();
+  void saveCoWatchParty();
+  void reconcileCoWatchParty();
 
   QNetworkAccessManager m_network;
   QSettings m_settings;
@@ -168,6 +187,10 @@ private:
   QString m_token;
   QString m_userId;
   QString m_userName;
+  QStringList m_coWatchUserIds;
+  QString m_homeFeedOwnerId;
+  QString m_homeFeedUserId;
+  QString m_homeFeedToken;
   QVariantList m_publicUsers;
   QVariantList m_libraries;
   QVariantList m_continueItems;

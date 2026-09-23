@@ -16,6 +16,7 @@ Window {
 
     property string page: familyApi.signedIn ? "home" : "login"
     property string chosenUser: ""
+    property var chosenCoWatchUser: ({})
     property var focusedItem: ({})
     property var selectedSeries: ({})
     property string detailReturnPage: "home"
@@ -157,6 +158,8 @@ Window {
             page = "settings"
         } else if (page === "issueReport") {
             page = "detail"
+        } else if (page === "watchTogether") {
+            page = "profile"
         } else if (page !== "home" && familyApi.signedIn) {
             page = "home"
         }
@@ -255,6 +258,12 @@ Window {
             if (success) {
                 issueNote.clear()
                 window.page = "detail"
+            }
+        }
+        function onCoWatchChanged() {
+            if (window.chosenCoWatchUser.Id && familyApi.hasSavedProfile(window.chosenCoWatchUser.Id)) {
+                window.chosenCoWatchUser = ({})
+                coWatchPassword.clear()
             }
         }
         function onLiveTvChanged() {
@@ -414,6 +423,96 @@ Window {
                 NativeAction { text: "Back to Home"; onClicked: page = "home" }
                 NativeAction { text: "Sign out"; onClicked: familyApi.signOut() }
             }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 12
+                visible: page === "profile" && !chosenUser
+                NativeAction {
+                    width: 205
+                    text: familyApi.watchingTogether ? "Manage Watching Together" : "Watch Together"
+                    onClicked: { window.chosenCoWatchUser = ({}); page = "watchTogether" }
+                }
+                NativeAction {
+                    width: 220
+                    visible: familyApi.watchingTogether
+                    text: "Stop Watching Together"
+                    onClicked: { familyApi.stopWatchingTogether(); page = "home" }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "watchTogether"
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width - 100, 820)
+            spacing: 15
+            Row {
+                spacing: 15
+                NativeAction { width: 120; text: "← Profiles"; onClicked: window.goBack() }
+                Text { text: "Watching Together"; color: familyApi.themeText; font.pixelSize: 29; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
+            }
+            Text { text: "Choose the family members watching on this device."; color: familyApi.themeText; font.pixelSize: 18 }
+            Repeater {
+                model: familyApi.publicUsers.filter(function(user) {
+                    return familyApi.coWatchProfiles.length === 0 || user.Id !== familyApi.coWatchProfiles[0].Id
+                })
+                NativeAction {
+                    width: parent.width
+                    height: 53
+                    selected: familyApi.coWatchProfiles.some(function(profile) { return profile.Id === modelData.Id })
+                    text: (selected ? "✓  " : "") + (modelData.Name || "User")
+                        + (familyApi.hasSavedProfile(modelData.Id) ? "" : "  ·  Sign in first")
+                    onClicked: {
+                        if (familyApi.hasSavedProfile(modelData.Id))
+                            familyApi.setCoWatchProfile(modelData.Id, !selected)
+                        else {
+                            window.chosenCoWatchUser = modelData
+                            coWatchPassword.forceActiveFocus()
+                        }
+                    }
+                }
+            }
+            Text { text: "Sign in " + (window.chosenCoWatchUser.Name || ""); visible: !!window.chosenCoWatchUser.Id; color: familyApi.themeText; font.pixelSize: 18 }
+            Row {
+                spacing: 12
+                visible: !!window.chosenCoWatchUser.Id
+                TextField {
+                    id: coWatchPassword
+                    width: 390; height: 48
+                    echoMode: TextInput.Password
+                    placeholderText: "Password (leave blank if none)"
+                    onAccepted: familyApi.authenticateParticipant(window.chosenCoWatchUser.Id, text)
+                }
+                NativeAction {
+                    width: 150
+                    text: "Add profile"
+                    onClicked: familyApi.authenticateParticipant(window.chosenCoWatchUser.Id, coWatchPassword.text)
+                }
+            }
+            Text { text: "Use this person's Continue Watching and Deck on Home:"; visible: familyApi.watchingTogether; color: familyApi.themeText; font.pixelSize: 18 }
+            Flow {
+                width: parent.width
+                spacing: 10
+                visible: familyApi.watchingTogether
+                Repeater {
+                    model: familyApi.coWatchProfiles
+                    NativeAction {
+                        width: 170
+                        text: modelData.Name || "User"
+                        selected: familyApi.homeFeedOwnerId === modelData.Id
+                        onClicked: familyApi.setHomeFeedOwner(modelData.Id)
+                    }
+                }
+            }
+            NativeAction {
+                width: 220
+                visible: familyApi.watchingTogether
+                text: "Stop Watching Together"
+                onClicked: { familyApi.stopWatchingTogether(); page = "profile" }
+            }
         }
     }
 
@@ -480,11 +579,12 @@ Window {
         }
         NativeAction {
             id: profileButton
-            width: 170
+            width: familyApi.watchingTogether ? 260 : 170
+            height: familyApi.watchingTogether ? 60 : 48
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.margins: 16
-            text: familyApi.userName
+            text: familyApi.watchingTogether ? familyApi.coWatchLabel : familyApi.userName
             downAction: function() { homeButton.forceActiveFocus() }
             onClicked: {
                 chosenUser = ""
@@ -492,6 +592,16 @@ Window {
                 familyApi.refreshPublicUsers()
                 page = "profile"
             }
+        }
+        Text {
+            visible: familyApi.watchingTogether
+            anchors.horizontalCenter: profileButton.horizontalCenter
+            anchors.top: profileButton.top
+            anchors.topMargin: 37
+            text: "Watching Together"
+            color: familyApi.themeOnAccent
+            font.pixelSize: 12
+            font.bold: true
         }
         Flickable {
             id: homeScroll
