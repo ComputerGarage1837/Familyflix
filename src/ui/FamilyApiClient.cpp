@@ -85,6 +85,9 @@ FamilyApiClient::FamilyApiClient(QObject* parent)
   m_token = m_settings.value(QStringLiteral("token")).toString();
   m_userId = m_settings.value(QStringLiteral("userId")).toString();
   m_userName = m_settings.value(QStringLiteral("userName")).toString();
+  if (!m_token.isEmpty() && !m_userId.isEmpty()
+      && m_settings.value(QStringLiteral("profiles/%1/token").arg(m_userId)).toString().isEmpty())
+    m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
   if (!m_userId.isEmpty())
     m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                    QStringLiteral("Ocean")).toString();
