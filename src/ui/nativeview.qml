@@ -56,6 +56,7 @@ Window {
     property var backgroundRandomItem: ({})
     property var playingItem: ({})
     property var nextEpisode: ({})
+    property bool autoNextPending: false
     property var playbackQueue: []
     property int playbackQueueIndex: -1
     property int kidsQueuedEpisodes: 0
@@ -298,6 +299,7 @@ Window {
             playerIsLive = false
             activeSkipSegment = ({})
             lastSkipSegmentKey = ""
+            familyApi.refreshSeriesPlaybackPreferences(item.Type === "Episode" ? (item.SeriesId || "") : "")
             familyApi.refreshMediaSegments(item.Id)
             page = "player"
         }
@@ -359,6 +361,7 @@ Window {
             familyApi.openItem(selectedSeries.Id || "")
             page = "detail"
         } else if (page === "nextEpisode") {
+            autoNextPending = false
             page = playbackReturnPage
         } else if (page === "playlistPicker") {
             page = "detail"
@@ -477,6 +480,7 @@ Window {
         target: familyApi
         function onSessionChanged() {
             window.issueReportPending = false
+            window.autoNextPending = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
             window.sleepDeadlineMs = 0
@@ -515,8 +519,17 @@ Window {
         }
         function onNextEpisodeReady(episode) {
             if (window.page !== "nextEpisode") return
-            if (!episode.Id) { window.page = window.playbackReturnPage; return }
+            if (!episode.Id) {
+                window.autoNextPending = false
+                window.page = window.playbackReturnPage
+                return
+            }
             window.nextEpisode = episode
+            if (window.autoNextPending) {
+                window.autoNextPending = false
+                familyApi.openItem(episode.Id)
+                window.playItem(episode, "detail")
+            }
         }
         function onLiveTvChanged() {
             if (window.page !== "liveTv") return
@@ -574,8 +587,11 @@ Window {
                 if (limitReached) { window.notice = "Kids Mode episode limit reached"; noticeTimer.restart() }
                 familyApi.openPlaylist(familyApi.selectedPlaylistId)
                 window.page = "playlist"
-            } else if (window.playingItem.Type === "Episode" && familyApi.nextUpMode !== "Off") {
+            } else if (window.playingItem.Type === "Episode" && familyApi.mediaQueuingEnabled
+                       && familyApi.activeSeriesAutoplayMode !== "STOP_AFTER_EPISODE"
+                       && (familyApi.activeSeriesAutoplayMode === "PLAY_NEXT" || familyApi.nextUpMode !== "Off")) {
                 window.nextEpisode = ({})
+                window.autoNextPending = familyApi.activeSeriesAutoplayMode === "PLAY_NEXT"
                 window.page = "nextEpisode"
                 familyApi.resolveNextEpisode(window.playingItem)
             } else window.page = window.playbackReturnPage
@@ -584,6 +600,7 @@ Window {
             if (window.playerIsLive) { window.livePreviewActive = false; return }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.autoNextPending = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
             window.page = window.playbackReturnPage
@@ -597,6 +614,7 @@ Window {
             }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            window.autoNextPending = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
             window.notice = message

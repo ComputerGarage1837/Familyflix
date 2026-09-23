@@ -32,6 +32,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(int kidsBedtimeStart READ kidsBedtimeStart NOTIFY kidsSettingsChanged)
   Q_PROPERTY(bool kidsHasPin READ kidsHasPin NOTIFY kidsSettingsChanged)
   Q_PROPERTY(QString nextUpMode READ nextUpMode NOTIFY nextUpModeChanged)
+  Q_PROPERTY(bool mediaQueuingEnabled READ mediaQueuingEnabled NOTIFY nextUpModeChanged)
   Q_PROPERTY(bool backdropEnabled READ backdropEnabled NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QString clockBehavior READ clockBehavior NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
@@ -62,6 +63,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList tvChannels READ tvChannels NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvPrograms READ tvPrograms NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList mediaSegments READ mediaSegments NOTIFY mediaSegmentsChanged)
+  Q_PROPERTY(QString activeSeriesAutoplayMode READ activeSeriesAutoplayMode NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(QString themeName READ themeName NOTIFY themeChanged)
   Q_PROPERTY(QColor themeScreen READ themeScreen NOTIFY themeChanged)
   Q_PROPERTY(QColor themeSurface READ themeSurface NOTIFY themeChanged)
@@ -90,6 +92,7 @@ public:
   int kidsBedtimeStart() const { return m_kidsBedtimeStart; }
   bool kidsHasPin() const { return !m_kidsPinSalt.isEmpty() && !m_kidsPinHash.isEmpty(); }
   QString nextUpMode() const { return m_nextUpMode; }
+  bool mediaQueuingEnabled() const { return m_mediaQueuingEnabled; }
   bool backdropEnabled() const { return m_backdropEnabled; }
   QString clockBehavior() const { return m_clockBehavior; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
@@ -120,6 +123,7 @@ public:
   QVariantList tvChannels() const { return m_tvChannels; }
   QVariantList tvPrograms() const { return m_tvPrograms; }
   QVariantList mediaSegments() const { return m_mediaSegments; }
+  QString activeSeriesAutoplayMode() const { return m_activeSeriesAutoplayMode; }
   QString themeName() const { return m_themeName; }
   QColor themeScreen() const;
   QColor themeSurface() const;
@@ -181,6 +185,7 @@ public:
   Q_INVOKABLE QVariantList tvProgramsForChannel(const QString& channelId) const;
   Q_INVOKABLE void refreshTvGuide(int band, const QDateTime& startUtc);
   Q_INVOKABLE void refreshMediaSegments(const QString& itemId);
+  Q_INVOKABLE void refreshSeriesPlaybackPreferences(const QString& seriesId);
   Q_INVOKABLE QString mediaSegmentAction(const QString& type) const;
   Q_INVOKABLE void setMediaSegmentAction(const QString& type, const QString& action);
   Q_INVOKABLE void reportIssue(const QString& itemId, const QString& category, const QString& note);
@@ -225,6 +230,7 @@ signals:
   void playlistsChanged();
   void liveTvChanged();
   void mediaSegmentsChanged();
+  void seriesPlaybackPreferencesChanged();
   void issueReportFinished(bool success, const QString& message);
   void themeChanged();
   void windowsUpdateChanged();
@@ -294,6 +300,7 @@ private:
   QByteArray m_kidsPinSalt;
   QByteArray m_kidsPinHash;
   QString m_nextUpMode = QStringLiteral("Extended");
+  bool m_mediaQueuingEnabled = true;
   bool m_backdropEnabled = true;
   QString m_clockBehavior = QStringLiteral("ALWAYS");
   QVariantMap m_profileSettingsValues;
@@ -343,6 +350,10 @@ private:
   QVariantList m_tvChannels;
   QVariantList m_tvPrograms;
   QVariantList m_mediaSegments;
+  QString m_activeSeriesId;
+  QString m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
+  QString m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
+  quint64 m_seriesPlaybackPreferencesRevision = 0;
   quint64 m_mediaSegmentsRevision = 0;
   quint64 m_tvGuideRevision = 0;
   QString m_themeName = QStringLiteral("Ocean");

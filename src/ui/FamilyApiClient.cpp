@@ -267,7 +267,50 @@ QString FamilyApiClient::mediaSegmentAction(const QString& type) const
   if (!supported.contains(type)) return QStringLiteral("Off");
   const QString fallback = type == QStringLiteral("Intro") || type == QStringLiteral("Outro")
     ? QStringLiteral("Ask") : QStringLiteral("Off");
+  if (type == QStringLiteral("Intro")) {
+    if (m_activeSeriesIntroSkipMode == QStringLiteral("ASK")) return QStringLiteral("Ask");
+    if (m_activeSeriesIntroSkipMode == QStringLiteral("AUTO_SKIP")) return QStringLiteral("Auto");
+    if (m_activeSeriesIntroSkipMode == QStringLiteral("DO_NOT_SKIP")) return QStringLiteral("Off");
+  }
   return m_settings.value(QStringLiteral("users/%1/segments/%2").arg(m_userId, type), fallback).toString();
+}
+
+void FamilyApiClient::refreshSeriesPlaybackPreferences(const QString& seriesId)
+{
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = ++m_seriesPlaybackPreferencesRevision;
+  m_activeSeriesId = seriesId;
+  m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
+  m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
+  emit seriesPlaybackPreferencesChanged();
+  emit mediaSegmentsChanged();
+  static const QRegularExpression validId(QStringLiteral("^[0-9a-fA-F]{32}$"));
+  if (!signedIn() || !validId.match(seriesId).hasMatch()) return;
+  request("GET", QStringLiteral("DisplayPreferences/familyflix-series-playback-v1-%1").arg(seriesId),
+          { { QStringLiteral("client"), QStringLiteral("familyflix") } }, {},
+          [this, session, revision, seriesId](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || revision != m_seriesPlaybackPreferencesRevision
+        || m_activeSeriesId != seriesId || !error.isEmpty()) return;
+    const QString raw = data.toMap().value(QStringLiteral("CustomPrefs")).toMap()
+      .value(QStringLiteral("familyFlixSeriesPlaybackV1")).toString();
+    if (raw.isEmpty()) return;
+    QJsonParseError parseError;
+    const auto parsed = QJsonDocument::fromJson(raw.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !parsed.isObject()) return;
+    const auto document = parsed.object().toVariantMap();
+    if (document.value(QStringLiteral("version")).toInt() != 1) return;
+    const auto values = document.value(QStringLiteral("values")).toMap();
+    const QString intro = values.value(QStringLiteral("introSkipMode")).toString();
+    if (QStringList{ QStringLiteral("APP_DEFAULT"), QStringLiteral("ASK"),
+                     QStringLiteral("AUTO_SKIP"), QStringLiteral("DO_NOT_SKIP") }.contains(intro))
+      m_activeSeriesIntroSkipMode = intro;
+    const QString autoplay = values.value(QStringLiteral("autoplayMode")).toString();
+    if (QStringList{ QStringLiteral("APP_DEFAULT"), QStringLiteral("PLAY_NEXT"),
+                     QStringLiteral("STOP_AFTER_EPISODE") }.contains(autoplay))
+      m_activeSeriesAutoplayMode = autoplay;
+    emit seriesPlaybackPreferencesChanged();
+    emit mediaSegmentsChanged();
+  });
 }
 
 void FamilyApiClient::setMediaSegmentAction(const QString& type, const QString& action)
@@ -321,6 +364,14 @@ void FamilyApiClient::applyProfileSettings(const QVariantMap& values)
     m_nextUpMode = mode;
     m_settings.setValue(QStringLiteral("users/%1/nextUpMode").arg(m_userId), mode);
     emit nextUpModeChanged();
+  }
+  const QString queuing = values.value(QStringLiteral("pref_enable_tv_queuing")).toString();
+  if (queuing == QStringLiteral("true") || queuing == QStringLiteral("false")) {
+    const bool enabled = queuing == QStringLiteral("true");
+    if (enabled != m_mediaQueuingEnabled) {
+      m_mediaQueuingEnabled = enabled;
+      emit nextUpModeChanged();
+    }
   }
   const QString backdrop = values.value(QStringLiteral("pref_show_backdrop")).toString();
   if (backdrop == QStringLiteral("true") || backdrop == QStringLiteral("false")) {
@@ -1466,6 +1517,10 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   ++m_seasonRevision;
   ++m_tvGuideRevision;
   ++m_mediaSegmentsRevision;
+  ++m_seriesPlaybackPreferencesRevision;
+  m_activeSeriesId.clear();
+  m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
+  m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
   ++m_coWatchPresetRevision;
   ++m_familyNightRevision;
   m_coWatchPresetMutationBusy = false;
@@ -1489,17 +1544,21 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_userName = userName;
   loadCoWatchParty();
   loadKidsSettings();
+  m_mediaQueuingEnabled = true;
+  m_backdropEnabled = true;
+  m_clockBehavior = QStringLiteral("ALWAYS");
   m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                  QStringLiteral("Ocean")).toString();
   m_settings.setValue(QStringLiteral("token"), m_token);
   m_settings.setValue(QStringLiteral("userId"), m_userId);
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
-  emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
+  emit sessionChanged(); emit themeChanged(); emit profileAppearanceChanged(); emit nextUpModeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
   emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
+  emit seriesPlaybackPreferencesChanged();
   refreshProfileSettings();
   refreshHome();
   refreshWatchlist();
@@ -1523,6 +1582,10 @@ void FamilyApiClient::signOut()
   ++m_itemRevision;
   ++m_seasonRevision;
   ++m_mediaSegmentsRevision;
+  ++m_seriesPlaybackPreferencesRevision;
+  m_activeSeriesId.clear();
+  m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
+  m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
   ++m_coWatchPresetRevision;
   ++m_familyNightRevision;
   m_coWatchPresetMutationBusy = false;
@@ -1538,6 +1601,7 @@ void FamilyApiClient::signOut()
   m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0; m_kidsBedtimeStart = -1;
   m_kidsPinSalt.clear(); m_kidsPinHash.clear();
   m_nextUpMode = QStringLiteral("Extended");
+  m_mediaQueuingEnabled = true;
   m_backdropEnabled = true;
   m_clockBehavior = QStringLiteral("ALWAYS");
   m_themeName = QStringLiteral("Ocean");
@@ -1571,6 +1635,7 @@ void FamilyApiClient::signOut()
   emit selectedCastChanged();
   emit selectedIssueSummaryChanged();
   emit mediaSegmentsChanged();
+  emit seriesPlaybackPreferencesChanged();
   emit watchlistChanged();
   emit seriesChanged();
   emit playlistsChanged();
