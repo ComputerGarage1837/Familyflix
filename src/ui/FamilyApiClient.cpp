@@ -51,10 +51,17 @@ void FamilyApiClient::requestWithStatus(const QByteArray& method, const QString&
   url.setQuery(parameters);
   QNetworkRequest networkRequest(url);
   networkRequest.setRawHeader("Accept", "application/json");
-  networkRequest.setRawHeader("X-Emby-Authorization",
-    QStringLiteral("MediaBrowser Client=\"Family Flix Windows\", Device=\"Windows\", "
-                   "DeviceId=\"%1\", Version=\"0.1\"").arg(m_deviceId).toUtf8());
-  if (!m_token.isEmpty()) networkRequest.setRawHeader("X-Emby-Token", m_token.toUtf8());
+  const bool publicRequest = path == QStringLiteral("Users/Public")
+                          || path == QStringLiteral("Users/AuthenticateByName");
+  QString authorization = QStringLiteral(
+    "MediaBrowser Client=\"Family Flix Windows\", Device=\"Windows\", "
+    "DeviceId=\"%1\", Version=\"0.1\"").arg(m_deviceId);
+  if (!publicRequest && !m_token.isEmpty()) {
+    authorization += QStringLiteral(", Token=\"%1\"").arg(m_token);
+    networkRequest.setRawHeader("X-Emby-Token", m_token.toUtf8());
+  }
+  networkRequest.setRawHeader("Authorization", authorization.toUtf8());
+  networkRequest.setRawHeader("X-Emby-Authorization", authorization.toUtf8());
   if (!body.isEmpty()) networkRequest.setHeader(QNetworkRequest::ContentTypeHeader,
                                                 QStringLiteral("application/json"));
   QNetworkReply* reply = method == "POST" ? m_network.post(networkRequest, body)
