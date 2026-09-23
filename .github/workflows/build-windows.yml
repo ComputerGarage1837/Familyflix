@@ -38,7 +38,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
       with:
-        ref: familyflix-windows
+        ref: ${{ github.sha }}
         submodules: recursive
     - name: Install Qt 6
       uses: jurplel/install-qt-action@v4
