@@ -197,6 +197,10 @@ Window {
             trackMenuVisible = false
             availableTracks = []
             playerPanel.forceActiveFocus()
+        } else if (page === "allLibraries") {
+            Qt.callLater(function() { librariesGrid.forceActiveFocus() })
+        } else if (page === "libraryBrowse") {
+            Qt.callLater(function() { libraryItemsGrid.forceActiveFocus() })
         }
     }
 
@@ -457,7 +461,7 @@ Window {
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
-                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: notice = "Library browser is being ported" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: page = "allLibraries" }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshPlaylists(); page = "playlists" } }
                 NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: window.openLiveTv() }
@@ -574,6 +578,93 @@ Window {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "allLibraries"
+        NativeAction {
+            x: 28; y: 22
+            text: "← Home"
+            onClicked: page = "home"
+        }
+        Text {
+            x: 220; y: 25
+            text: "All Libraries"
+            color: familyApi.themeText
+            font.pixelSize: 31; font.bold: true
+        }
+        GridView {
+            id: librariesGrid
+            x: 25; y: 100
+            width: parent.width - 50
+            height: parent.height - 120
+            cellWidth: 265; cellHeight: 190
+            model: familyApi.libraries
+            focus: visible
+            clip: true
+            keyNavigationEnabled: true
+            Keys.onReturnPressed: if (currentItem) {
+                familyApi.openLibrary(familyApi.libraries[currentIndex])
+                page = "libraryBrowse"
+            }
+            Keys.onEnterPressed: if (currentItem) {
+                familyApi.openLibrary(familyApi.libraries[currentIndex])
+                page = "libraryBrowse"
+            }
+            Keys.onEscapePressed: page = "home"
+            delegate: Rectangle {
+                required property var modelData
+                required property int index
+                width: 245; height: 168; radius: 9
+                color: familyApi.themeSurface
+                border.width: GridView.isCurrentItem ? 3 : 1
+                border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
+                Image { anchors.fill: parent; anchors.margins: 3; source: familyApi.imageUrl(modelData.Id || "", "Backdrop"); fillMode: Image.PreserveAspectCrop }
+                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 55; color: "#d908111b" }
+                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 12; text: modelData.Name || "Library"; color: "white"; font.pixelSize: 20; font.bold: true; elide: Text.ElideRight }
+                MouseArea { anchors.fill: parent; onClicked: { librariesGrid.currentIndex = index; familyApi.openLibrary(modelData); page = "libraryBrowse" } }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "libraryBrowse"
+        NativeAction { x: 28; y: 22; text: "← Libraries"; onClicked: page = "allLibraries" }
+        Text { x: 220; y: 25; text: familyApi.selectedLibrary.Name || "Library"; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
+        Text {
+            anchors.right: parent.right; anchors.rightMargin: 30; y: 36
+            text: familyApi.libraryLoading ? "Loading…" : (familyApi.libraryItems.length + " items")
+            color: familyApi.themeText; font.pixelSize: 17
+        }
+        GridView {
+            id: libraryItemsGrid
+            x: 25; y: 100
+            width: parent.width - 50
+            height: parent.height - 120
+            cellWidth: 245; cellHeight: 180
+            model: familyApi.libraryItems
+            focus: visible
+            clip: true
+            keyNavigationEnabled: true
+            onCurrentIndexChanged: if (currentIndex >= count - 12) familyApi.loadMoreLibrary()
+            Keys.onReturnPressed: if (currentIndex >= 0) window.showItem(familyApi.libraryItems[currentIndex], "libraryBrowse")
+            Keys.onEnterPressed: if (currentIndex >= 0) window.showItem(familyApi.libraryItems[currentIndex], "libraryBrowse")
+            Keys.onEscapePressed: page = "allLibraries"
+            delegate: Rectangle {
+                required property var modelData
+                required property int index
+                width: 225; height: 162; radius: 9
+                color: familyApi.themeSurface
+                border.width: GridView.isCurrentItem ? 3 : 1
+                border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
+                Image { anchors.fill: parent; anchors.margins: 3; source: familyApi.imageUrl(modelData.Id || "", "Backdrop"); fillMode: Image.PreserveAspectCrop }
+                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
+                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: modelData.Name || ""; color: "white"; font.pixelSize: 16; elide: Text.ElideRight }
+                MouseArea { anchors.fill: parent; onClicked: { libraryItemsGrid.currentIndex = index; window.showItem(modelData, "libraryBrowse") } }
             }
         }
     }

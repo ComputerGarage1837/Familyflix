@@ -468,6 +468,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
 {
   ++m_sessionRevision;
   ++m_homeRevision;
+  ++m_libraryBrowseRevision;
   ++m_itemRevision;
   ++m_tvGuideRevision;
   ++m_mediaSegmentsRevision;
@@ -475,6 +476,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_playbackStartConfirmed = false; m_pendingStopMilliseconds = -1;
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_recentDeckActivity.clear();
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
+  m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_playlists.clear(); m_playlistItems.clear();
   m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear(); m_watchlistEntries.clear(); m_householdWatchlistEntries.clear();
@@ -489,7 +491,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("userId"), m_userId);
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
-  emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit selectedItemChanged();
+  emit sessionChanged(); emit themeChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
   emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
   refreshHome();
@@ -502,6 +504,7 @@ void FamilyApiClient::signOut()
   ++m_profileAttemptRevision;
   ++m_sessionRevision;
   ++m_homeRevision;
+  ++m_libraryBrowseRevision;
   ++m_itemRevision;
   ++m_mediaSegmentsRevision;
   m_settings.remove(QStringLiteral("profiles/%1/token").arg(m_userId));
@@ -513,6 +516,7 @@ void FamilyApiClient::signOut()
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
   m_libraryRows.clear(); m_selectedItem.clear(); m_selectedIssueSummary.clear();
+  m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
   m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
@@ -526,6 +530,7 @@ void FamilyApiClient::signOut()
   emit sessionChanged();
   emit themeChanged();
   emit homeChanged();
+  emit libraryBrowseChanged();
   emit selectedItemChanged();
   emit selectedIssueSummaryChanged();
   emit mediaSegmentsChanged();
@@ -642,6 +647,64 @@ void FamilyApiClient::refreshHome()
     m_recentDeckActivity = items(data);
     m_recentDeckActivityReady = true;
     correctDeckFromRecent();
+  });
+}
+
+void FamilyApiClient::openLibrary(const QVariantMap& library)
+{
+  if (!signedIn() || library.value(QStringLiteral("Id")).toString().isEmpty()) return;
+  ++m_libraryBrowseRevision;
+  m_selectedLibrary = library;
+  m_libraryItems.clear();
+  m_libraryHasMore = true;
+  m_libraryLoading = false;
+  emit libraryBrowseChanged();
+  loadMoreLibrary();
+}
+
+void FamilyApiClient::loadMoreLibrary()
+{
+  if (!signedIn() || m_libraryLoading || !m_libraryHasMore) return;
+  const QString parentId = m_selectedLibrary.value(QStringLiteral("Id")).toString();
+  if (parentId.isEmpty()) return;
+  QString types = QStringLiteral("Movie,Series,Video,BoxSet");
+  const QString kind = m_selectedLibrary.value(QStringLiteral("CollectionType")).toString().toLower();
+  if (kind == QStringLiteral("tvshows")) types = QStringLiteral("Series");
+  else if (kind == QStringLiteral("movies")) types = QStringLiteral("Movie,BoxSet");
+  const int offset = m_libraryItems.size();
+  const quint64 session = m_sessionRevision;
+  const quint64 revision = m_libraryBrowseRevision;
+  m_libraryLoading = true;
+  emit libraryBrowseChanged();
+  request("GET", QStringLiteral("Users/%1/Items").arg(m_userId),
+          { { QStringLiteral("ParentId"), parentId },
+            { QStringLiteral("Recursive"), true },
+            { QStringLiteral("IncludeItemTypes"), types },
+            { QStringLiteral("SortBy"), QStringLiteral("SortName") },
+            { QStringLiteral("SortOrder"), QStringLiteral("Ascending") },
+            { QStringLiteral("StartIndex"), offset },
+            { QStringLiteral("Limit"), 60 },
+            { QStringLiteral("EnableUserData"), true } }, {},
+          [this, session, revision](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || revision != m_libraryBrowseRevision) return;
+    m_libraryLoading = false;
+    if (!error.isEmpty()) {
+      emit errorOccurred(QStringLiteral("Library items could not load."));
+      emit libraryBrowseChanged();
+      return;
+    }
+    const QVariantList next = items(data);
+    QSet<QString> known;
+    for (const auto& value : m_libraryItems)
+      known.insert(value.toMap().value(QStringLiteral("Id")).toString());
+    for (const auto& value : next) {
+      const QString id = value.toMap().value(QStringLiteral("Id")).toString();
+      if (!id.isEmpty() && !known.contains(id)) { known.insert(id); m_libraryItems.append(value); }
+    }
+    const auto document = data.toMap();
+    const int total = document.value(QStringLiteral("TotalRecordCount"), -1).toInt();
+    m_libraryHasMore = total >= 0 ? m_libraryItems.size() < total : next.size() == 60;
+    emit libraryBrowseChanged();
   });
 }
 

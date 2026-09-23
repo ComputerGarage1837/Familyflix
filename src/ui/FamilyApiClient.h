@@ -22,6 +22,10 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList continueItems READ continueItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList deckItems READ deckItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList libraryRows READ libraryRows NOTIFY homeChanged)
+  Q_PROPERTY(QVariantMap selectedLibrary READ selectedLibrary NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(QVariantList libraryItems READ libraryItems NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(bool libraryHasMore READ libraryHasMore NOTIFY libraryBrowseChanged)
+  Q_PROPERTY(bool libraryLoading READ libraryLoading NOTIFY libraryBrowseChanged)
   Q_PROPERTY(QVariantMap selectedItem READ selectedItem NOTIFY selectedItemChanged)
   Q_PROPERTY(QVariantMap selectedIssueSummary READ selectedIssueSummary NOTIFY selectedIssueSummaryChanged)
   Q_PROPERTY(QVariantList watchlistEntries READ watchlistEntries NOTIFY watchlistChanged)
@@ -55,6 +59,10 @@ public:
   QVariantList continueItems() const { return m_continueItems; }
   QVariantList deckItems() const { return m_deckItems; }
   QVariantList libraryRows() const { return m_libraryRows; }
+  QVariantMap selectedLibrary() const { return m_selectedLibrary; }
+  QVariantList libraryItems() const { return m_libraryItems; }
+  bool libraryHasMore() const { return m_libraryHasMore; }
+  bool libraryLoading() const { return m_libraryLoading; }
   QVariantMap selectedItem() const { return m_selectedItem; }
   QVariantMap selectedIssueSummary() const { return m_selectedIssueSummary; }
   QVariantList watchlistEntries() const { return m_watchlistEntries; }
@@ -83,6 +91,8 @@ public:
   Q_INVOKABLE void useSavedProfile(const QString& userId);
   Q_INVOKABLE void signOut();
   Q_INVOKABLE void refreshHome();
+  Q_INVOKABLE void openLibrary(const QVariantMap& library);
+  Q_INVOKABLE void loadMoreLibrary();
   Q_INVOKABLE bool libraryVisibleInRail(const QString& libraryId) const;
   Q_INVOKABLE void setLibraryVisibleInRail(const QString& libraryId, bool visible);
   Q_INVOKABLE void moveLibrary(const QString& libraryId, int offset);
@@ -120,6 +130,7 @@ signals:
   void sessionChanged();
   void publicUsersChanged();
   void homeChanged();
+  void libraryBrowseChanged();
   void selectedItemChanged();
   void selectedIssueSummaryChanged();
   void watchlistChanged();
@@ -166,6 +177,11 @@ private:
   bool m_recentDeckActivityReady = false;
   bool m_deckCorrectionStarted = false;
   QVariantList m_libraryRows;
+  QVariantMap m_selectedLibrary;
+  QVariantList m_libraryItems;
+  bool m_libraryHasMore = false;
+  bool m_libraryLoading = false;
+  quint64 m_libraryBrowseRevision = 0;
   QVariantMap m_selectedItem;
   QVariantMap m_selectedIssueSummary;
   QVariantList m_watchlistEntries;
