@@ -9,10 +9,21 @@ FocusScope {
     property var downAction: null
     property var leftAction: null
     property var rightAction: null
+    property var focusScroll: null
     signal clicked()
     width: 160
     height: 48
     activeFocusOnTab: true
+
+    onActiveFocusChanged: {
+        if (!activeFocus || !focusScroll) return
+        const top = action.mapToItem(focusScroll.contentItem, 0, 0).y
+        if (top < focusScroll.contentY)
+            focusScroll.contentY = Math.max(0, top - 8)
+        else if (top + height > focusScroll.contentY + focusScroll.height)
+            focusScroll.contentY = Math.min(focusScroll.contentHeight - focusScroll.height,
+                                            top + height - focusScroll.height + 8)
+    }
 
     function moveAmongSiblings(direction) {
         if (!parent) return

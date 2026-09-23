@@ -22,6 +22,9 @@ Window {
     property string notice: ""
     property bool playerControlsVisible: false
     property bool playerPaused: false
+    property bool sidebarExpanded: true
+    property int lastHomeRow: 0
+    property int lastHomeCard: 0
     property var homeRows: {
         let rows = []
         if (familyApi.continueItems.length) rows.push({ title: "Continue Watching", items: familyApi.continueItems })
@@ -74,6 +77,7 @@ Window {
             page = "detail"
         } else if (page === "detail") {
             page = detailReturnPage
+            if (page === "home") Qt.callLater(function() { window.focusCard(lastHomeRow, lastHomeCard) })
         } else if (page === "season") {
             familyApi.openItem(selectedSeries.Id || "")
             page = "detail"
@@ -263,20 +267,29 @@ Window {
         visible: page === "home"
         Rectangle {
             id: sidebar
-            width: 220
+            width: window.sidebarExpanded ? 220 : 64
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             color: "#e50b1724"
-            Column {
+            Flickable {
+                id: sidebarScroll
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 8
-                Text { text: "Family Flix"; color: "white"; font.pixelSize: 27; font.bold: true; height: 60 }
+                anchors.margins: 12
+                contentWidth: width
+                contentHeight: sidebarColumn.height + 12
+                clip: true
+              Column {
+                id: sidebarColumn
+                width: sidebarScroll.width
+                spacing: 6
+                Text { text: "Family Flix"; visible: window.sidebarExpanded; color: "white"; font.pixelSize: 27; font.bold: true; height: visible ? 56 : 0 }
                 NativeAction {
                     id: homeButton
                     width: parent.width
-                    text: "Home"
+                    text: window.sidebarExpanded ? "Home" : "☰"
                     selected: true
+                    focusScroll: sidebarScroll
+                    onActiveFocusChanged: if (activeFocus) window.sidebarExpanded = true
                     upAction: function() { profileButton.forceActiveFocus() }
                     rightAction: function() { window.focusCard(0, 0) }
                     onClicked: homeScroll.contentY = 0
@@ -284,17 +297,20 @@ Window {
                 Repeater {
                     model: familyApi.railLibraries
                     NativeAction {
-                        width: 188
+                        width: parent.width
+                        visible: window.sidebarExpanded
                         text: modelData.Name || "Library"
+                        focusScroll: sidebarScroll
                         rightAction: function() { window.focusCard(0, 0) }
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
-                NativeAction { width: parent.width; text: "All Libraries"; onClicked: notice = "Library browser is being ported" }
-                NativeAction { width: parent.width; text: "Watchlist"; onClicked: { familyApi.refreshWatchlist(); page = "watchlist" } }
-                NativeAction { width: parent.width; text: "Playlists"; onClicked: notice = "Playlist screen is being ported" }
-                NativeAction { width: parent.width; text: "Live TV"; onClicked: notice = "TV guide is being ported" }
-                NativeAction { width: parent.width; text: "Settings"; onClicked: page = "settings" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll; onClicked: notice = "Library browser is being ported" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll; onClicked: { familyApi.refreshWatchlist(); page = "watchlist" } }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll; onClicked: notice = "Playlist screen is being ported" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll; onClicked: notice = "TV guide is being ported" }
+                NativeAction { width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll; onClicked: page = "settings" }
+              }
             }
         }
         Text {
@@ -372,6 +388,11 @@ Window {
                                         border.color: "#ffd36a"
                                         focus: false
                                         activeFocusOnTab: true
+                                        onActiveFocusChanged: if (activeFocus) {
+                                            window.lastHomeRow = section.index
+                                            window.lastHomeCard = card.index
+                                            window.sidebarExpanded = false
+                                        }
                                         Image {
                                             anchors.fill: parent
                                             anchors.margins: 3
