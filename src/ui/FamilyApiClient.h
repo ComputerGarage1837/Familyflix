@@ -23,6 +23,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList deckItems READ deckItems NOTIFY homeChanged)
   Q_PROPERTY(QVariantList libraryRows READ libraryRows NOTIFY homeChanged)
   Q_PROPERTY(QVariantMap selectedItem READ selectedItem NOTIFY selectedItemChanged)
+  Q_PROPERTY(QVariantMap selectedIssueSummary READ selectedIssueSummary NOTIFY selectedIssueSummaryChanged)
   Q_PROPERTY(QVariantList watchlistEntries READ watchlistEntries NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList householdWatchlistEntries READ householdWatchlistEntries NOTIFY watchlistChanged)
   Q_PROPERTY(QVariantList seasons READ seasons NOTIFY seriesChanged)
@@ -55,6 +56,7 @@ public:
   QVariantList deckItems() const { return m_deckItems; }
   QVariantList libraryRows() const { return m_libraryRows; }
   QVariantMap selectedItem() const { return m_selectedItem; }
+  QVariantMap selectedIssueSummary() const { return m_selectedIssueSummary; }
   QVariantList watchlistEntries() const { return m_watchlistEntries; }
   QVariantList householdWatchlistEntries() const { return m_householdWatchlistEntries; }
   QVariantList seasons() const { return m_seasons; }
@@ -116,6 +118,7 @@ signals:
   void publicUsersChanged();
   void homeChanged();
   void selectedItemChanged();
+  void selectedIssueSummaryChanged();
   void watchlistChanged();
   void seriesChanged();
   void playlistsChanged();
@@ -159,6 +162,7 @@ private:
   bool m_deckCorrectionStarted = false;
   QVariantList m_libraryRows;
   QVariantMap m_selectedItem;
+  QVariantMap m_selectedIssueSummary;
   QVariantList m_watchlistEntries;
   QVariantList m_householdWatchlistEntries;
   QVariantList m_seasons;

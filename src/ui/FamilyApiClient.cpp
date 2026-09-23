@@ -741,7 +741,17 @@ void FamilyApiClient::openItem(const QString& itemId)
   const quint64 revision = m_sessionRevision;
   const quint64 itemRevision = ++m_itemRevision;
   m_selectedItem.clear();
+  m_selectedIssueSummary.clear();
   emit selectedItemChanged();
+  emit selectedIssueSummaryChanged();
+  request("GET", QStringLiteral("FamilyFlix/Issues/Summaries"),
+          { { QStringLiteral("ids"), itemId } }, {},
+          [this, revision, itemRevision](const QVariant& data, const QString& error) {
+    if (revision != m_sessionRevision || itemRevision != m_itemRevision || !error.isEmpty()) return;
+    const auto summaries = data.toMap().value(QStringLiteral("items")).toList();
+    if (!summaries.isEmpty()) m_selectedIssueSummary = summaries.first().toMap();
+    emit selectedIssueSummaryChanged();
+  });
   request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, itemId), {}, {},
           [this, revision, itemRevision](const QVariant& data, const QString& error) {
     if (revision != m_sessionRevision || itemRevision != m_itemRevision) return;

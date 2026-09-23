@@ -1007,6 +1007,25 @@ Window {
                 font.pixelSize: 42
                 font.bold: true
             }
+            Rectangle {
+                width: Math.min(parent.width, 950)
+                height: visible ? 64 : 0
+                radius: 7
+                color: "#593813"
+                border.color: "#efb85c"
+                visible: Number(familyApi.selectedIssueSummary.activeCount || 0) > 0
+                    && ["reported", "investigating"].includes(String(familyApi.selectedIssueSummary.status || "").toLowerCase())
+                Text {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    verticalAlignment: Text.AlignVCenter
+                    color: "#fff3d6"
+                    font.pixelSize: 17
+                    wrapMode: Text.WordWrap
+                    text: "Reported playback problem: " + (familyApi.selectedIssueSummary.categories || []).join(", ")
+                        + (familyApi.selectedIssueSummary.affectedEpisodeCount ? " · " + familyApi.selectedIssueSummary.affectedEpisodeCount + " affected episodes" : "")
+                }
+            }
             Text {
                 width: Math.min(parent.width, 950)
                 text: familyApi.selectedItem.Overview || ""
