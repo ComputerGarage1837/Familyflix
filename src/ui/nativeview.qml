@@ -196,6 +196,24 @@ Window {
         }).join(" · ")
     }
 
+    function browseCardTitle(item) {
+        if (!item) return ""
+        if (item.Type !== "Episode") return item.Name || item.SeriesName || "Video"
+        return [item.SeriesName || "Show", episodeNumber(item), safeTitle(item)].filter(function(value) {
+            return !!value
+        }).join(" · ")
+    }
+
+    function episodeListTitle(item) {
+        if (!item) return ""
+        const parts = [episodeNumber(item), safeTitle(item)]
+        const minutes = Math.round(Number(item.RunTimeTicks || 0) / 600000000)
+        if (minutes > 0) parts.push(minutes + " min")
+        if (item.UserData && item.UserData.Played) parts.push("✓ Watched")
+        else if (resumeFraction(item) > 0) parts.push("In progress")
+        return parts.filter(function(value) { return !!value }).join("  ·  ")
+    }
+
     function detailMetadata(item) {
         if (!item) return ""
         const parts = []
@@ -1886,7 +1904,7 @@ Window {
                 border.color: searchGrid.activeFocus && GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
                 Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 52; color: "#d908111b" }
-                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: modelData.Name || modelData.SeriesName || "Video"; color: "white"; font.pixelSize: 16; font.bold: true; elide: Text.ElideRight }
+                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: window.browseCardTitle(modelData); color: "white"; font.pixelSize: 16; font.bold: true; elide: Text.ElideRight }
                 MouseArea { anchors.fill: parent; onClicked: { searchGrid.currentIndex = index; window.showItem(modelData, "search") } }
             }
             footer: NativeAction {
@@ -2018,7 +2036,7 @@ Window {
                 border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
                 Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
-                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: modelData.Name || ""; color: "white"; font.pixelSize: 16; elide: Text.ElideRight }
+                Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: window.browseCardTitle(modelData); color: "white"; font.pixelSize: 16; elide: Text.ElideRight }
                 MouseArea { anchors.fill: parent; onClicked: { libraryItemsGrid.currentIndex = index; window.showItem(modelData, "libraryBrowse") } }
             }
         }
@@ -2785,7 +2803,7 @@ Window {
                             NativeAction {
                                 width: Math.max(300, window.width - 720)
                                 height: 62
-                                text: (modelData.SeriesName ? modelData.SeriesName + " — " : "") + (modelData.Name || "Video")
+                                text: window.browseCardTitle(modelData)
                                 focusScroll: playlistScroll
                                 upAction: function() { playlistRow.focusNeighbor(-1, 0) }
                                 downAction: function() { playlistRow.focusNeighbor(1, 0) }
@@ -3218,7 +3236,7 @@ Window {
             Text {
                 width: parent.width
                 text: nextEpisode.Id
-                    ? (nextEpisode.SeriesName || "Show") + " · " + window.safeTitle(nextEpisode)
+                    ? window.browseCardTitle(nextEpisode)
                     : "Finding the next unwatched episode…"
                 color: familyApi.themeText; font.pixelSize: 23; wrapMode: Text.WordWrap
             }
@@ -3292,9 +3310,7 @@ Window {
                         NativeAction {
                             width: parent.width
                             height: 65
-                            text: familyApi.kidsSpoilerHidden(modelData)
-                                ? window.safeTitle(modelData)
-                                : "Episode " + (modelData.IndexNumber || "") + "  ·  " + (modelData.Name || "")
+                            text: window.episodeListTitle(modelData)
                             onClicked: window.showItem(modelData, "season")
                         }
                     }
