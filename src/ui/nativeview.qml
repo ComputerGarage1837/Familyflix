@@ -1493,6 +1493,7 @@ Window {
             text: familyApi.watchingTogether ? familyApi.coWatchLabel : familyApi.userName
             onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
             downAction: function() { homeButton.forceActiveFocus() }
+            leftAction: function() { settingsTopButton.forceActiveFocus() }
             onClicked: {
                 chosenUser = ""
                 password.clear()
@@ -1505,6 +1506,19 @@ Window {
                     page = "profile"
                 }
             }
+        }
+        NativeAction {
+            id: settingsTopButton
+            width: 52
+            height: 48
+            anchors.top: profileButton.top
+            anchors.right: profileButton.left
+            anchors.rightMargin: 8
+            text: "⚙"
+            onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+            downAction: function() { homeButton.forceActiveFocus() }
+            rightAction: function() { profileButton.forceActiveFocus() }
+            onClicked: page = "settings"
         }
         Text {
             visible: familyApi.watchingTogether
@@ -1634,7 +1648,10 @@ Window {
                                             else homeButton.forceActiveFocus()
                                         }
                                         Keys.onRightPressed: window.focusCard(section.index, card.index + 1)
-                                        Keys.onUpPressed: window.focusCard(section.index - 1, 0)
+                                        Keys.onUpPressed: {
+                                            if (section.index > 0) window.focusCard(section.index - 1, 0)
+                                            else profileButton.forceActiveFocus()
+                                        }
                                         Keys.onDownPressed: window.focusCard(section.index + 1, 0)
                                     }
                                 }
