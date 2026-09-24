@@ -3196,6 +3196,7 @@ Window {
                 Text {
                     text: "Extras · " + (familyApi.selectedItem.Name || "Video")
                     color: familyApi.themeText; font.pixelSize: 30; font.bold: true
+                    width: Math.max(200, window.width - 280); elide: Text.ElideRight
                 }
             }
             Text {
@@ -3447,7 +3448,11 @@ Window {
                     }
                     onClicked: window.goBack()
                 }
-                Text { text: (selectedSeries.Name || "Show") + " · " + (selectedSeason.Name || "Episodes"); color: "white"; font.pixelSize: 30; font.bold: true }
+                Text {
+                    text: (selectedSeries.Name || "Show") + " · " + (selectedSeason.Name || "Episodes")
+                    color: "white"; font.pixelSize: 30; font.bold: true
+                    width: Math.max(200, window.width - 250); elide: Text.ElideRight
+                }
             }
             Text { text: "Season cast"; visible: familyApi.seasonCast.length > 0; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
             Row {

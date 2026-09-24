@@ -2127,7 +2127,8 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_queuedPlaybackItem.clear(); m_queuedPlaybackPositionMilliseconds = 0;
   m_queuedPlaybackStopMilliseconds = -1;
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear(); m_recentDeckActivity.clear();
-  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
+  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedExtras.clear(); m_selectedExtrasLoading = false;
+  m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear(); m_playlists.clear(); m_playlistItems.clear();
   m_playlistLoading = false; ++m_playlistLoadRevision;
@@ -2154,7 +2155,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_settings.setValue(QStringLiteral("userId"), m_userId);
   m_settings.setValue(QStringLiteral("userName"), m_userName);
   m_settings.setValue(QStringLiteral("profiles/%1/token").arg(m_userId), m_token);
-  emit sessionChanged(); emit themeChanged(); emit profileAppearanceChanged(); emit nextUpModeChanged(); emit seekPreferenceChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedCastChanged();
+  emit sessionChanged(); emit themeChanged(); emit profileAppearanceChanged(); emit nextUpModeChanged(); emit seekPreferenceChanged(); emit homeChanged(); emit libraryBrowseChanged(); emit selectedItemChanged(); emit selectedExtrasChanged(); emit selectedCastChanged();
   emit searchChanged();
   emit coWatchPresetsChanged();
   emit familyNightChanged();
@@ -2232,7 +2233,8 @@ void FamilyApiClient::signOut()
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear();
   m_recentDeckActivity.clear();
   m_deckFallbackReady = m_recentDeckActivityReady = m_deckCorrectionStarted = false;
-  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedCast.clear(); m_selectedIssueSummary.clear();
+  m_libraryRows.clear(); m_selectedItem.clear(); m_selectedExtras.clear(); m_selectedExtrasLoading = false;
+  m_selectedCast.clear(); m_selectedIssueSummary.clear();
   m_selectedLibrary.clear(); m_libraryItems.clear(); m_libraryHasMore = false; m_libraryLoading = false;
   m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear();
   m_playlists.clear(); m_playlistItems.clear(); m_selectedPlaylistId.clear();
@@ -2260,6 +2262,7 @@ void FamilyApiClient::signOut()
   emit homeChanged();
   emit libraryBrowseChanged();
   emit selectedItemChanged();
+  emit selectedExtrasChanged();
   emit selectedCastChanged();
   emit selectedIssueSummaryChanged();
   emit mediaSegmentsChanged();
