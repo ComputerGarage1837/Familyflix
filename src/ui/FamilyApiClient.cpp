@@ -3652,8 +3652,8 @@ void FamilyApiClient::reportPlaybackStart(const QVariantMap& item, qlonglong pos
     for (const auto& value : m_watchlistEntries) {
       const auto entry = value.toMap();
       const QString listed = entry.value(QStringLiteral("itemId")).toString();
-      if (listed.compare(itemId, Qt::CaseInsensitive) != 0
-          && (seriesId.isEmpty() || listed.compare(seriesId, Qt::CaseInsensitive) != 0)) continue;
+      if (normalizedItemId(listed) != normalizedItemId(itemId)
+          && (seriesId.isEmpty() || normalizedItemId(listed) != normalizedItemId(seriesId))) continue;
       writeWatchlistMembership(revision, false, entry,
         QUuid::createUuid().toString(QUuid::WithoutBraces), m_watchlistRevision, 0);
       break;

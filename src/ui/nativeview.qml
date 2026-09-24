@@ -350,7 +350,8 @@ Window {
 
     function householdEntry(itemId) {
         for (const entry of familyApi.householdWatchlistEntries) {
-            if (entry.itemId === itemId) return entry
+            if (String(entry.itemId || "").replace(/-/g, "").toLowerCase()
+                === String(itemId || "").replace(/-/g, "").toLowerCase()) return entry
         }
         return null
     }
