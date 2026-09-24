@@ -3288,7 +3288,15 @@ Window {
             spacing: 18
             Row {
                 spacing: 15
-                NativeAction { id: seasonBackButton; text: "← Show"; onClicked: window.goBack() }
+                NativeAction {
+                    id: seasonBackButton
+                    text: "← Show"
+                    downAction: function() {
+                        const first = episodeRepeater.itemAt(0)
+                        if (first) first.focusAction()
+                    }
+                    onClicked: window.goBack()
+                }
                 Text { text: (selectedSeries.Name || "Show") + " · " + (selectedSeason.Name || "Episodes"); color: "white"; font.pixelSize: 30; font.bold: true }
             }
             Text { text: "Season cast"; visible: familyApi.seasonCast.length > 0; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
@@ -3309,19 +3317,51 @@ Window {
                     }
                 }
             }
-            ScrollView {
+            Flickable {
+                id: episodeScroll
                 width: parent.width
                 height: Math.max(140, parent.height - (familyApi.seasonCast.length ? 220 : 100))
+                contentWidth: width
+                contentHeight: episodeColumn.height
+                clip: true
                 Column {
+                    id: episodeColumn
                     width: Math.max(800, window.width - 90)
                     spacing: 8
                     Repeater {
+                        id: episodeRepeater
                         model: familyApi.episodes
-                        NativeAction {
-                            width: parent.width
-                            height: 65
-                            text: window.episodeListTitle(modelData)
-                            onClicked: window.showItem(modelData, "season")
+                        Row {
+                            id: episodeRow
+                            required property var modelData
+                            required property int index
+                            spacing: 10
+                            function focusAction() { episodeAction.forceActiveFocus() }
+                            Artwork {
+                                width: 130; height: 73
+                                item: episodeRow.modelData
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: { episodeAction.forceActiveFocus(); window.showItem(episodeRow.modelData, "season") }
+                                }
+                            }
+                            NativeAction {
+                                id: episodeAction
+                                width: episodeColumn.width - 140
+                                height: 73
+                                text: window.episodeListTitle(episodeRow.modelData)
+                                focusScroll: episodeScroll
+                                upAction: function() {
+                                    const prior = episodeRepeater.itemAt(episodeRow.index - 1)
+                                    if (prior) prior.focusAction()
+                                    else seasonBackButton.forceActiveFocus()
+                                }
+                                downAction: function() {
+                                    const next = episodeRepeater.itemAt(episodeRow.index + 1)
+                                    if (next) next.focusAction()
+                                }
+                                onClicked: window.showItem(episodeRow.modelData, "season")
+                            }
                         }
                     }
                 }
