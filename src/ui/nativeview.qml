@@ -100,6 +100,7 @@ Window {
     property bool searchKeyboardOpen: false
     property bool searchSymbols: false
     property string watchlistMode: "personal"
+    property string lastWatchlistItemId: ""
     property var playlistTarget: ({})
     property string selectedPlaylistName: ""
     property int tvCategoryBand: 1
@@ -346,6 +347,24 @@ Window {
                 Type: type === "series" ? "Series" : "Movie" })
         }
         return result
+    }
+
+    function focusWatchlistChoice() {
+        if (page !== "watchlist" || watchlistBackButton.activeFocus
+            || watchlistPersonalButton.activeFocus || watchlistHouseholdButton.activeFocus) return
+        let first = null
+        for (const repeater of [movieWatchlistRepeater, showWatchlistRepeater]) {
+            for (let index = 0; index < repeater.count; ++index) {
+                const card = repeater.itemAt(index)
+                if (!card) continue
+                if (card.activeFocus) return
+                if (!first) first = card
+                if (String(card.modelData.Id || "").replace(/-/g, "").toLowerCase()
+                    === lastWatchlistItemId.replace(/-/g, "").toLowerCase()) first = card
+            }
+        }
+        if (first) first.forceActiveFocus()
+        else watchlistBackButton.forceActiveFocus()
     }
 
     function householdEntry(itemId) {
@@ -640,11 +659,7 @@ Window {
         } else if (page === "seriesOptions") {
             Qt.callLater(function() { seriesOptionsBack.forceActiveFocus() })
         } else if (page === "watchlist") {
-            Qt.callLater(function() {
-                const first = movieWatchlistRepeater.itemAt(0) || showWatchlistRepeater.itemAt(0)
-                if (first) first.forceActiveFocus()
-                else watchlistBackButton.forceActiveFocus()
-            })
+            Qt.callLater(window.focusWatchlistChoice)
         } else if (page === "search") {
             if (!searchInput.text && !familyApi.searchResults.length) {
                 searchKeyboardOpen = true
@@ -863,6 +878,7 @@ Window {
             if (!window.backgroundRandomId) Qt.callLater(window.cycleBackground)
             if (window.page === "home" && window.homeCardFocused)
                 Qt.callLater(window.focusHomeItem)
+            if (window.page === "watchlist") Qt.callLater(window.focusWatchlistChoice)
         }
     }
     Connections {
@@ -1934,8 +1950,8 @@ Window {
                 spacing: 20
                 NativeAction { id: watchlistBackButton; text: "← Home"; onClicked: page = "home" }
                 Text { text: "Watchlist"; color: "white"; font.pixelSize: 33; font.bold: true }
-                NativeAction { text: "My List"; selected: watchlistMode === "personal"; onClicked: watchlistMode = "personal" }
-                NativeAction { text: "Family List"; selected: watchlistMode === "household"; onClicked: watchlistMode = "household" }
+                NativeAction { id: watchlistPersonalButton; text: "My List"; selected: watchlistMode === "personal"; onClicked: watchlistMode = "personal" }
+                NativeAction { id: watchlistHouseholdButton; text: "Family List"; selected: watchlistMode === "household"; onClicked: watchlistMode = "household" }
             }
             Text { text: "Movies"; color: "white"; font.pixelSize: 24; font.bold: true }
             Flickable {
@@ -1963,6 +1979,7 @@ Window {
                             activeFocusOnTab: true
                             onActiveFocusChanged: if (activeFocus) {
                                 window.focusedItem = modelData
+                                window.lastWatchlistItemId = modelData.Id || ""
                                 if (x < movieWatchlistScroll.contentX)
                                     movieWatchlistScroll.contentX = Math.max(0, x - 8)
                                 else if (x + width > movieWatchlistScroll.contentX + movieWatchlistScroll.width)
@@ -2023,6 +2040,7 @@ Window {
                             activeFocusOnTab: true
                             onActiveFocusChanged: if (activeFocus) {
                                 window.focusedItem = modelData
+                                window.lastWatchlistItemId = modelData.Id || ""
                                 if (x < showWatchlistScroll.contentX)
                                     showWatchlistScroll.contentX = Math.max(0, x - 8)
                                 else if (x + width > showWatchlistScroll.contentX + showWatchlistScroll.width)
