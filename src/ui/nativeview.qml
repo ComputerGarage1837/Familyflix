@@ -339,7 +339,8 @@ Window {
         for (const entry of entries) {
             if (entry.itemType !== type) continue
             const item = resolved.find(function(candidate) {
-                return String(candidate.Id || "").toLowerCase() === String(entry.itemId || "").toLowerCase()
+                return String(candidate.Id || "").replace(/-/g, "").toLowerCase()
+                    === String(entry.itemId || "").replace(/-/g, "").toLowerCase()
             })
             result.push(item || { Id: entry.itemId, Name: entry.title,
                 Type: type === "series" ? "Series" : "Movie" })
@@ -1926,6 +1927,7 @@ Window {
         Column {
             anchors.fill: parent
             anchors.margins: 40
+            anchors.topMargin: 72
             spacing: 24
             Row {
                 spacing: 20
@@ -1988,6 +1990,7 @@ Window {
                                 const other = showWatchlistRepeater.itemAt(Math.min(index, showWatchlistRepeater.count - 1))
                                 if (other) other.forceActiveFocus()
                             }
+                            Keys.onUpPressed: watchlistBackButton.forceActiveFocus()
                             MouseArea { anchors.fill: parent; onClicked: { movieWatchlistCard.forceActiveFocus(); window.showItem(modelData, "watchlist") } }
                         }
                     }
@@ -2046,6 +2049,7 @@ Window {
                             Keys.onUpPressed: {
                                 const other = movieWatchlistRepeater.itemAt(Math.min(index, movieWatchlistRepeater.count - 1))
                                 if (other) other.forceActiveFocus()
+                                else watchlistBackButton.forceActiveFocus()
                             }
                             MouseArea { anchors.fill: parent; onClicked: { showWatchlistCard.forceActiveFocus(); window.showItem(modelData, "watchlist") } }
                         }

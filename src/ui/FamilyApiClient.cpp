@@ -24,6 +24,11 @@
 namespace {
 const QUrl server(QStringLiteral("https://myfamilyflix.duckdns.org/"));
 
+QString normalizedItemId(QString id)
+{
+  return id.remove(QLatin1Char('-')).toLower();
+}
+
 struct ThemePalette {
   const char* name;
   const char* screen;
@@ -77,8 +82,8 @@ bool watchlistEntryMatchesItem(const QVariantMap& entry, const QVariantMap& item
 {
   const QString expectedType = entry.value(QStringLiteral("itemType")).toString().toLower();
   if (item.value(QStringLiteral("Type")).toString().toLower() != expectedType) return false;
-  if (entry.value(QStringLiteral("itemId")).toString().compare(
-        item.value(QStringLiteral("Id")).toString(), Qt::CaseInsensitive) == 0) return true;
+  if (normalizedItemId(entry.value(QStringLiteral("itemId")).toString()) ==
+      normalizedItemId(item.value(QStringLiteral("Id")).toString())) return true;
   const auto expected = entry.value(QStringLiteral("providerIds")).toMap();
   const auto actual = item.value(QStringLiteral("ProviderIds")).toMap();
   for (auto wanted = expected.cbegin(); wanted != expected.cend(); ++wanted) {
@@ -2880,11 +2885,11 @@ void FamilyApiClient::refreshWatchlist()
       QHash<QString, QVariantMap> byId;
       for (const auto& value : items(metadata)) {
         const QVariantMap item = value.toMap();
-        byId.insert(item.value(QStringLiteral("Id")).toString().toLower(), item);
+        byId.insert(normalizedItemId(item.value(QStringLiteral("Id")).toString()), item);
       }
       QVariantList ordered;
       for (const auto& value : m_watchlistEntries) {
-        const QString id = value.toMap().value(QStringLiteral("itemId")).toString().toLower();
+        const QString id = normalizedItemId(value.toMap().value(QStringLiteral("itemId")).toString());
         if (byId.contains(id)) ordered.append(byId.value(id));
       }
       m_watchlistItems = ordered;
@@ -2929,11 +2934,11 @@ void FamilyApiClient::refreshHouseholdWatchlist()
       QHash<QString, QVariantMap> byId;
       for (const auto& value : items(metadata)) {
         const QVariantMap item = value.toMap();
-        byId.insert(item.value(QStringLiteral("Id")).toString().toLower(), item);
+        byId.insert(normalizedItemId(item.value(QStringLiteral("Id")).toString()), item);
       }
       QVariantList ordered;
       for (const auto& value : m_householdWatchlistEntries) {
-        const QString id = value.toMap().value(QStringLiteral("itemId")).toString().toLower();
+        const QString id = normalizedItemId(value.toMap().value(QStringLiteral("itemId")).toString());
         if (byId.contains(id)) ordered.append(byId.value(id));
       }
       m_householdWatchlistItems = ordered;
@@ -2946,8 +2951,8 @@ bool FamilyApiClient::isWatchlisted(const QString& itemId) const
 {
   for (const auto& value : m_watchlistEntries) {
     const auto entry = value.toMap();
-    if (entry.value(QStringLiteral("itemId")).toString().compare(itemId, Qt::CaseInsensitive) == 0
-        || entry.value(QStringLiteral("seriesId")).toString().compare(itemId, Qt::CaseInsensitive) == 0)
+    if (normalizedItemId(entry.value(QStringLiteral("itemId")).toString()) == normalizedItemId(itemId)
+        || normalizedItemId(entry.value(QStringLiteral("seriesId")).toString()) == normalizedItemId(itemId))
       return true;
   }
   return false;
@@ -2957,7 +2962,7 @@ bool FamilyApiClient::isHouseholdWatchlisted(const QString& itemId) const
 {
   for (const auto& value : m_householdWatchlistEntries) {
     const auto entry = value.toMap();
-    if (entry.value(QStringLiteral("itemId")).toString().compare(itemId, Qt::CaseInsensitive) == 0)
+    if (normalizedItemId(entry.value(QStringLiteral("itemId")).toString()) == normalizedItemId(itemId))
       return true;
   }
   return false;
