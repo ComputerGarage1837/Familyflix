@@ -175,7 +175,9 @@ Window {
             return choices
         }
         if (purpose === "portrait") {
-            add(own, "Primary")
+            // Jellyfin includes cast members without portrait artwork. Do not
+            // request images that the server has not advertised.
+            if (tags.Primary || item.PrimaryImageTag) add(own, "Primary")
             return choices
         }
         if (purpose === "backdrop") {
@@ -2606,11 +2608,26 @@ Window {
                             Column {
                                 width: 112
                                 spacing: 3
-                                Artwork {
+                                Rectangle {
                                     width: 44; height: 44
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    item: modelData
-                                    purpose: "portrait"
+                                    radius: 22
+                                    clip: true
+                                    color: familyApi.themeSurface
+                                    border.color: familyApi.themeAccentSecondary
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: (modelData.Name || "?").charAt(0).toUpperCase()
+                                        color: familyApi.themeText
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                    }
+                                    Artwork {
+                                        anchors.fill: parent
+                                        item: modelData
+                                        purpose: "portrait"
+                                        visible: status === Image.Ready
+                                    }
                                 }
                                 Text {
                                     width: parent.width
