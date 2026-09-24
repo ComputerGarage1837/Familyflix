@@ -86,6 +86,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QVariantList tvChannels READ tvChannels NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList tvPrograms READ tvPrograms NOTIFY liveTvChanged)
   Q_PROPERTY(QVariantList mediaSegments READ mediaSegments NOTIFY mediaSegmentsChanged)
+  Q_PROPERTY(QVariantList playbackChapters READ playbackChapters NOTIFY playbackChaptersChanged)
   Q_PROPERTY(QString activeSeriesAutoplayMode READ activeSeriesAutoplayMode NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(QString activeSeriesIntroSkipMode READ activeSeriesIntroSkipMode NOTIFY seriesPlaybackPreferencesChanged)
   Q_PROPERTY(bool activeSeriesPreferencesReady READ activeSeriesPreferencesReady NOTIFY seriesPlaybackPreferencesChanged)
@@ -173,6 +174,7 @@ public:
   QVariantList tvChannels() const { return m_tvChannels; }
   QVariantList tvPrograms() const { return m_tvPrograms; }
   QVariantList mediaSegments() const { return m_mediaSegments; }
+  QVariantList playbackChapters() const { return m_playbackChapters; }
   QString activeSeriesAutoplayMode() const { return m_activeSeriesAutoplayMode; }
   QString activeSeriesIntroSkipMode() const { return m_activeSeriesIntroSkipMode; }
   bool activeSeriesPreferencesReady() const { return m_activeSeriesPreferencesReady; }
@@ -258,6 +260,7 @@ public:
   Q_INVOKABLE QVariantList tvProgramsForChannel(const QString& channelId) const;
   Q_INVOKABLE void refreshTvGuide(int band, const QDateTime& startUtc);
   Q_INVOKABLE void refreshMediaSegments(const QString& itemId);
+  Q_INVOKABLE void refreshPlaybackChapters(const QString& itemId);
   Q_INVOKABLE void refreshSeriesPlaybackPreferences(const QString& seriesId);
   Q_INVOKABLE void setActiveSeriesPlaybackPreference(const QString& key, const QString& value);
   Q_INVOKABLE QString mediaSegmentAction(const QString& type) const;
@@ -311,6 +314,7 @@ signals:
   void playlistsChanged();
   void liveTvChanged();
   void mediaSegmentsChanged();
+  void playbackChaptersChanged();
   void seriesPlaybackPreferencesChanged();
   void issueReportFinished(bool success, const QString& message);
   void themeChanged();
@@ -473,6 +477,7 @@ private:
   QVariantList m_tvChannels;
   QVariantList m_tvPrograms;
   QVariantList m_mediaSegments;
+  QVariantList m_playbackChapters;
   QString m_activeSeriesId;
   QString m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
   QString m_activeSeriesAutoplayMode = QStringLiteral("APP_DEFAULT");
@@ -481,6 +486,7 @@ private:
   bool m_activeSeriesPreferencesWriteActive = false;
   quint64 m_seriesPlaybackPreferencesRevision = 0;
   quint64 m_mediaSegmentsRevision = 0;
+  quint64 m_playbackChaptersRevision = 0;
   quint64 m_tvGuideRevision = 0;
   QString m_themeName = QStringLiteral("Ocean");
   qlonglong m_watchlistRevision = 0;

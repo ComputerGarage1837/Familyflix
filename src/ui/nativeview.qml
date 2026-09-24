@@ -419,6 +419,25 @@ Window {
             : minutes + ":" + String(remainder).padStart(2, "0")
     }
 
+    function seekChapter(direction) {
+        const chapters = familyApi.playbackChapters
+        const now = Number(components.player.getPosition()) * 1000
+        if (!chapters.length || !isFinite(now)) return
+        let target = null
+        if (direction > 0) {
+            target = chapters.find(function(chapter) {
+                return Number(chapter.StartPositionTicks || 0) / 10000 > now + 1000
+            })
+        } else {
+            for (const chapter of chapters) {
+                if (Number(chapter.StartPositionTicks || 0) / 10000 < now - 3000) target = chapter
+                else break
+            }
+        }
+        if (target) components.player.seekTo(Math.max(0, Number(target.StartPositionTicks || 0) / 10000))
+        controlsTimer.restart()
+    }
+
     function focusPlayerSeek() {
         if (playbackSeek.visible && playbackSeek.enabled) playbackSeek.forceActiveFocus()
         else playerPanel.forceActiveFocus()
@@ -584,6 +603,7 @@ Window {
             explicitSubtitleSelection = false
             familyApi.refreshSeriesPlaybackPreferences(item.Type === "Episode" ? (item.SeriesId || "") : "")
             familyApi.refreshMediaSegments(item.Id)
+            familyApi.refreshPlaybackChapters(item.Id)
             page = "player"
         }
     }
@@ -3624,6 +3644,18 @@ Window {
                                 height: parent.height; radius: parent.radius
                                 color: familyApi.themeAccent
                             }
+                            Repeater {
+                                model: familyApi.playbackChapters
+                                Rectangle {
+                                    width: 3; height: 16; radius: 1
+                                    x: parent.width * Math.min(1, Math.max(0,
+                                        Number(modelData.StartPositionTicks || 0) /
+                                        Math.max(1, window.playerDurationSeconds * 10000000)))
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: "white"
+                                    visible: window.playerDurationSeconds > 0
+                                }
+                            }
                         }
                         handle: Rectangle {
                             x: playbackSeek.leftPadding + playbackSeek.visualPosition * (playbackSeek.availableWidth - width)
@@ -3659,6 +3691,18 @@ Window {
                 }
                 NativeAction { width: 120; text: "−" + (familyApi.skipBackMs / 1000) + " sec"; upAction: function() { window.focusPlayerSeek() }; onClicked: { components.player.seekTo(Math.max(0, components.player.getPosition() * 1000 - familyApi.skipBackMs)); controlsTimer.restart() } }
                 NativeAction { width: 120; text: "+" + (familyApi.skipForwardMs / 1000) + " sec"; upAction: function() { window.focusPlayerSeek() }; onClicked: { components.player.seekTo(components.player.getPosition() * 1000 + familyApi.skipForwardMs); controlsTimer.restart() } }
+                NativeAction {
+                    width: 95; text: "◀ Chapter"
+                    visible: !window.playerIsLive && familyApi.playbackChapters.length > 1
+                    upAction: function() { window.focusPlayerSeek() }
+                    onClicked: window.seekChapter(-1)
+                }
+                NativeAction {
+                    width: 95; text: "Chapter ▶"
+                    visible: !window.playerIsLive && familyApi.playbackChapters.length > 1
+                    upAction: function() { window.focusPlayerSeek() }
+                    onClicked: window.seekChapter(1)
+                }
                 NativeAction {
                     width: 125
                     visible: !window.playerIsLive

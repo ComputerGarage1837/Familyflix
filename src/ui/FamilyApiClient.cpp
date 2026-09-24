@@ -779,6 +779,21 @@ void FamilyApiClient::refreshMediaSegments(const QString& itemId)
   });
 }
 
+void FamilyApiClient::refreshPlaybackChapters(const QString& itemId)
+{
+  const quint64 revision = ++m_playbackChaptersRevision;
+  const quint64 session = m_sessionRevision;
+  m_playbackChapters.clear();
+  emit playbackChaptersChanged();
+  if (!signedIn() || itemId.isEmpty()) return;
+  request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, itemId), {}, {},
+          [this, revision, session](const QVariant& data, const QString& error) {
+    if (revision != m_playbackChaptersRevision || session != m_sessionRevision || !error.isEmpty()) return;
+    m_playbackChapters = data.toMap().value(QStringLiteral("Chapters")).toList();
+    emit playbackChaptersChanged();
+  });
+}
+
 void FamilyApiClient::reportIssue(const QString& itemId, const QString& category, const QString& note)
 {
   static const QSet<QString> categories = { QStringLiteral("noAudio"),
@@ -2110,6 +2125,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   ++m_seasonRevision;
   ++m_tvGuideRevision;
   ++m_mediaSegmentsRevision;
+  ++m_playbackChaptersRevision;
   ++m_seriesPlaybackPreferencesRevision;
   m_activeSeriesId.clear();
   m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
@@ -2133,7 +2149,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_seasons.clear(); m_episodes.clear(); m_seasonCast.clear(); m_playlists.clear(); m_playlistItems.clear();
   m_playlistLoading = false; ++m_playlistLoadRevision;
   m_selectedPlaylistId.clear(); m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
-  m_mediaSegments.clear(); m_watchlistEntries.clear(); m_watchlistItems.clear();
+  m_mediaSegments.clear(); m_playbackChapters.clear(); m_watchlistEntries.clear(); m_watchlistItems.clear();
   m_householdWatchlistEntries.clear(); m_householdWatchlistItems.clear();
   ++m_watchlistItemsRevision;
   ++m_householdWatchlistItemsRevision;
@@ -2160,7 +2176,7 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   emit coWatchPresetsChanged();
   emit familyNightChanged();
   emit selectedIssueSummaryChanged(); emit watchlistChanged(); emit seriesChanged();
-  emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged();
+  emit playlistsChanged(); emit liveTvChanged(); emit mediaSegmentsChanged(); emit playbackChaptersChanged();
   emit seriesPlaybackPreferencesChanged();
   refreshProfileSettings();
   refreshLibraryMenuPreferences();
@@ -2199,6 +2215,7 @@ void FamilyApiClient::signOut()
   ++m_itemRevision;
   ++m_seasonRevision;
   ++m_mediaSegmentsRevision;
+  ++m_playbackChaptersRevision;
   ++m_seriesPlaybackPreferencesRevision;
   m_activeSeriesId.clear();
   m_activeSeriesIntroSkipMode = QStringLiteral("APP_DEFAULT");
@@ -2241,6 +2258,7 @@ void FamilyApiClient::signOut()
   m_playlistLoading = false; ++m_playlistLoadRevision;
   m_tvCategories.clear(); m_tvChannels.clear(); m_tvPrograms.clear();
   m_mediaSegments.clear();
+  m_playbackChapters.clear();
   ++m_tvGuideRevision;
   m_watchlistEntries.clear(); m_watchlistItems.clear(); m_watchlistRevision = 0;
   ++m_watchlistItemsRevision;
@@ -2266,6 +2284,7 @@ void FamilyApiClient::signOut()
   emit selectedCastChanged();
   emit selectedIssueSummaryChanged();
   emit mediaSegmentsChanged();
+  emit playbackChaptersChanged();
   emit seriesPlaybackPreferencesChanged();
   emit watchlistChanged();
   emit seriesChanged();
