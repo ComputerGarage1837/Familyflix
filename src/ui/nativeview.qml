@@ -1695,8 +1695,8 @@ Window {
                                             Text {
                                                 id: statusLabel
                                                 anchors.centerIn: parent
-                                                text: card.modelData.UserData && card.modelData.UserData.Played ? "✓ Watched"
-                                                    : window.resumeFraction(card.modelData) > 0 ? "In progress" : ""
+                                                text: !(card.modelData.UserData && card.modelData.UserData.Played)
+                                                    && window.resumeFraction(card.modelData) > 0 ? "In progress" : ""
                                                 color: "white"; font.pixelSize: 12; font.bold: true
                                             }
                                         }
@@ -3057,6 +3057,13 @@ Window {
                             familyApi.selectedItem.Type === "Series" ? familyApi.selectedItem.Id : familyApi.selectedItem.SeriesId)
                         page = "seriesOptions"
                     }
+                }
+                NativeAction {
+                    width: 78
+                    fontSize: 14
+                    text: "Go to show"
+                    visible: familyApi.selectedItem.Type === "Episode" && !!familyApi.selectedItem.SeriesId
+                    onClicked: window.showItem({ Id: familyApi.selectedItem.SeriesId, Type: "Series" }, window.detailReturnPage)
                 }
                 NativeAction {
                     width: 72
