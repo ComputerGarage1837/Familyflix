@@ -1685,7 +1685,7 @@ Window {
         anchors.fill: parent
         visible: page === "search"
         NativeAction { x: 28; y: 22; text: "← Home"; onClicked: page = "home" }
-        Text { x: 220; y: 25; text: "Search movies and shows"; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
+        Text { x: 220; y: 25; text: "Search"; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
         TextField {
             id: searchInput
             x: 28; y: 90
@@ -1796,8 +1796,8 @@ Window {
                 required property int index
                 width: 228; height: 165; radius: 9
                 color: familyApi.themeSurface
-                border.width: GridView.isCurrentItem ? 3 : 1
-                border.color: GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
+                border.width: searchGrid.activeFocus && GridView.isCurrentItem ? 3 : 1
+                border.color: searchGrid.activeFocus && GridView.isCurrentItem ? familyApi.themeAccent : familyApi.themeAccentSecondary
                 Artwork { anchors.fill: parent; anchors.margins: 3; item: modelData }
                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 52; color: "#d908111b" }
                 Text { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8; text: modelData.Name || modelData.SeriesName || "Video"; color: "white"; font.pixelSize: 16; font.bold: true; elide: Text.ElideRight }
@@ -2588,7 +2588,18 @@ Window {
                     onClicked: window.createNamedPlaylist()
                 }
             }
+            Text {
+                visible: familyApi.playlists.length === 0
+                text: page === "playlistPicker"
+                    ? "No playlists yet. Name one above to create it and add this video."
+                    : "No playlists yet. Name one above to start a movie-and-show playlist."
+                color: familyApi.themeText
+                font.pixelSize: 19
+                wrapMode: Text.WordWrap
+                width: Math.min(parent.width, 760)
+            }
             ScrollView {
+                visible: familyApi.playlists.length > 0
                 width: parent.width
                 height: parent.height - 135
                 Column {
