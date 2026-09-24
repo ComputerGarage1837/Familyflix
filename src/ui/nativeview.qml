@@ -94,6 +94,7 @@ Window {
     property int lastHomeCard: 0
     property string lastHomeItemId: ""
     property bool homeCardFocused: false
+    property string lastSidebarKey: "Home"
     property bool contextOpen: false
     property var contextItem: ({})
     property bool searchKeyboardOpen: false
@@ -626,7 +627,7 @@ Window {
         } else if (page === "home") {
             Qt.callLater(function() {
                 if (window.homeCardFocused && window.lastHomeItemId) window.focusHomeItem()
-                else homeButton.forceActiveFocus()
+                else window.focusSidebarChoice()
             })
         } else if (page === "login" || page === "profile") {
             Qt.callLater(window.focusLoginChoice)
@@ -710,6 +711,16 @@ Window {
         focusCard(lastHomeRow, lastHomeCard)
     }
 
+    function focusSidebarChoice() {
+        for (const item of sidebarColumn.children) {
+            if (item && item.sidebarKey === lastSidebarKey && item.visible) {
+                item.forceActiveFocus()
+                return
+            }
+        }
+        homeButton.forceActiveFocus()
+    }
+
     function focusLoginChoice() {
         if (page !== "login" && page !== "profile") return
         if (chosenUser) { password.forceActiveFocus(); return }
@@ -720,7 +731,7 @@ Window {
 
     Component.onCompleted: {
         applyPlayerZoom()
-        if (page === "home") Qt.callLater(function() { homeButton.forceActiveFocus() })
+        if (page === "home") Qt.callLater(window.focusSidebarChoice)
         else if (page === "login") Qt.callLater(window.focusLoginChoice)
         if (familyApi.signedIn) {
             familyApi.refreshHome()
@@ -1394,11 +1405,12 @@ Window {
                 Text { text: "Family Flix"; visible: window.sidebarExpanded; color: "white"; font.pixelSize: 27; font.bold: true; height: visible ? 56 : 0 }
                 NativeAction {
                     id: homeButton
+                    sidebarKey: "Home"
                     width: parent.width
                     text: window.sidebarExpanded ? "Home" : "☰"
                     selected: true
                     focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.sidebarExpanded = true; window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.sidebarExpanded = true; window.focusedItem = ({}); window.homeCardFocused = false }
                     upAction: function() { profileButton.forceActiveFocus() }
                     rightAction: function() { window.focusCard(0, 0) }
                     onClicked: homeScroll.contentY = 0
@@ -1406,48 +1418,56 @@ Window {
                 Repeater {
                     model: familyApi.railLibraries
                     NativeAction {
+                        sidebarKey: modelData.Id || ""
                         width: parent.width
                         visible: window.sidebarExpanded
                         text: modelData.Name || "Library"
                         focusScroll: sidebarScroll
-                        onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                        onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                         rightAction: function() { window.focusCard(0, 0) }
                         onClicked: window.scrollToSection(modelData.Name)
                     }
                 }
                 NativeAction {
+                    sidebarKey: "All Libraries"
                     width: parent.width; visible: window.sidebarExpanded; text: "All Libraries"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: page = "allLibraries"
                 }
                 NativeAction {
+                    sidebarKey: "Watchlist"
                     width: parent.width; visible: window.sidebarExpanded; text: "Watchlist"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: { familyApi.refreshWatchlist(); familyApi.refreshHouseholdWatchlist(); page = "watchlist" }
                 }
                 NativeAction {
+                    sidebarKey: "Search"
                     width: parent.width; visible: window.sidebarExpanded; text: "Search"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: page = "search"
                 }
                 NativeAction {
+                    sidebarKey: "Family Night"
                     width: parent.width; visible: window.sidebarExpanded; text: "Family Night"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: { window.familyNightPick = ({}); familyApi.refreshFamilyNightCandidates(); page = "familyNight" }
                 }
                 NativeAction {
+                    sidebarKey: "Playlists"
                     width: parent.width; visible: window.sidebarExpanded; text: "Playlists"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: { familyApi.refreshPlaylists(); page = "playlists" }
                 }
                 NativeAction {
+                    sidebarKey: "Live TV"
                     width: parent.width; visible: window.sidebarExpanded; text: "Live TV"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: window.openLiveTv()
                 }
                 NativeAction {
+                    sidebarKey: "Settings"
                     width: parent.width; visible: window.sidebarExpanded; text: "Settings"; focusScroll: sidebarScroll
-                    onActiveFocusChanged: if (activeFocus) { window.focusedItem = ({}); window.homeCardFocused = false }
+                    onActiveFocusChanged: if (activeFocus) { window.lastSidebarKey = sidebarKey; window.focusedItem = ({}); window.homeCardFocused = false }
                     onClicked: page = "settings"
                 }
               }

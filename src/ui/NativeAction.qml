@@ -6,6 +6,7 @@ FocusScope {
     property color accent: familyApi.themeAccent
     property int fontSize: 16
     property bool selected: false
+    property string sidebarKey: ""
     property var upAction: null
     property var downAction: null
     property var leftAction: null
