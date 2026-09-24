@@ -256,6 +256,8 @@ int main(int argc, char *argv[])
     {
       QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope,
                          Paths::globalDataDir());
+      QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                         Paths::globalDataDir());
     }
 
     // Handle config-dir (overrides portable mode if explicitly set)
@@ -274,6 +276,7 @@ int main(int argc, char *argv[])
 
       Paths::setConfigDir(absPath);
       QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, absPath);
+      QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, absPath);
     }
 
     // Handle --list-profiles

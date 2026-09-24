@@ -166,6 +166,58 @@ Window {
         return item.Name || ""
     }
 
+    function episodeNumber(item) {
+        if (!item || item.Type !== "Episode") return ""
+        const season = Number(item.ParentIndexNumber)
+        const episode = Number(item.IndexNumber)
+        const hasSeason = item.ParentIndexNumber !== undefined && item.ParentIndexNumber !== null
+            && !isNaN(season)
+        const hasEpisode = item.IndexNumber !== undefined && item.IndexNumber !== null
+            && !isNaN(episode)
+        if (hasSeason && hasEpisode)
+            return "S" + String(season).padStart(2, "0") + ":E" + String(episode).padStart(2, "0")
+        if (hasEpisode) return "Episode " + episode
+        return ""
+    }
+
+    function homeCardSubtitle(item) {
+        if (!item || item.Type !== "Episode") return ""
+        const number = episodeNumber(item)
+        if (familyApi.kidsSpoilerHidden(item)) return number
+        const title = item.Name || ""
+        return number && title ? number + " · " + title : number || title
+    }
+
+    function detailTitle(item) {
+        if (!item) return ""
+        if (item.Type !== "Episode") return safeTitle(item)
+        return [item.SeriesName || "Show", episodeNumber(item), safeTitle(item)].filter(function(value) {
+            return !!value
+        }).join(" · ")
+    }
+
+    function detailMetadata(item) {
+        if (!item) return ""
+        const parts = []
+        const year = Number(item.ProductionYear || 0)
+        if (year > 1800) parts.push(String(year))
+        const minutes = Math.round(Number(item.RunTimeTicks || 0) / 600000000)
+        if (minutes > 0) parts.push(minutes >= 60
+            ? Math.floor(minutes / 60) + "h " + String(minutes % 60).padStart(2, "0") + "m"
+            : minutes + "m")
+        if (item.OfficialRating) parts.push(item.OfficialRating)
+        const rating = Number(item.CommunityRating || 0)
+        if (rating > 0) parts.push("★ " + rating.toFixed(1))
+        if (item.Genres && item.Genres.length) parts.push(item.Genres.slice(0, 3).join(" / "))
+        return parts.join("  ·  ")
+    }
+
+    function resumeFraction(item) {
+        const runtime = Number(item && item.RunTimeTicks || 0)
+        const position = Number(item && item.UserData && item.UserData.PlaybackPositionTicks || 0)
+        return runtime > 0 && position > 0 ? Math.min(1, Math.max(0, position / runtime)) : 0
+    }
+
     function bedtimeTime(minutes) {
         const hour = Math.floor(minutes / 60)
         const displayHour = hour % 12 || 12
@@ -1613,14 +1665,48 @@ Window {
                                             anchors.margins: 3
                                             item: card.modelData
                                         }
-                                        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#d908111b" }
-                                        Text {
+                                        Rectangle {
+                                            anchors.top: parent.top; anchors.right: parent.right
+                                            anchors.margins: 8
+                                            radius: 4
+                                            width: statusLabel.implicitWidth + 12; height: 23
+                                            color: "#df08111b"
+                                            visible: statusLabel.text.length > 0
+                                            Text {
+                                                id: statusLabel
+                                                anchors.centerIn: parent
+                                                text: card.modelData.UserData && card.modelData.UserData.Played ? "✓ Watched"
+                                                    : window.resumeFraction(card.modelData) > 0 ? "In progress" : ""
+                                                color: "white"; font.pixelSize: 12; font.bold: true
+                                            }
+                                        }
+                                        Rectangle {
+                                            anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                            height: card.modelData.Type === "Episode" ? 62 : 54
+                                            color: "#d908111b"
+                                        }
+                                        Column {
                                             anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                                             anchors.margins: 8
-                                            text: familyApi.kidsSpoilerHidden(card.modelData)
-                                                ? (card.modelData.SeriesName || "Show") + " · " + window.safeTitle(card.modelData)
-                                                : (card.modelData.SeriesName || card.modelData.Name || "")
-                                            color: "white"; font.pixelSize: 15; elide: Text.ElideRight
+                                            spacing: 2
+                                            Text {
+                                                width: parent.width
+                                                text: card.modelData.SeriesName || card.modelData.Name || ""
+                                                color: "white"; font.pixelSize: 15; font.bold: true; elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                width: parent.width
+                                                visible: card.modelData.Type === "Episode"
+                                                text: window.homeCardSubtitle(card.modelData)
+                                                color: "#dce5f1"; font.pixelSize: 13; elide: Text.ElideRight
+                                            }
+                                        }
+                                        Rectangle {
+                                            anchors.left: parent.left; anchors.bottom: parent.bottom
+                                            height: 3
+                                            width: parent.width * window.resumeFraction(card.modelData)
+                                            color: familyApi.themeAccent
+                                            visible: window.resumeFraction(card.modelData) > 0
                                         }
                                         Timer {
                                             id: longSelectTimer
@@ -2766,10 +2852,20 @@ Window {
             anchors.margins: 44
             spacing: 14
             Text {
-                text: window.safeTitle(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
+                text: window.detailTitle(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
                 color: "white"
                 font.pixelSize: 42
                 font.bold: true
+                width: parent.width
+                elide: Text.ElideRight
+            }
+            Text {
+                width: parent.width
+                text: window.detailMetadata(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
+                visible: text.length > 0
+                color: "#e4edf6"
+                font.pixelSize: 18
+                elide: Text.ElideRight
             }
             Rectangle {
                 width: Math.min(parent.width, 950)
