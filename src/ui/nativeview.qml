@@ -243,6 +243,27 @@ Window {
         return parts.join("  ·  ")
     }
 
+    function mediaSummary(item) {
+        const sources = item && item.MediaSources || []
+        if (!sources.length) return ""
+        const streams = sources[0].MediaStreams || []
+        const video = streams.find(function(stream) { return stream.Type === "Video" })
+        const audio = streams.find(function(stream) { return stream.Type === "Audio" })
+        const parts = []
+        if (video) {
+            const width = Number(video.Width || 0)
+            const height = Number(video.Height || 0)
+            if (width > 0 && height > 0) parts.push(width + "×" + height)
+            if (video.Codec) parts.push(String(video.Codec).toUpperCase())
+        }
+        if (audio) {
+            if (audio.Codec) parts.push(String(audio.Codec).toUpperCase() + " audio")
+            if (audio.DisplayTitle && !audio.Codec) parts.push(audio.DisplayTitle)
+            if (Number(audio.Channels || 0) > 0) parts.push(audio.Channels + " channels")
+        }
+        return parts.join("  ·  ")
+    }
+
     function resumeFraction(item) {
         if (item && item.UserData && item.UserData.Played) return 0
         const runtime = Number(item && item.RunTimeTicks || 0)
@@ -2901,6 +2922,14 @@ Window {
                 visible: text.length > 0
                 color: "#e4edf6"
                 font.pixelSize: 18
+                elide: Text.ElideRight
+            }
+            Text {
+                width: parent.width
+                text: window.mediaSummary(familyApi.selectedItem)
+                visible: text.length > 0
+                color: "#cbd8e7"
+                font.pixelSize: 15
                 elide: Text.ElideRight
             }
             Rectangle {
