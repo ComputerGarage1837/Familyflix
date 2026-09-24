@@ -3212,6 +3212,24 @@ void FamilyApiClient::openItem(const QString& itemId)
   });
 }
 
+void FamilyApiClient::loadLocalTrailer(const QString& itemId)
+{
+  if (!signedIn() || itemId.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  request("GET", QStringLiteral("Items/%1/LocalTrailers").arg(itemId),
+          { { QStringLiteral("UserId"), m_userId } }, {},
+          [this, session, itemId](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision) return;
+    if (!error.isEmpty()) { emit errorOccurred(error); return; }
+    const auto trailers = items(data);
+    if (trailers.isEmpty()) {
+      emit errorOccurred(QStringLiteral("No playable local trailer was found."));
+      return;
+    }
+    emit localTrailerReady(itemId, trailers.first().toMap());
+  });
+}
+
 void FamilyApiClient::openSeason(const QString& seasonId)
 {
   if (!signedIn() || seasonId.isEmpty()) return;

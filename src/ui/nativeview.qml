@@ -216,6 +216,17 @@ Window {
         return parts.filter(function(value) { return !!value }).join("  ·  ")
     }
 
+    function seasonButtonTitle(item) {
+        if (!item) return "Season"
+        const name = item.Name || "Season"
+        if (familyApi.watchedIndicatorBehavior !== "ALWAYS") return name
+        const usage = item.UserData || {}
+        const remaining = Number(usage.UnplayedItemCount || 0)
+        if (remaining > 0) return name + " · " + remaining + " unwatched"
+        if (usage.Played) return name + " · ✓"
+        return name
+    }
+
     function detailMetadata(item) {
         if (!item) return ""
         const parts = []
@@ -910,6 +921,10 @@ Window {
                 || window.familyNightPick.Id !== itemId) return
             window.pendingFamilyNightId = ""
             window.playItem(item, "familyNight")
+        }
+        function onLocalTrailerReady(itemId, trailer) {
+            if (window.page === "detail" && familyApi.selectedItem.Id === itemId && trailer.Id)
+                window.playItem(trailer, "detail", false, true)
         }
         function onNextEpisodeReady(episode) {
             if (window.page !== "nextEpisode") return
@@ -3003,6 +3018,20 @@ Window {
                     onClicked: window.playSelected(true)
                 }
                 NativeAction {
+                    width: 82
+                    text: "Trailer"
+                    visible: Number(familyApi.selectedItem.LocalTrailerCount || 0) > 0
+                        || (familyApi.selectedItem.RemoteTrailers || []).length > 0
+                    onClicked: {
+                        if (Number(familyApi.selectedItem.LocalTrailerCount || 0) > 0)
+                            familyApi.loadLocalTrailer(familyApi.selectedItem.Id)
+                        else {
+                            const link = (familyApi.selectedItem.RemoteTrailers || [])[0]
+                            if (link && /^https?:\/\//i.test(link.Url || "")) Qt.openUrlExternally(link.Url)
+                        }
+                    }
+                }
+                NativeAction {
                     text: familyApi.isWatchlisted(familyApi.selectedItem.Id || "")
                         ? "− Watchlist" : "+ Watchlist"
                     width: 105
@@ -3095,8 +3124,8 @@ Window {
                     Repeater {
                         model: familyApi.seasons
                         NativeAction {
-                            width: 175
-                            text: modelData.Name || "Season"
+                            width: 210
+                            text: window.seasonButtonTitle(modelData)
                             onClicked: window.showSeason(modelData)
                         }
                     }

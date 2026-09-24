@@ -238,6 +238,7 @@ public:
   Q_INVOKABLE void moveHomeRow(const QString& rowId, int offset);
   Q_INVOKABLE void cycleSkipForwardMs();
   Q_INVOKABLE void openItem(const QString& itemId);
+  Q_INVOKABLE void loadLocalTrailer(const QString& itemId);
   Q_INVOKABLE void openSeason(const QString& seasonId);
   Q_INVOKABLE void refreshPlaylists();
   Q_INVOKABLE void openPlaylist(const QString& playlistId);
@@ -296,6 +297,7 @@ signals:
   void seekPreferenceChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
+  void localTrailerReady(const QString& itemId, const QVariantMap& trailer);
   void selectedCastChanged();
   void selectedIssueSummaryChanged();
   void watchlistChanged();
