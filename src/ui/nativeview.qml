@@ -59,6 +59,9 @@ Window {
     property var nextEpisode: ({})
     property bool autoNextPending: false
     property bool nextUpAutoBlocked: false
+    property bool stillWatchingPrompt: false
+    property int uninterruptedEpisodes: 0
+    property real uninterruptedMinutes: 0
     property double nextUpDeadlineMs: 0
     property int nextUpSecondsRemaining: 0
     property var playbackQueue: []
@@ -419,6 +422,10 @@ Window {
 
     function playItem(item, returnPage, automatic, startOver) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
+        if (!automatic) {
+            uninterruptedEpisodes = 0
+            uninterruptedMinutes = 0
+        }
         if (!familyApi.kidsPlaybackAllowed()) {
             notice = "Playback is paused for bedtime until " + bedtimeTime(familyApi.kidsBedtimeEnd) + "."
             noticeTimer.restart()
@@ -435,6 +442,7 @@ Window {
             if (!automatic && playbackQueueIndex < 0) kidsQueuedEpisodes = 0
             if (item.Type === "Episode") kidsQueuedEpisodes++
             playingItem = item
+            playerDurationSeconds = 0
             playbackReturnPage = returnPage || "detail"
             playerIsLive = false
             activeSkipSegment = ({})
@@ -666,12 +674,26 @@ Window {
     }
 
     Component.onCompleted: {
+        applyPlayerZoom()
         if (familyApi.signedIn) {
             familyApi.refreshHome()
             familyApi.refreshWatchlist()
             familyApi.refreshHouseholdWatchlist()
         }
         else familyApi.refreshPublicUsers()
+    }
+    function applyPlayerZoom() {
+        const aspect = familyApi.playerZoomMode === "AUTO_CROP" ? "zoom"
+            : familyApi.playerZoomMode === "STRETCH" ? "stretch" : "fit"
+        components.settings.setValue("video", "aspect", aspect)
+    }
+    function shouldAskStillWatching() {
+        const mode = familyApi.stillWatchingBehavior
+        if (mode === "DISABLED") return false
+        const episodeLimits = { SHORT: 2, DEFAULT: 3, LONG: 5, VERY_LONG: 8 }
+        const minuteLimits = { SHORT: 60, DEFAULT: 90, LONG: 150, VERY_LONG: 240 }
+        return uninterruptedEpisodes >= episodeLimits[mode]
+            || uninterruptedMinutes >= minuteLimits[mode]
     }
     Shortcut { sequence: "Esc"; onActivated: window.goBack() }
     Shortcut { sequence: "Backspace"; onActivated: window.goBack() }
@@ -680,12 +702,15 @@ Window {
     Connections {
         target: familyApi
         function onSessionChanged() {
+            window.uninterruptedEpisodes = 0
+            window.uninterruptedMinutes = 0
             window.issueReportPending = false
             window.pendingSeriesPlayId = ""
             searchInput.clear()
             window.searchKeyboardOpen = false
             window.searchSymbols = false
             window.autoNextPending = false
+            window.stillWatchingPrompt = false
             window.playbackQueue = []
             window.playbackQueueIndex = -1
             window.playbackSpeed = 1.0
@@ -694,6 +719,7 @@ Window {
             password.clear()
             window.page = familyApi.signedIn ? "home" : "login"
         }
+        function onPlayerZoomModeChanged() { window.applyPlayerZoom() }
         function onErrorOccurred(message) {
             window.notice = message
             noticeTimer.restart()
@@ -749,7 +775,8 @@ Window {
                 window.autoNextPending = false
                 familyApi.openItem(episode.Id)
                 window.playItem(episode, "detail", true)
-            } else if (!window.nextUpAutoBlocked && familyApi.nextUpTimeoutMs > 0 && familyApi.nextUpMode !== "Off"
+            } else if (!window.stillWatchingPrompt && !window.nextUpAutoBlocked
+                       && familyApi.nextUpTimeoutMs > 0 && familyApi.nextUpMode !== "Off"
                        && familyApi.mediaQueuingEnabled) {
                 window.nextUpDeadlineMs = Date.now() + familyApi.nextUpTimeoutMs
                 window.nextUpSecondsRemaining = Math.ceil(familyApi.nextUpTimeoutMs / 1000)
@@ -806,6 +833,10 @@ Window {
             }
             if (window.page !== "player") return
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
+            if (window.playingItem.Type === "Episode") {
+                window.uninterruptedEpisodes++
+                window.uninterruptedMinutes += window.playerDurationSeconds / 60
+            }
             if (window.playbackQueueIndex >= 0) {
                 const nextIndex = window.playbackQueueIndex + 1
                 const nextItem = window.playbackQueue[nextIndex]
@@ -831,7 +862,9 @@ Window {
                 window.nextEpisode = ({})
                 window.nextUpDeadlineMs = 0
                 window.nextUpAutoBlocked = limitReached
-                window.autoNextPending = familyApi.activeSeriesAutoplayMode === "PLAY_NEXT" && !limitReached
+                window.stillWatchingPrompt = !limitReached && window.shouldAskStillWatching()
+                window.autoNextPending = familyApi.activeSeriesAutoplayMode === "PLAY_NEXT"
+                    && !limitReached && !window.stillWatchingPrompt
                 if (limitReached) { window.notice = "Kids Mode automatic-next limit reached"; noticeTimer.restart() }
                 window.page = "nextEpisode"
                 familyApi.resolveNextEpisode(window.playingItem)
@@ -2054,6 +2087,16 @@ Window {
                 onClicked: familyApi.toggleMediaQueuing()
             }
             NativeAction {
+                text: "Still watching prompt: " + familyApi.stillWatchingBehavior.replace(/_/g, " ")
+                width: 325
+                onClicked: familyApi.cycleStillWatchingBehavior()
+            }
+            NativeAction {
+                text: "Picture fit: " + familyApi.playerZoomMode.replace(/_/g, " ")
+                width: 325
+                onClicked: familyApi.cyclePlayerZoomMode()
+            }
+            NativeAction {
                 text: "Next episode countdown: " + (familyApi.nextUpTimeoutMs === 0
                     ? "Off" : familyApi.nextUpTimeoutMs / 1000 + " sec")
                 width: 325
@@ -2955,7 +2998,7 @@ Window {
             anchors.centerIn: parent
             width: Math.min(parent.width - 100, 800)
             spacing: 16
-            Text { text: "Up next"; color: familyApi.themeText; font.pixelSize: 32; font.bold: true }
+            Text { text: window.stillWatchingPrompt ? "Still watching?" : "Up next"; color: familyApi.themeText; font.pixelSize: 32; font.bold: true }
             Text {
                 width: parent.width
                 text: nextEpisode.Id

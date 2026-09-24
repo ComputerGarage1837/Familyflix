@@ -653,6 +653,20 @@ void FamilyApiClient::applyProfileSettings(const QVariantMap& values)
       emit profileAppearanceChanged();
     }
   }
+  const QString zoom = values.value(QStringLiteral("player_zoom_mode")).toString();
+  if (QStringList{ QStringLiteral("FIT"), QStringLiteral("AUTO_CROP"),
+                   QStringLiteral("STRETCH") }.contains(zoom) && zoom != m_playerZoomMode) {
+    m_playerZoomMode = zoom;
+    emit playerZoomModeChanged();
+  }
+  const QString stillWatching = values.value(QStringLiteral("enable_still_watching")).toString();
+  if (QStringList{ QStringLiteral("DISABLED"), QStringLiteral("SHORT"),
+                   QStringLiteral("DEFAULT"), QStringLiteral("LONG"),
+                   QStringLiteral("VERY_LONG") }.contains(stillWatching)
+      && stillWatching != m_stillWatchingBehavior) {
+    m_stillWatchingBehavior = stillWatching;
+    emit stillWatchingBehaviorChanged();
+  }
   const QString segments = values.value(QStringLiteral("media_segment_actions")).toString();
   if (!segments.isNull()) {
     for (const QString& type : { QStringLiteral("Intro"), QStringLiteral("Outro"),
@@ -1498,6 +1512,26 @@ void FamilyApiClient::toggleSeriesThumbnails()
   emit profileAppearanceChanged();
   changeProfileSetting(QStringLiteral("pref_enable_series_thumbnails"),
     m_seriesThumbnailsEnabled ? QStringLiteral("true") : QStringLiteral("false"));
+}
+
+void FamilyApiClient::cyclePlayerZoomMode()
+{
+  if (!signedIn()) return;
+  const QStringList choices{ QStringLiteral("FIT"), QStringLiteral("AUTO_CROP"),
+    QStringLiteral("STRETCH") };
+  m_playerZoomMode = choices[(choices.indexOf(m_playerZoomMode) + 1) % choices.size()];
+  emit playerZoomModeChanged();
+  changeProfileSetting(QStringLiteral("player_zoom_mode"), m_playerZoomMode);
+}
+
+void FamilyApiClient::cycleStillWatchingBehavior()
+{
+  if (!signedIn()) return;
+  const QStringList choices{ QStringLiteral("DISABLED"), QStringLiteral("SHORT"),
+    QStringLiteral("DEFAULT"), QStringLiteral("LONG"), QStringLiteral("VERY_LONG") };
+  m_stillWatchingBehavior = choices[(choices.indexOf(m_stillWatchingBehavior) + 1) % choices.size()];
+  emit stillWatchingBehaviorChanged();
+  changeProfileSetting(QStringLiteral("enable_still_watching"), m_stillWatchingBehavior);
 }
 
 QString FamilyApiClient::temporaryStorageGiB() const

@@ -40,6 +40,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(QString clockBehavior READ clockBehavior NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QString watchedIndicatorBehavior READ watchedIndicatorBehavior NOTIFY profileAppearanceChanged)
   Q_PROPERTY(bool seriesThumbnailsEnabled READ seriesThumbnailsEnabled NOTIFY profileAppearanceChanged)
+  Q_PROPERTY(QString playerZoomMode READ playerZoomMode NOTIFY playerZoomModeChanged)
+  Q_PROPERTY(QString stillWatchingBehavior READ stillWatchingBehavior NOTIFY stillWatchingBehaviorChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
   Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
@@ -123,6 +125,8 @@ public:
   QString clockBehavior() const { return m_clockBehavior; }
   QString watchedIndicatorBehavior() const { return m_watchedIndicatorBehavior; }
   bool seriesThumbnailsEnabled() const { return m_seriesThumbnailsEnabled; }
+  QString playerZoomMode() const { return m_playerZoomMode; }
+  QString stillWatchingBehavior() const { return m_stillWatchingBehavior; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
   bool familyNightLoading() const { return m_familyNightLoading; }
@@ -205,6 +209,8 @@ public:
   Q_INVOKABLE void cycleClockBehavior();
   Q_INVOKABLE void cycleWatchedIndicatorBehavior();
   Q_INVOKABLE void toggleSeriesThumbnails();
+  Q_INVOKABLE void cyclePlayerZoomMode();
+  Q_INVOKABLE void cycleStillWatchingBehavior();
   Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void refreshCoWatchPresets();
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
@@ -278,6 +284,8 @@ signals:
   void kidsSettingsChanged();
   void nextUpModeChanged();
   void profileAppearanceChanged();
+  void playerZoomModeChanged();
+  void stillWatchingBehaviorChanged();
   void coWatchPresetsChanged();
   void familyNightChanged();
   void firstUnwatchedEpisodeReady(const QString& seriesId, const QVariantMap& episode);
@@ -380,6 +388,8 @@ private:
   QString m_clockBehavior = QStringLiteral("ALWAYS");
   QString m_watchedIndicatorBehavior = QStringLiteral("ALWAYS");
   bool m_seriesThumbnailsEnabled = true;
+  QString m_playerZoomMode = QStringLiteral("FIT");
+  QString m_stillWatchingBehavior = QStringLiteral("DISABLED");
   QVariantMap m_profileSettingsValues;
   QVariantMap m_pendingProfileSettings;
   QVariantMap m_pendingSegmentActions;
