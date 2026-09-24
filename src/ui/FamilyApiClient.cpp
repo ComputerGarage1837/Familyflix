@@ -3152,9 +3152,12 @@ void FamilyApiClient::openItem(const QString& itemId)
   const quint64 revision = m_sessionRevision;
   const quint64 itemRevision = ++m_itemRevision;
   m_selectedItem.clear();
+  m_selectedExtras.clear();
+  m_selectedExtrasLoading = false;
   m_selectedCast.clear();
   m_selectedIssueSummary.clear();
   emit selectedItemChanged();
+  emit selectedExtrasChanged();
   emit selectedCastChanged();
   emit selectedIssueSummaryChanged();
   request("GET", QStringLiteral("FamilyFlix/Issues/Summaries"),
@@ -3227,6 +3230,26 @@ void FamilyApiClient::loadLocalTrailer(const QString& itemId)
       return;
     }
     emit localTrailerReady(itemId, trailers.first().toMap());
+  });
+}
+
+void FamilyApiClient::loadSpecialFeatures(const QString& itemId)
+{
+  if (!signedIn() || itemId.isEmpty()) return;
+  const quint64 session = m_sessionRevision;
+  const quint64 itemRevision = m_itemRevision;
+  m_selectedExtras.clear();
+  m_selectedExtrasLoading = true;
+  emit selectedExtrasChanged();
+  request("GET", QStringLiteral("Items/%1/SpecialFeatures").arg(itemId),
+          { { QStringLiteral("UserId"), m_userId } }, {},
+          [this, session, itemRevision, itemId](const QVariant& data, const QString& error) {
+    if (session != m_sessionRevision || itemRevision != m_itemRevision
+        || m_selectedItem.value(QStringLiteral("Id")).toString() != itemId) return;
+    m_selectedExtrasLoading = false;
+    if (!error.isEmpty()) emit errorOccurred(error);
+    else m_selectedExtras = items(data);
+    emit selectedExtrasChanged();
   });
 }
 

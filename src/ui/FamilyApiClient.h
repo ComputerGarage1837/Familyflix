@@ -67,6 +67,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool libraryFavoritesOnly READ libraryFavoritesOnly NOTIFY libraryBrowseChanged)
   Q_PROPERTY(bool libraryUnwatchedOnly READ libraryUnwatchedOnly NOTIFY libraryBrowseChanged)
   Q_PROPERTY(QVariantMap selectedItem READ selectedItem NOTIFY selectedItemChanged)
+  Q_PROPERTY(QVariantList selectedExtras READ selectedExtras NOTIFY selectedExtrasChanged)
+  Q_PROPERTY(bool selectedExtrasLoading READ selectedExtrasLoading NOTIFY selectedExtrasChanged)
   Q_PROPERTY(QVariantList selectedCast READ selectedCast NOTIFY selectedCastChanged)
   Q_PROPERTY(QVariantMap selectedIssueSummary READ selectedIssueSummary NOTIFY selectedIssueSummaryChanged)
   Q_PROPERTY(QVariantList watchlistEntries READ watchlistEntries NOTIFY watchlistChanged)
@@ -152,6 +154,8 @@ public:
   bool libraryFavoritesOnly() const { return m_libraryFavoritesOnly; }
   bool libraryUnwatchedOnly() const { return m_libraryUnwatchedOnly; }
   QVariantMap selectedItem() const { return m_selectedItem; }
+  QVariantList selectedExtras() const { return m_selectedExtras; }
+  bool selectedExtrasLoading() const { return m_selectedExtrasLoading; }
   QVariantList selectedCast() const { return m_selectedCast; }
   QVariantMap selectedIssueSummary() const { return m_selectedIssueSummary; }
   QVariantList watchlistEntries() const { return m_watchlistEntries; }
@@ -239,6 +243,7 @@ public:
   Q_INVOKABLE void cycleSkipForwardMs();
   Q_INVOKABLE void openItem(const QString& itemId);
   Q_INVOKABLE void loadLocalTrailer(const QString& itemId);
+  Q_INVOKABLE void loadSpecialFeatures(const QString& itemId);
   Q_INVOKABLE void openSeason(const QString& seasonId);
   Q_INVOKABLE void refreshPlaylists();
   Q_INVOKABLE void openPlaylist(const QString& playlistId);
@@ -297,6 +302,7 @@ signals:
   void seekPreferenceChanged();
   void libraryBrowseChanged();
   void selectedItemChanged();
+  void selectedExtrasChanged();
   void localTrailerReady(const QString& itemId, const QVariantMap& trailer);
   void selectedCastChanged();
   void selectedIssueSummaryChanged();
@@ -444,6 +450,8 @@ private:
   bool m_libraryPrefWriteActive = false;
   quint64 m_libraryBrowseRevision = 0;
   QVariantMap m_selectedItem;
+  QVariantList m_selectedExtras;
+  bool m_selectedExtrasLoading = false;
   QVariantList m_selectedCast;
   QVariantMap m_selectedIssueSummary;
   QVariantList m_watchlistEntries;

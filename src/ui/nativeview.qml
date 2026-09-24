@@ -645,6 +645,8 @@ Window {
         } else if (page === "season") {
             familyApi.openItem(selectedSeries.Id || "")
             page = "detail"
+        } else if (page === "extras") {
+            page = "detail"
         } else if (page === "nextEpisode") {
             autoNextPending = false
             page = playbackReturnPage
@@ -797,7 +799,8 @@ Window {
             detail: detailBackButton,
             issueReport: issueCancelButton,
             nextEpisode: nextEpisodeDoneButton,
-            season: seasonBackButton
+            season: seasonBackButton,
+            extras: extrasBackButton
         }[page]
         if (first && first.visible && first.enabled) first.forceActiveFocus()
     }
@@ -3061,6 +3064,15 @@ Window {
                     }
                 }
                 NativeAction {
+                    width: 70
+                    text: "Extras"
+                    visible: Number(familyApi.selectedItem.SpecialFeatureCount || 0) > 0
+                    onClicked: {
+                        familyApi.loadSpecialFeatures(familyApi.selectedItem.Id)
+                        page = "extras"
+                    }
+                }
+                NativeAction {
                     text: familyApi.isWatchlisted(familyApi.selectedItem.Id || "")
                         ? "− Watchlist" : "+ Watchlist"
                     width: 105
@@ -3156,6 +3168,86 @@ Window {
                             width: 210
                             text: window.seasonButtonTitle(modelData)
                             onClicked: window.showSeason(modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: page === "extras"
+        Column {
+            anchors.fill: parent
+            anchors.margins: 35
+            spacing: 18
+            Row {
+                spacing: 18
+                NativeAction {
+                    id: extrasBackButton
+                    text: "← Details"
+                    downAction: function() {
+                        const first = extrasRepeater.itemAt(0)
+                        if (first) first.focusAction()
+                    }
+                    onClicked: window.goBack()
+                }
+                Text {
+                    text: "Extras · " + (familyApi.selectedItem.Name || "Video")
+                    color: familyApi.themeText; font.pixelSize: 30; font.bold: true
+                }
+            }
+            Text {
+                visible: familyApi.selectedExtras.length === 0
+                text: familyApi.selectedExtrasLoading ? "Loading extras…" : "No extras available."
+                color: familyApi.themeText; font.pixelSize: 18
+            }
+            Flickable {
+                id: extrasScroll
+                width: parent.width
+                height: parent.height - 100
+                contentWidth: width
+                contentHeight: extrasColumn.height
+                clip: true
+                Column {
+                    id: extrasColumn
+                    width: extrasScroll.width
+                    spacing: 9
+                    Repeater {
+                        id: extrasRepeater
+                        model: familyApi.selectedExtras
+                        Row {
+                            id: extraRow
+                            required property var modelData
+                            required property int index
+                            spacing: 10
+                            function focusAction() { extraAction.forceActiveFocus() }
+                            Artwork {
+                                width: 130; height: 73
+                                item: extraRow.modelData
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: { extraAction.forceActiveFocus(); window.playItem(extraRow.modelData, "extras", false, true) }
+                                }
+                            }
+                            NativeAction {
+                                id: extraAction
+                                width: extrasColumn.width - 140
+                                height: 73
+                                text: extraRow.modelData.Name || "Extra"
+                                focusScroll: extrasScroll
+                                upAction: function() {
+                                    const prior = extrasRepeater.itemAt(extraRow.index - 1)
+                                    if (prior) prior.focusAction()
+                                    else extrasBackButton.forceActiveFocus()
+                                }
+                                downAction: function() {
+                                    const next = extrasRepeater.itemAt(extraRow.index + 1)
+                                    if (next) next.focusAction()
+                                }
+                                onClicked: window.playItem(extraRow.modelData, "extras", false, true)
+                            }
                         }
                     }
                 }
