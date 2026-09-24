@@ -623,6 +623,13 @@ Window {
             trackMenuVisible = false
             availableTracks = []
             playerPanel.forceActiveFocus()
+        } else if (page === "home") {
+            Qt.callLater(function() {
+                if (window.homeCardFocused && window.lastHomeItemId) window.focusHomeItem()
+                else homeButton.forceActiveFocus()
+            })
+        } else if (page === "login" || page === "profile") {
+            Qt.callLater(window.focusLoginChoice)
         } else if (page === "allLibraries") {
             Qt.callLater(function() { librariesGrid.forceActiveFocus() })
         } else if (page === "libraryBrowse") {
@@ -677,8 +684,18 @@ Window {
         focusCard(lastHomeRow, lastHomeCard)
     }
 
+    function focusLoginChoice() {
+        if (page !== "login" && page !== "profile") return
+        if (chosenUser) { password.forceActiveFocus(); return }
+        const first = userRepeater.itemAt(0)
+        if (first) first.forceActiveFocus()
+        else if (page === "profile") profileBackButton.forceActiveFocus()
+    }
+
     Component.onCompleted: {
         applyPlayerZoom()
+        if (page === "home") Qt.callLater(function() { homeButton.forceActiveFocus() })
+        else if (page === "login") Qt.callLater(window.focusLoginChoice)
         if (familyApi.signedIn) {
             familyApi.refreshHome()
             familyApi.refreshWatchlist()
@@ -724,6 +741,7 @@ Window {
             window.page = familyApi.signedIn ? "home" : "login"
         }
         function onPlayerZoomModeChanged() { window.applyPlayerZoom() }
+        function onPublicUsersChanged() { Qt.callLater(window.focusLoginChoice) }
         function onErrorOccurred(message) {
             window.notice = message
             noticeTimer.restart()
@@ -1058,7 +1076,7 @@ Window {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 12
                 visible: page === "profile" && !chosenUser
-                NativeAction { text: "Back to Home"; onClicked: page = "home" }
+                NativeAction { id: profileBackButton; text: "Back to Home"; onClicked: page = "home" }
                 NativeAction { text: "Sign out"; onClicked: familyApi.signOut() }
                 NativeAction { text: "Kids Mode"; onClicked: page = "kidsSettings" }
             }
