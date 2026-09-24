@@ -10,6 +10,7 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QDebug>
+#include <QCryptographicHash>
 #include "Names.h"
 #include "Version.h"
 #include "core/ProfileManager.h"
@@ -159,6 +160,17 @@ QString Paths::socketName(const QString& serverName)
   if (profileName.isEmpty())
     profileName = "default";
   QString socketFile = QString("jellyfin-desktop.%1.%2").arg(profileName, serverName);
+
+#ifdef Q_OS_WIN
+  // Portable copies own separate data directories and must not forward a launch
+  // to an unrelated portable (or installed) copy using the same profile name.
+  if (isPortableMode())
+  {
+    const QByteArray appDir = QDir(QCoreApplication::applicationDirPath()).canonicalPath().toUtf8();
+    const QByteArray id = QCryptographicHash::hash(appDir, QCryptographicHash::Sha256).toHex().left(12);
+    socketFile += QStringLiteral(".") + QString::fromLatin1(id);
+  }
+#endif
 
 #ifdef Q_OS_UNIX
   QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);

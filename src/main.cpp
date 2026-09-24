@@ -4,6 +4,7 @@
 #include <QIcon>
 #include <QtQml>
 #include <optional>
+#include <memory>
 #include <Qt>
 #include <QtWebEngineQuick>
 #include <qtwebenginecoreglobal.h>
@@ -12,6 +13,9 @@
 #include <QCommandLineOption>
 #include <QDebug>
 #include <QSettings>
+#include <QDateTime>
+#include <QDir>
+#include <QTimer>
 
 #include "shared/Names.h"
 #include "system/SystemComponent.h"
@@ -516,6 +520,32 @@ int main(int argc, char *argv[])
         throw FatalException(QObject::tr("Failed to parse application engine script."));
 
       QQuickWindow* window = Globals::MainWindow();
+
+#ifdef Q_OS_WIN
+      // Local, opt-in visual QA for Windows versions unsupported by the
+      // external capture helper. Never enabled in normal installations.
+      if (Paths::isPortableMode())
+      {
+        const QString qaMarker = QCoreApplication::applicationDirPath() + "/qa-capture";
+        if (QFileInfo::exists(qaMarker))
+        {
+          const QString qaDir = QCoreApplication::applicationDirPath() + "/qa-captures";
+          QDir().mkpath(qaDir);
+          auto captureCount = std::make_shared<int>(0);
+          auto captureTimer = new QTimer(window);
+          captureTimer->setInterval(10000);
+          QObject::connect(captureTimer, &QTimer::timeout, window,
+                           [window, captureTimer, captureCount, qaDir]() {
+            const QString filename = qaDir + "/" + QDateTime::currentDateTimeUtc().toString("yyyyMMdd-HHmmss-zzz") + ".png";
+            if (!window->grabWindow().save(filename))
+              qWarning() << "QA screenshot failed:" << filename;
+            if (++(*captureCount) >= 12)
+              captureTimer->stop();
+          });
+          captureTimer->start();
+        }
+      }
+#endif
 
       // Set window flags for proper popup handling (e.g., WebEngineView dropdowns)
       window->setFlags(window->flags() | Qt::WindowFullscreenButtonHint);
