@@ -638,6 +638,21 @@ void FamilyApiClient::applyProfileSettings(const QVariantMap& values)
     m_clockBehavior = clock;
     emit profileAppearanceChanged();
   }
+  const QString watched = values.value(QStringLiteral("pref_watched_indicator_behavior")).toString();
+  if (QStringList{ QStringLiteral("ALWAYS"), QStringLiteral("HIDE_UNWATCHED"),
+                   QStringLiteral("EPISODES_ONLY"), QStringLiteral("NEVER") }.contains(watched)
+      && watched != m_watchedIndicatorBehavior) {
+    m_watchedIndicatorBehavior = watched;
+    emit profileAppearanceChanged();
+  }
+  const QString thumbnails = values.value(QStringLiteral("pref_enable_series_thumbnails")).toString();
+  if (thumbnails == QStringLiteral("true") || thumbnails == QStringLiteral("false")) {
+    const bool enabled = thumbnails == QStringLiteral("true");
+    if (enabled != m_seriesThumbnailsEnabled) {
+      m_seriesThumbnailsEnabled = enabled;
+      emit profileAppearanceChanged();
+    }
+  }
   const QString segments = values.value(QStringLiteral("media_segment_actions")).toString();
   if (!segments.isNull()) {
     for (const QString& type : { QStringLiteral("Intro"), QStringLiteral("Outro"),
@@ -1450,6 +1465,25 @@ void FamilyApiClient::cycleClockBehavior()
   changeProfileSetting(QStringLiteral("pref_clock_behavior"), m_clockBehavior);
 }
 
+void FamilyApiClient::cycleWatchedIndicatorBehavior()
+{
+  if (!signedIn()) return;
+  const QStringList choices{ QStringLiteral("ALWAYS"), QStringLiteral("HIDE_UNWATCHED"),
+    QStringLiteral("EPISODES_ONLY"), QStringLiteral("NEVER") };
+  m_watchedIndicatorBehavior = choices[(choices.indexOf(m_watchedIndicatorBehavior) + 1) % choices.size()];
+  emit profileAppearanceChanged();
+  changeProfileSetting(QStringLiteral("pref_watched_indicator_behavior"), m_watchedIndicatorBehavior);
+}
+
+void FamilyApiClient::toggleSeriesThumbnails()
+{
+  if (!signedIn()) return;
+  m_seriesThumbnailsEnabled = !m_seriesThumbnailsEnabled;
+  emit profileAppearanceChanged();
+  changeProfileSetting(QStringLiteral("pref_enable_series_thumbnails"),
+    m_seriesThumbnailsEnabled ? QStringLiteral("true") : QStringLiteral("false"));
+}
+
 QString FamilyApiClient::temporaryStorageGiB() const
 {
   const qint64 bytes = QStorageInfo(QDir::tempPath()).bytesAvailable();
@@ -2057,6 +2091,8 @@ void FamilyApiClient::activateSession(const QString& token, const QString& userI
   m_mediaQueuingEnabled = true;
   m_backdropEnabled = true;
   m_clockBehavior = QStringLiteral("ALWAYS");
+  m_watchedIndicatorBehavior = QStringLiteral("ALWAYS");
+  m_seriesThumbnailsEnabled = true;
   m_themeName = m_settings.value(QStringLiteral("users/%1/theme").arg(m_userId),
                                  QStringLiteral("Ocean")).toString();
   m_settings.setValue(QStringLiteral("token"), m_token);
@@ -2134,6 +2170,8 @@ void FamilyApiClient::signOut()
   m_mediaQueuingEnabled = true;
   m_backdropEnabled = true;
   m_clockBehavior = QStringLiteral("ALWAYS");
+  m_watchedIndicatorBehavior = QStringLiteral("ALWAYS");
+  m_seriesThumbnailsEnabled = true;
   m_themeName = QStringLiteral("Ocean");
   m_libraries.clear(); m_continueItems.clear(); m_deckItems.clear(); m_groupDeckItems.clear();
   m_recentDeckActivity.clear();

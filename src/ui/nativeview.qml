@@ -193,6 +193,8 @@ Window {
         } else {
             // Match the Android wide-card preference: episode still first,
             // followed by the title or parent wide image when available.
+            if (item.Type === "Series" && !familyApi.seriesThumbnailsEnabled && tags.Primary)
+                add(own, "Primary")
             if (item.Type === "Episode" && tags.Primary) add(own, "Primary")
             if (item.ParentThumbImageTag) add(item.ParentThumbItemId, "Thumb")
             if (item.SeriesThumbImageTag) add(item.SeriesId, "Thumb")
@@ -218,6 +220,35 @@ Window {
             candidateIndex++
         asynchronous: true
         fillMode: Image.PreserveAspectCrop
+        property string watchedBadge: {
+            if (purpose !== "card" || !item || !item.Id) return ""
+            const mode = familyApi.watchedIndicatorBehavior
+            if (mode === "NEVER") return ""
+            const usage = item.UserData || {}
+            if (usage.Played && (mode !== "EPISODES_ONLY" || item.Type === "Episode")) return "✓"
+            const count = Number(usage.UnplayedItemCount || 0)
+            if (mode === "ALWAYS" && count > 0 && (item.Type === "Series" || item.Type === "Season"))
+                return count > 99 ? "99+" : String(count)
+            return ""
+        }
+        Rectangle {
+            visible: parent.watchedBadge.length > 0
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: 7
+            width: Math.max(27, badgeText.implicitWidth + 14)
+            height: 27
+            radius: 14
+            color: familyApi.themeAccent
+            Text {
+                id: badgeText
+                anchors.centerIn: parent
+                text: parent.parent.watchedBadge
+                color: familyApi.themeOnAccent
+                font.pixelSize: 14
+                font.bold: true
+            }
+        }
     }
 
     function showItem(item, returnPage) {
@@ -2026,6 +2057,16 @@ Window {
             NativeAction { text: "Skip forward: " + (familyApi.skipForwardMs / 1000) + " sec"; width: 325; onClicked: familyApi.cycleSkipForwardMs() }
             NativeAction { text: "Background images: " + (familyApi.backdropEnabled ? "On" : "Off"); width: 325; onClicked: familyApi.toggleBackdropEnabled() }
             NativeAction { text: "Clock: " + familyApi.clockBehavior.replace(/_/g, " "); width: 325; onClicked: familyApi.cycleClockBehavior() }
+            NativeAction {
+                text: "Watched badges: " + familyApi.watchedIndicatorBehavior.replace(/_/g, " ")
+                width: 325
+                onClicked: familyApi.cycleWatchedIndicatorBehavior()
+            }
+            NativeAction {
+                text: "Series thumbnails: " + (familyApi.seriesThumbnailsEnabled ? "On" : "Off")
+                width: 325
+                onClicked: familyApi.toggleSeriesThumbnails()
+            }
             NativeAction { text: "Check Windows updates"; width: 325; onClicked: familyApi.checkWindowsUpdate(true) }
             Flickable {
                 width: parent.width

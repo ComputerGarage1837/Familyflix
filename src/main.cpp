@@ -4,7 +4,6 @@
 #include <QIcon>
 #include <QtQml>
 #include <optional>
-#include <memory>
 #include <Qt>
 #include <QtWebEngineQuick>
 #include <qtwebenginecoreglobal.h>
@@ -15,6 +14,7 @@
 #include <QSettings>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QTimer>
 
 #include "shared/Names.h"
@@ -530,17 +530,17 @@ int main(int argc, char *argv[])
         if (QFileInfo::exists(qaMarker))
         {
           const QString qaDir = QCoreApplication::applicationDirPath() + "/qa-captures";
+          const QString requestPath = QCoreApplication::applicationDirPath() + "/qa-request";
           QDir().mkpath(qaDir);
-          auto captureCount = std::make_shared<int>(0);
           auto captureTimer = new QTimer(window);
-          captureTimer->setInterval(10000);
+          captureTimer->setInterval(250);
           QObject::connect(captureTimer, &QTimer::timeout, window,
-                           [window, captureTimer, captureCount, qaDir]() {
+                           [window, qaDir, requestPath]() {
+            if (!QFileInfo::exists(requestPath)) return;
+            QFile::remove(requestPath);
             const QString filename = qaDir + "/" + QDateTime::currentDateTimeUtc().toString("yyyyMMdd-HHmmss-zzz") + ".png";
             if (!window->grabWindow().save(filename))
               qWarning() << "QA screenshot failed:" << filename;
-            if (++(*captureCount) >= 12)
-              captureTimer->stop();
           });
           captureTimer->start();
         }

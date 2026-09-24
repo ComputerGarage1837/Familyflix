@@ -37,6 +37,8 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool mediaQueuingEnabled READ mediaQueuingEnabled NOTIFY nextUpModeChanged)
   Q_PROPERTY(bool backdropEnabled READ backdropEnabled NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QString clockBehavior READ clockBehavior NOTIFY profileAppearanceChanged)
+  Q_PROPERTY(QString watchedIndicatorBehavior READ watchedIndicatorBehavior NOTIFY profileAppearanceChanged)
+  Q_PROPERTY(bool seriesThumbnailsEnabled READ seriesThumbnailsEnabled NOTIFY profileAppearanceChanged)
   Q_PROPERTY(QVariantList coWatchPresets READ coWatchPresets NOTIFY coWatchPresetsChanged)
   Q_PROPERTY(QVariantList familyNightCandidates READ familyNightCandidates NOTIFY familyNightChanged)
   Q_PROPERTY(bool familyNightLoading READ familyNightLoading NOTIFY familyNightChanged)
@@ -117,6 +119,8 @@ public:
   bool mediaQueuingEnabled() const { return m_mediaQueuingEnabled; }
   bool backdropEnabled() const { return m_backdropEnabled; }
   QString clockBehavior() const { return m_clockBehavior; }
+  QString watchedIndicatorBehavior() const { return m_watchedIndicatorBehavior; }
+  bool seriesThumbnailsEnabled() const { return m_seriesThumbnailsEnabled; }
   QVariantList coWatchPresets() const { return m_coWatchPresets; }
   QVariantList familyNightCandidates() const { return m_familyNightCandidates; }
   bool familyNightLoading() const { return m_familyNightLoading; }
@@ -196,6 +200,8 @@ public:
   Q_INVOKABLE void toggleMediaQueuing();
   Q_INVOKABLE void toggleBackdropEnabled();
   Q_INVOKABLE void cycleClockBehavior();
+  Q_INVOKABLE void cycleWatchedIndicatorBehavior();
+  Q_INVOKABLE void toggleSeriesThumbnails();
   Q_INVOKABLE void stopWatchingTogether();
   Q_INVOKABLE void refreshCoWatchPresets();
   Q_INVOKABLE void saveCoWatchPreset(const QString& name);
@@ -368,6 +374,8 @@ private:
   bool m_mediaQueuingEnabled = true;
   bool m_backdropEnabled = true;
   QString m_clockBehavior = QStringLiteral("ALWAYS");
+  QString m_watchedIndicatorBehavior = QStringLiteral("ALWAYS");
+  bool m_seriesThumbnailsEnabled = true;
   QVariantMap m_profileSettingsValues;
   QVariantMap m_pendingProfileSettings;
   QVariantMap m_pendingSegmentActions;
