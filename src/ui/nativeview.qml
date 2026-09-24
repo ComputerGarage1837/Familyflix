@@ -75,6 +75,10 @@ Window {
     property string detailReturnPage: "home"
     property string notice: ""
     property bool playerControlsVisible: false
+    onPlayerControlsVisibleChanged: if (playerControlsVisible && page === "player" && !playerIsLive) {
+        uninterruptedEpisodes = 0
+        uninterruptedMinutes = 0
+    }
     property bool playerPaused: false
     property real playbackSpeed: 1.0
     property real playerPositionSeconds: 0
