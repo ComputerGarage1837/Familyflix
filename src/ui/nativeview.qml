@@ -191,7 +191,8 @@ Window {
     function detailTitle(item) {
         if (!item) return ""
         if (item.Type !== "Episode") return safeTitle(item)
-        return [item.SeriesName || "Show", episodeNumber(item), safeTitle(item)].filter(function(value) {
+        return [item.SeriesName || "Show", episodeNumber(item),
+            familyApi.kidsSpoilerHidden(item) ? "" : safeTitle(item)].filter(function(value) {
             return !!value
         }).join(" · ")
     }
@@ -199,14 +200,15 @@ Window {
     function browseCardTitle(item) {
         if (!item) return ""
         if (item.Type !== "Episode") return item.Name || item.SeriesName || "Video"
-        return [item.SeriesName || "Show", episodeNumber(item), safeTitle(item)].filter(function(value) {
+        return [item.SeriesName || "Show", episodeNumber(item),
+            familyApi.kidsSpoilerHidden(item) ? "" : safeTitle(item)].filter(function(value) {
             return !!value
         }).join(" · ")
     }
 
     function episodeListTitle(item) {
         if (!item) return ""
-        const parts = [episodeNumber(item), safeTitle(item)]
+        const parts = [episodeNumber(item), familyApi.kidsSpoilerHidden(item) ? "" : safeTitle(item)]
         const minutes = Math.round(Number(item.RunTimeTicks || 0) / 600000000)
         if (minutes > 0) parts.push(minutes + " min")
         if (item.UserData && item.UserData.Played) parts.push("✓ Watched")
