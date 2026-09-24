@@ -233,6 +233,7 @@ Window {
     }
 
     function resumeFraction(item) {
+        if (item && item.UserData && item.UserData.Played) return 0
         const runtime = Number(item && item.RunTimeTicks || 0)
         const position = Number(item && item.UserData && item.UserData.PlaybackPositionTicks || 0)
         return runtime > 0 && position > 0 ? Math.min(1, Math.max(0, position / runtime)) : 0
