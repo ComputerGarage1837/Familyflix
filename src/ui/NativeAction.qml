@@ -27,7 +27,7 @@ FocusScope {
                                             top + height - focusScroll.height + 8)
     }
 
-    function moveAmongSiblings(direction) {
+    function moveAmongSiblings(direction, continueFocusChain) {
         if (!parent) return
         const actions = []
         for (let item of parent.children) {
@@ -36,13 +36,17 @@ FocusScope {
         const index = actions.indexOf(action)
         const next = actions[index + direction]
         if (next) next.forceActiveFocus()
+        else if (continueFocusChain) {
+            const target = action.nextItemInFocusChain(direction > 0)
+            if (target && target !== action) target.forceActiveFocus()
+        }
     }
 
     Keys.onReturnPressed: clicked()
     Keys.onEnterPressed: clicked()
     Keys.onSpacePressed: clicked()
-    Keys.onUpPressed: upAction ? upAction() : moveAmongSiblings(-(parent && parent.actionColumns ? parent.actionColumns : navColumns))
-    Keys.onDownPressed: downAction ? downAction() : moveAmongSiblings(parent && parent.actionColumns ? parent.actionColumns : navColumns)
+    Keys.onUpPressed: upAction ? upAction() : moveAmongSiblings(-(parent && parent.actionColumns ? parent.actionColumns : navColumns), true)
+    Keys.onDownPressed: downAction ? downAction() : moveAmongSiblings(parent && parent.actionColumns ? parent.actionColumns : navColumns, true)
     Keys.onLeftPressed: leftAction ? leftAction() : moveAmongSiblings(-1)
     Keys.onRightPressed: rightAction ? rightAction() : moveAmongSiblings(1)
 
