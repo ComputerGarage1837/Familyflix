@@ -157,6 +157,12 @@ Window {
         return item.Name || ""
     }
 
+    function bedtimeTime(minutes) {
+        const hour = Math.floor(minutes / 60)
+        const displayHour = hour % 12 || 12
+        return displayHour + ":" + String(minutes % 60).padStart(2, "0") + (hour < 12 ? " AM" : " PM")
+    }
+
     function artworkChoices(item, purpose) {
         if (!item || !item.Id) return []
         const choices = []
@@ -369,13 +375,12 @@ Window {
             familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
         const wasPlaying = page === "player" || livePreviewActive
         if (wasPlaying) {
+            playerPositionSeconds = Number(components.player.getPosition()) / 1000
             playbackQueue = []
             playbackQueueIndex = -1
             livePreviewActive = false
             page = playerIsLive ? "liveTv" : playbackReturnPage
             playerIsLive = false
-            playerPositionSeconds = resume / 1000
-            playerDurationSeconds = Number(item.RunTimeTicks || 0) / 10000000
             components.player.stop()
         }
         notice = "Sleep timer ended playback"
@@ -415,7 +420,7 @@ Window {
     function playItem(item, returnPage, automatic, startOver) {
         if (!item.Id || item.Type === "Series" || item.Type === "Season") return
         if (!familyApi.kidsPlaybackAllowed()) {
-            notice = "Playback is paused for bedtime until 7:00 AM."
+            notice = "Playback is paused for bedtime until " + bedtimeTime(familyApi.kidsBedtimeEnd) + "."
             noticeTimer.restart()
             return
         }
@@ -905,7 +910,7 @@ Window {
             if (!window.playerIsLive) familyApi.reportPlaybackStopped(components.player.getPosition() * 1000)
             components.player.stop()
             window.page = window.playerIsLive ? "liveTv" : window.playbackReturnPage
-            window.notice = "Bedtime reached. Playback stopped until 7:00 AM."
+            window.notice = "Bedtime reached. Playback stopped until " + window.bedtimeTime(familyApi.kidsBedtimeEnd) + "."
             noticeTimer.restart()
         }
     }
@@ -1171,8 +1176,14 @@ Window {
             }
             NativeAction {
                 width: parent.width
-                text: "Bedtime: " + (familyApi.kidsBedtimeStart < 0 ? "Off" : (familyApi.kidsBedtimeStart / 60) + ":00–7:00")
+                text: "Bedtime start: " + (familyApi.kidsBedtimeStart < 0 ? "Off" : window.bedtimeTime(familyApi.kidsBedtimeStart))
                 onClicked: familyApi.cycleKidsBedtime()
+            }
+            NativeAction {
+                width: parent.width
+                text: "Bedtime end: " + window.bedtimeTime(familyApi.kidsBedtimeEnd)
+                enabled: familyApi.kidsBedtimeStart >= 0
+                onClicked: familyApi.cycleKidsBedtimeEnd()
             }
             TextField {
                 id: newKidsPin
@@ -2690,7 +2701,10 @@ Window {
                 }
             }
             Row {
+                id: detailActionRow
                 spacing: 8
+                transformOrigin: Item.TopLeft
+                scale: Math.min(1, (window.width - 88) / Math.max(1, implicitWidth))
                 NativeAction { width: 55; text: "Back"; onClicked: window.goBack() }
                 NativeAction {
                     width: 105
@@ -2702,7 +2716,7 @@ Window {
                     onClicked: window.playSelected(false)
                 }
                 NativeAction {
-                    width: 80
+                    width: 105
                     text: "Start over"
                     visible: (familyApi.selectedItem.Type === "Movie" || familyApi.selectedItem.Type === "Episode")
                         && Number(familyApi.selectedItem.UserData && familyApi.selectedItem.UserData.PlaybackPositionTicks || 0) > 0

@@ -30,6 +30,7 @@ class FamilyApiClient final : public QObject
   Q_PROPERTY(bool kidsHideSpoilers READ kidsHideSpoilers NOTIFY kidsSettingsChanged)
   Q_PROPERTY(int kidsEpisodeLimit READ kidsEpisodeLimit NOTIFY kidsSettingsChanged)
   Q_PROPERTY(int kidsBedtimeStart READ kidsBedtimeStart NOTIFY kidsSettingsChanged)
+  Q_PROPERTY(int kidsBedtimeEnd READ kidsBedtimeEnd NOTIFY kidsSettingsChanged)
   Q_PROPERTY(bool kidsHasPin READ kidsHasPin NOTIFY kidsSettingsChanged)
   Q_PROPERTY(QString nextUpMode READ nextUpMode NOTIFY nextUpModeChanged)
   Q_PROPERTY(int nextUpTimeoutMs READ nextUpTimeoutMs NOTIFY nextUpModeChanged)
@@ -112,6 +113,7 @@ public:
   bool kidsHideSpoilers() const { return m_kidsHideSpoilers; }
   int kidsEpisodeLimit() const { return m_kidsEpisodeLimit; }
   int kidsBedtimeStart() const { return m_kidsBedtimeStart; }
+  int kidsBedtimeEnd() const { return m_kidsBedtimeEnd; }
   bool kidsHasPin() const { return !m_kidsPinSalt.isEmpty() && !m_kidsPinHash.isEmpty(); }
   QString nextUpMode() const { return m_nextUpMode; }
   int nextUpTimeoutMs() const { return m_nextUpTimeoutMs; }
@@ -190,6 +192,7 @@ public:
   Q_INVOKABLE void setKidsHideSpoilers(bool hidden);
   Q_INVOKABLE void cycleKidsEpisodeLimit();
   Q_INVOKABLE void cycleKidsBedtime();
+  Q_INVOKABLE void cycleKidsBedtimeEnd();
   Q_INVOKABLE bool setKidsPin(const QString& pin);
   Q_INVOKABLE bool verifyKidsPin(const QString& pin) const;
   Q_INVOKABLE bool kidsPlaybackAllowed() const;
@@ -366,6 +369,7 @@ private:
   bool m_kidsHideSpoilers = true;
   int m_kidsEpisodeLimit = 0;
   int m_kidsBedtimeStart = -1;
+  int m_kidsBedtimeEnd = 7 * 60;
   QByteArray m_kidsPinSalt;
   QByteArray m_kidsPinHash;
   QString m_nextUpMode = QStringLiteral("Extended");

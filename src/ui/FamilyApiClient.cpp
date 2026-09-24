@@ -1301,6 +1301,8 @@ void FamilyApiClient::loadKidsSettings()
   m_kidsHideSpoilers = m_settings.value(key + QStringLiteral("hideSpoilers"), true).toBool();
   m_kidsEpisodeLimit = m_settings.value(key + QStringLiteral("episodeLimit"), 0).toInt();
   m_kidsBedtimeStart = m_settings.value(key + QStringLiteral("bedtimeStart"), -1).toInt();
+  m_kidsBedtimeEnd = m_settings.value(key + QStringLiteral("bedtimeEnd"), 7 * 60).toInt();
+  if (m_kidsBedtimeEnd < 0 || m_kidsBedtimeEnd >= 24 * 60) m_kidsBedtimeEnd = 7 * 60;
   m_kidsPinSalt = m_settings.value(key + QStringLiteral("pinSalt")).toByteArray();
   m_kidsPinHash = m_settings.value(key + QStringLiteral("pinHash")).toByteArray();
   m_nextUpMode = m_settings.value(QStringLiteral("users/%1/nextUpMode").arg(m_userId),
@@ -1323,6 +1325,7 @@ void FamilyApiClient::saveKidsSettings()
   m_settings.setValue(key + QStringLiteral("hideSpoilers"), m_kidsHideSpoilers);
   m_settings.setValue(key + QStringLiteral("episodeLimit"), m_kidsEpisodeLimit);
   m_settings.setValue(key + QStringLiteral("bedtimeStart"), m_kidsBedtimeStart);
+  m_settings.setValue(key + QStringLiteral("bedtimeEnd"), m_kidsBedtimeEnd);
   m_settings.setValue(key + QStringLiteral("pinSalt"), m_kidsPinSalt);
   m_settings.setValue(key + QStringLiteral("pinHash"), m_kidsPinHash);
   emit kidsSettingsChanged();
@@ -1360,6 +1363,15 @@ void FamilyApiClient::cycleKidsBedtime()
   saveKidsSettings();
 }
 
+void FamilyApiClient::cycleKidsBedtimeEnd()
+{
+  if (!signedIn()) return;
+  const QList<int> options{ 6 * 60, 7 * 60, 8 * 60, 9 * 60 };
+  const int current = options.indexOf(m_kidsBedtimeEnd);
+  m_kidsBedtimeEnd = options[(current + 1) % options.size()];
+  saveKidsSettings();
+}
+
 bool FamilyApiClient::setKidsPin(const QString& pin)
 {
   if (!signedIn() || (!pin.isEmpty() && !QRegularExpression(
@@ -1392,10 +1404,14 @@ bool FamilyApiClient::verifyKidsPin(const QString& pin) const
 
 bool FamilyApiClient::kidsPlaybackAllowed() const
 {
-  if (!m_kidsEnabled || m_kidsBedtimeStart < 0) return true;
+  if (!m_kidsEnabled || m_kidsBedtimeStart < 0 || m_kidsBedtimeEnd < 0) return true;
   const auto now = QTime::currentTime();
   const int minute = now.hour() * 60 + now.minute();
-  return !(minute >= m_kidsBedtimeStart || minute < 7 * 60);
+  if (m_kidsBedtimeStart == m_kidsBedtimeEnd) return false;
+  const bool bedtime = m_kidsBedtimeStart < m_kidsBedtimeEnd
+    ? minute >= m_kidsBedtimeStart && minute < m_kidsBedtimeEnd
+    : minute >= m_kidsBedtimeStart || minute < m_kidsBedtimeEnd;
+  return !bedtime;
 }
 
 bool FamilyApiClient::kidsSpoilerHidden(const QVariantMap& item) const
@@ -2162,7 +2178,8 @@ void FamilyApiClient::signOut()
   m_queuedPlaybackStopMilliseconds = -1;
   m_token.clear(); m_userId.clear(); m_userName.clear();
   m_coWatchUserIds.clear(); m_homeFeedOwnerId.clear(); m_homeFeedUserId.clear(); m_homeFeedToken.clear();
-  m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0; m_kidsBedtimeStart = -1;
+  m_kidsEnabled = false; m_kidsHideSpoilers = true; m_kidsEpisodeLimit = 0;
+  m_kidsBedtimeStart = -1; m_kidsBedtimeEnd = 7 * 60;
   m_kidsPinSalt.clear(); m_kidsPinHash.clear();
   m_nextUpMode = QStringLiteral("Extended");
   m_nextUpTimeoutMs = 7000;
