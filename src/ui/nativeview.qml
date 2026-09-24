@@ -640,6 +640,7 @@ Window {
             Qt.callLater(function() {
                 const first = movieWatchlistRepeater.itemAt(0) || showWatchlistRepeater.itemAt(0)
                 if (first) first.forceActiveFocus()
+                else watchlistBackButton.forceActiveFocus()
             })
         } else if (page === "search") {
             if (!searchInput.text && !familyApi.searchResults.length) {
@@ -650,7 +651,32 @@ Window {
                 if (familyApi.searchResults.length) searchGrid.forceActiveFocus()
                 else searchInput.forceActiveFocus()
             })
+        } else {
+            Qt.callLater(window.focusPageStart)
         }
+    }
+
+    function focusPageStart() {
+        const first = {
+            coWatchPresets: presetsBackButton,
+            parentPin: parentPinInput,
+            kidsSettings: kidsModeButton,
+            watchTogether: watchTogetherBackButton,
+            watchlist: watchlistBackButton,
+            familyNight: familyNightBackButton,
+            settings: settingsBackButton,
+            bufferSettings: bufferBackButton,
+            skipSettings: skipBackButton,
+            liveTv: liveBackButton,
+            playlists: playlistsBackButton,
+            playlistPicker: playlistsBackButton,
+            playlist: playlistBackButton,
+            detail: detailBackButton,
+            issueReport: issueCancelButton,
+            nextEpisode: nextEpisodeDoneButton,
+            season: seasonBackButton
+        }[page]
+        if (first && first.visible && first.enabled) first.forceActiveFocus()
     }
 
     function scrollToSection(name) {
@@ -1113,7 +1139,7 @@ Window {
             spacing: 17
             Row {
                 spacing: 12
-                NativeAction { width: 120; text: "← Profiles"; onClicked: window.goBack() }
+                NativeAction { id: presetsBackButton; width: 120; text: "← Profiles"; onClicked: window.goBack() }
                 Text { text: "Watching Together presets"; color: familyApi.themeText; font.pixelSize: 29; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
             }
             Text { text: "Presets are saved to your Jellyfin profile and shared with the Android app."; color: familyApi.themeText; font.pixelSize: 17; wrapMode: Text.WordWrap; width: parent.width }
@@ -1209,7 +1235,7 @@ Window {
             spacing: 12
             Text { text: "Kids Mode · " + familyApi.userName; color: familyApi.themeText; font.pixelSize: 31; font.bold: true }
             Text { text: "These settings stay with this Windows profile between updates."; color: familyApi.themeText; font.pixelSize: 17 }
-            NativeAction { width: parent.width; text: "Kids Mode: " + (familyApi.kidsModeEnabled ? "On" : "Off"); onClicked: familyApi.setKidsModeEnabled(!familyApi.kidsModeEnabled) }
+            NativeAction { id: kidsModeButton; width: parent.width; text: "Kids Mode: " + (familyApi.kidsModeEnabled ? "On" : "Off"); onClicked: familyApi.setKidsModeEnabled(!familyApi.kidsModeEnabled) }
             NativeAction { width: parent.width; text: "Hide unwatched episode spoilers: " + (familyApi.kidsHideSpoilers ? "On" : "Off"); onClicked: familyApi.setKidsHideSpoilers(!familyApi.kidsHideSpoilers) }
             NativeAction { width: parent.width; text: "Episodes before automatic next stops: " + (familyApi.kidsEpisodeLimit || "Unlimited"); onClicked: familyApi.cycleKidsEpisodeLimit() }
             Text {
@@ -1273,7 +1299,7 @@ Window {
             spacing: 15
             Row {
                 spacing: 15
-                NativeAction { width: 120; text: "← Profiles"; onClicked: window.goBack() }
+                NativeAction { id: watchTogetherBackButton; width: 120; text: "← Profiles"; onClicked: window.goBack() }
                 Text { text: "Watching Together"; color: familyApi.themeText; font.pixelSize: 29; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
             }
             Text { text: "Choose the family members watching on this device."; color: familyApi.themeText; font.pixelSize: 18 }
@@ -1866,7 +1892,7 @@ Window {
             spacing: 24
             Row {
                 spacing: 20
-                NativeAction { text: "← Home"; onClicked: page = "home" }
+                NativeAction { id: watchlistBackButton; text: "← Home"; onClicked: page = "home" }
                 Text { text: "Watchlist"; color: "white"; font.pixelSize: 33; font.bold: true }
                 NativeAction { text: "My List"; selected: watchlistMode === "personal"; onClicked: watchlistMode = "personal" }
                 NativeAction { text: "Family List"; selected: watchlistMode === "household"; onClicked: watchlistMode = "household" }
@@ -2001,7 +2027,7 @@ Window {
             spacing: 14
             Row {
                 spacing: 18
-                NativeAction { text: "← Home"; onClicked: page = "home" }
+                NativeAction { id: familyNightBackButton; text: "← Home"; onClicked: page = "home" }
                 Text { text: "Family Night"; color: familyApi.themeText; font.pixelSize: 32; font.bold: true; height: 48; verticalAlignment: Text.AlignVCenter }
                 NativeAction { text: "Refresh lists"; onClicked: familyApi.refreshFamilyNightCandidates() }
             }
@@ -2096,7 +2122,7 @@ Window {
               spacing: 16
             Row {
                 spacing: 18
-                NativeAction { text: "← Home"; onClicked: page = "home" }
+                NativeAction { id: settingsBackButton; text: "← Home"; onClicked: page = "home" }
                 Text { text: "Family Flix Settings"; color: "white"; font.pixelSize: 32; font.bold: true }
             }
             Text { text: "Colour theme"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
@@ -2237,7 +2263,7 @@ Window {
             anchors.fill: parent
             anchors.margins: 40
             spacing: 18
-            NativeAction { text: "← Settings"; onClicked: window.goBack() }
+            NativeAction { id: bufferBackButton; text: "← Settings"; onClicked: window.goBack() }
             Text { text: "Playback buffers"; color: familyApi.themeText; font.pixelSize: 30; font.bold: true }
             Text {
                 width: parent.width
@@ -2294,7 +2320,7 @@ Window {
             anchors.fill: parent
             anchors.margins: 40
             spacing: 18
-            NativeAction { text: "← Settings"; onClicked: window.goBack() }
+            NativeAction { id: skipBackButton; text: "← Settings"; onClicked: window.goBack() }
             Text { text: "Skip prompts"; color: familyApi.themeText; font.pixelSize: 30; font.bold: true }
             Text { text: "Ask shows a button during a detected segment. Auto skips it; Off leaves it alone."; color: familyApi.themeText; font.pixelSize: 17 }
             Repeater {
@@ -2324,6 +2350,7 @@ Window {
         visible: page === "liveTv"
         property real programWidth: Math.max(500, width - 445)
         NativeAction {
+            id: liveBackButton
             x: 20; y: 18; width: 180
             text: "← Return Home"
             onClicked: window.goBack()
@@ -2480,7 +2507,7 @@ Window {
             spacing: 16
             Row {
                 spacing: 18
-                NativeAction { text: "← Back"; onClicked: window.goBack() }
+                NativeAction { id: playlistsBackButton; text: "← Back"; onClicked: window.goBack() }
                 Text {
                     text: page === "playlistPicker" ? "Add to Playlist" : "Playlists"
                     color: "white"; font.pixelSize: 32; font.bold: true
@@ -2539,7 +2566,7 @@ Window {
             spacing: 16
             Row {
                 spacing: 18
-                NativeAction { text: "← Playlists"; onClicked: page = "playlists" }
+                NativeAction { id: playlistBackButton; text: "← Playlists"; onClicked: page = "playlists" }
                 Text { text: "Playlist"; color: "white"; font.pixelSize: 32; font.bold: true }
                 NativeAction {
                     text: familyApi.playlistLoading ? "Loading…" : "▶ Play all"
@@ -2770,7 +2797,7 @@ Window {
                 spacing: 8
                 transformOrigin: Item.TopLeft
                 scale: Math.min(1, (window.width - 88) / Math.max(1, implicitWidth))
-                NativeAction { width: 55; text: "Back"; onClicked: window.goBack() }
+                NativeAction { id: detailBackButton; width: 55; text: "Back"; onClicked: window.goBack() }
                 NativeAction {
                     width: 105
                     text: familyApi.selectedItem.Type === "Series" ? "Play next"
@@ -2999,7 +3026,7 @@ Window {
             }
             Row {
                 spacing: 12
-                NativeAction { text: "Cancel"; onClicked: window.goBack() }
+                NativeAction { id: issueCancelButton; text: "Cancel"; onClicked: window.goBack() }
                 NativeAction {
                     text: window.issueReportPending ? "Sending…" : "Send report"
                     width: 165
@@ -3052,7 +3079,7 @@ Window {
                         window.playItem(nextEpisode, "detail")
                     }
                 }
-                NativeAction { width: 150; text: "Done"; onClicked: { window.nextUpDeadlineMs = 0; window.goBack() } }
+                NativeAction { id: nextEpisodeDoneButton; width: 150; text: "Done"; onClicked: { window.nextUpDeadlineMs = 0; window.goBack() } }
             }
         }
     }
@@ -3066,7 +3093,7 @@ Window {
             spacing: 18
             Row {
                 spacing: 15
-                NativeAction { text: "← Show"; onClicked: window.goBack() }
+                NativeAction { id: seasonBackButton; text: "← Show"; onClicked: window.goBack() }
                 Text { text: (selectedSeries.Name || "Show") + " · " + (selectedSeason.Name || "Episodes"); color: "white"; font.pixelSize: 30; font.bold: true }
             }
             Text { text: "Season cast"; visible: familyApi.seasonCast.length > 0; color: familyApi.themeText; font.pixelSize: 20; font.bold: true }
