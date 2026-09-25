@@ -540,7 +540,8 @@
 .familyLiveTvGuide .familyGuideSidebar {
     flex: 0 0 clamp(16em, 24vw, 25em);
     gap: 0.18em;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 0.75em;
     background: #191f27;
     border-right: 1px solid #3b454f;

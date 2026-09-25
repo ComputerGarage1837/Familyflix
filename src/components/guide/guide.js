@@ -1299,7 +1299,16 @@ function Guide(options) {
         previewVideo.addEventListener(eventName, updatePreviewControls);
     }
     previewVideo.addEventListener('error', function () {
-        if (previewChannelId) showPreviewMessage('Preview unavailable. Select again for full screen.');
+        if (previewChannelId) {
+            stopPreviewStream(previewSessionId, previewLiveStreamId);
+            previewSessionId = null;
+            previewLiveStreamId = null;
+            previewStarted = false;
+            previewHls?.destroy();
+            previewHls = null;
+            updatePreviewControls();
+            showPreviewMessage('Preview unavailable. Select again for full screen.');
+        }
     });
     previewControls.querySelector('.familyGuidePlayPause').addEventListener('click', function () {
         if (previewVideo.paused) {
