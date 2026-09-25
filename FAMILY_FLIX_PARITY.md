@@ -10,6 +10,16 @@ This is the release gate for the Windows client. A successful build alone does
 not mean it can replace the Android TV app. Each row needs a Windows interaction
 check against the same Jellyfin server and user profiles before release.
 
+The active packaged Web client now includes the Family Flix guide with preview,
+categories, and stream release; visible-user profile chooser; saved login
+switching; Watching Together selection, feed owner, shared presets and playback
+reporting; Kids Mode bedtime and episode-limit guards with parent PIN; and a
+Family Night picker sourced from the current and selected participants'
+Watchlists. Automated builds, static checks, and picker/Deck tests pass. These
+new integrations have **not** yet passed an on-screen Windows playback test.
+The native Qt implementation described below is still retired and is not
+evidence of parity in the active packaged client.
+
 | Area | Windows source today | Required check or work |
 | --- | --- | --- |
 | Fixed server URL and visible-user sign in | Native API client and visible-user sign-in screen coded | Verify passwordless/password accounts, profile switch and persisted sign-in |
