@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
-import React, { type FC, type PropsWithChildren, ReactNode } from 'react';
+import React, { type FC, type PropsWithChildren, ReactNode, useEffect, useState } from 'react';
 
 import { appRouter } from 'components/router/appRouter';
 import { useApi } from 'hooks/useApi';
@@ -28,6 +28,35 @@ const onBackButtonClick = () => {
         });
 };
 
+const FamilyClock: FC = () => {
+    const [ stamp, setStamp ] = useState(() => new Date());
+    const [ location, setLocation ] = useState(() => window.location.hash);
+    const [ behavior, setBehavior ] = useState(() => document.documentElement.dataset.familyClock || 'ALWAYS');
+    useEffect(() => {
+        const timer = window.setInterval(() => setStamp(new Date()), 30_000);
+        const onLocation = () => setLocation(window.location.hash);
+        const onSettings = () => setBehavior(document.documentElement.dataset.familyClock || 'ALWAYS');
+        window.addEventListener('hashchange', onLocation);
+        document.addEventListener('familyflix-settings-updated', onSettings);
+        return () => {
+            window.clearInterval(timer);
+            window.removeEventListener('hashchange', onLocation);
+            document.removeEventListener('familyflix-settings-updated', onSettings);
+        };
+    }, []);
+    const playing = /#\/video(?:\?|$)/.test(location);
+    if (behavior === 'NEVER' || (behavior === 'IN_VIDEO' && !playing)
+        || (behavior === 'IN_MENUS' && playing)) return null;
+    const inGuide = /#\/livetv(?:\?|$)/.test(location) && /(?:\?|&)tab=1(?:&|$)/.test(location);
+    const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(stamp);
+    const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(stamp);
+    return <Box sx={{ position: 'absolute', left: inGuide ? 'auto' : '50%', right: inGuide ? 94 : 'auto',
+        transform: inGuide ? 'none' : 'translateX(-50%)', pointerEvents: 'none', whiteSpace: 'nowrap',
+        fontWeight: 600, fontSize: 14, opacity: 0.9 }} aria-label={`${date} ${time}`}>
+        {date} · {time}
+    </Box>;
+};
+
 const AppToolbar: FC<PropsWithChildren<AppToolbarProps>> = ({
     buttons,
     children,
@@ -44,6 +73,7 @@ const AppToolbar: FC<PropsWithChildren<AppToolbarProps>> = ({
         <Toolbar
             variant='dense'
             sx={{
+                position: 'relative',
                 flexWrap: {
                     xs: 'wrap',
                     lg: 'nowrap'
@@ -88,6 +118,8 @@ const AppToolbar: FC<PropsWithChildren<AppToolbarProps>> = ({
             )}
 
             {children}
+
+            {isUserLoggedIn && <FamilyClock />}
 
             <Box sx={{ display: 'flex', flexGrow: 1, justifyContent: 'flex-end' }}>
                 {buttons}
