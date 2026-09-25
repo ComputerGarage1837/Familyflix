@@ -19,6 +19,8 @@ accessible, and the home screen now has a personal Watchlist row backed by the
 existing server plugin. Focused home titles use their backdrop or thumbnail;
 otherwise movie/show backdrops rotate every minute. These changes still require
 runtime QA and do not yet complete Android TV feature parity.
+The desktop Deck now excludes watched episodes; the Android app's older-season
+selection rules remain to be ported.
 
 This is the **only active Family Flix for Windows project**. The older
 `../familyflix-windows` WebView2 launcher is retired and must not be shipped.
