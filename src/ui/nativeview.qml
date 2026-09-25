@@ -2126,6 +2126,13 @@ Window {
                 height: 190
                 contentWidth: movieRow.width
                 clip: true
+                Text {
+                    anchors.centerIn: parent
+                    visible: movieWatchlistRepeater.count === 0
+                    text: watchlistMode === "household" ? "No movies on the Family List yet." : "No movies on your Watchlist yet."
+                    color: familyApi.themeText
+                    font.pixelSize: 18
+                }
                 Row {
                     id: movieRow
                     spacing: 12
@@ -2187,6 +2194,13 @@ Window {
                 height: 190
                 contentWidth: showRow.width
                 clip: true
+                Text {
+                    anchors.centerIn: parent
+                    visible: showWatchlistRepeater.count === 0
+                    text: watchlistMode === "household" ? "No shows on the Family List yet." : "No shows on your Watchlist yet."
+                    color: familyApi.themeText
+                    font.pixelSize: 18
+                }
                 Row {
                     id: showRow
                     spacing: 12
