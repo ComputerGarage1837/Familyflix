@@ -1,5 +1,6 @@
 import ArrowBack from '@mui/icons-material/ArrowBack';
 import MenuIcon from '@mui/icons-material/Menu';
+import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Toolbar from '@mui/material/Toolbar';
@@ -9,6 +10,8 @@ import React, { type FC, type PropsWithChildren, ReactNode, useEffect, useState 
 import { appRouter } from 'components/router/appRouter';
 import { useApi } from 'hooks/useApi';
 import globalize from 'lib/globalize';
+import { ServerConnections } from 'lib/jellyfin-apiclient';
+import { readKidsSettings } from 'familyflix/kidsMode';
 
 import UserMenuButton from './UserMenuButton';
 
@@ -26,6 +29,10 @@ const onBackButtonClick = () => {
         .catch(err => {
             console.error('[AppToolbar] error calling appRouter.back', err);
         });
+};
+
+const onSettingsButtonClick = () => {
+    window.location.hash = '#/mypreferencesmenu';
 };
 
 const FamilyClock: FC = () => {
@@ -68,6 +75,14 @@ const AppToolbar: FC<PropsWithChildren<AppToolbarProps>> = ({
 }) => {
     const { user } = useApi();
     const isUserLoggedIn = Boolean(user);
+    const apiClient = ServerConnections.currentApiClient();
+    const [ kidsActive, setKidsActive ] = useState(() => readKidsSettings(apiClient).enabled);
+    useEffect(() => {
+        const refresh = () => setKidsActive(readKidsSettings(ServerConnections.currentApiClient()).enabled);
+        document.addEventListener('familyflix-kids-updated', refresh);
+        return () => document.removeEventListener('familyflix-kids-updated', refresh);
+    }, []);
+    const showSettings = isUserLoggedIn && !kidsActive;
 
     return (
         <Toolbar
@@ -124,6 +139,15 @@ const AppToolbar: FC<PropsWithChildren<AppToolbarProps>> = ({
             <Box sx={{ display: 'flex', flexGrow: 1, justifyContent: 'flex-end' }}>
                 {buttons}
             </Box>
+
+            {showSettings && (
+                <Tooltip title={globalize.translate('Settings')}>
+                    <IconButton color='inherit' aria-label={globalize.translate('Settings')}
+                        onClick={onSettingsButtonClick}>
+                        <SettingsIcon />
+                    </IconButton>
+                </Tooltip>
+            )}
 
             {isUserLoggedIn && isUserMenuAvailable && (
                 <Box sx={{ flexGrow: 0 }}>

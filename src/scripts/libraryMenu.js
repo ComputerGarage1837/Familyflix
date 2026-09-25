@@ -56,6 +56,7 @@ function renderHeader() {
     html += '<button is="paper-icon-button-light" class="headerAudioPlayerButton audioPlayerButton headerButton headerButtonRight hide"><span class="material-icons music_note" aria-hidden="true"></span></button>';
     html += '<button is="paper-icon-button-light" class="headerCastButton castButton headerButton headerButtonRight hide"><span class="material-icons cast" aria-hidden="true"></span></button>';
     html += '<button type="button" is="paper-icon-button-light" class="headerButton headerButtonRight headerSearchButton hide"><span class="material-icons search" aria-hidden="true"></span></button>';
+    html += '<button type="button" is="paper-icon-button-light" class="headerButton headerButtonRight headerSettingsButton hide" aria-label="Settings"><span class="material-icons settings" aria-hidden="true"></span></button>';
     html += '<button is="paper-icon-button-light" class="headerButton headerButtonRight headerUserButton hide"><span class="material-icons person" aria-hidden="true"></span></button>';
     html += '<span class="familyPartyHeader hide"></span>';
     html += '<div class="currentTimeText hide"></div>';
@@ -77,6 +78,7 @@ function renderHeader() {
     headerCastButton = skinHeader.querySelector('.headerCastButton');
     headerAudioPlayerButton = skinHeader.querySelector('.headerAudioPlayerButton');
     headerSearchButton = skinHeader.querySelector('.headerSearchButton');
+    headerSettingsButton = skinHeader.querySelector('.headerSettingsButton');
     headerSyncButton = skinHeader.querySelector('.headerSyncButton');
     currentTimeText = skinHeader.querySelector('.currentTimeText');
 
@@ -137,6 +139,9 @@ function retranslateUi() {
     if (headerUserButton) {
         headerUserButton.title = globalize.translate('Settings');
     }
+    if (headerSettingsButton) {
+        headerSettingsButton.title = globalize.translate('Settings');
+    }
 }
 
 function updateUserInHeader(user) {
@@ -177,6 +182,7 @@ function updateUserInHeader(user) {
         if (headerSearchButton) {
             headerSearchButton.classList.remove('hide');
         }
+        headerSettingsButton.classList.toggle('hide', readKidsSettings(getCurrentApiClient()).enabled);
 
         if (!layoutManager.tv) {
             headerCastButton.classList.remove('hide');
@@ -202,6 +208,7 @@ function updateUserInHeader(user) {
         if (headerSearchButton) {
             headerSearchButton.classList.add('hide');
         }
+        headerSettingsButton.classList.add('hide');
     }
 
     requiresUserRefresh = false;
@@ -264,6 +271,7 @@ function bindMenuEvents() {
     if (headerSearchButton) {
         headerSearchButton.addEventListener('click', showSearch);
     }
+    headerSettingsButton.addEventListener('click', onSettingsClick);
 
     headerUserButton.addEventListener('click', onHeaderUserButtonClick);
     headerHomeButton.addEventListener('click', onHeaderHomeButtonClick);
@@ -442,7 +450,9 @@ document.addEventListener('mousemove', event => {
 document.addEventListener('focusin', event => {
     if (document.body.classList.contains('familyRailMode') && navDrawerElement?.contains(event.target)) {
         expandFamilyRail();
-        event.target.closest('.navMenuOption')?.scrollIntoView({ block: 'nearest' });
+        const option = event.target.closest('.navMenuOption');
+        if (option?.dataset.itemid) familyRailLastKey = option.dataset.itemid;
+        option?.scrollIntoView({ block: 'nearest' });
     }
 });
 document.addEventListener('focusout', event => {
@@ -454,6 +464,8 @@ document.addEventListener('focusout', event => {
 document.addEventListener('familyflix-kids-updated', () => {
     currentDrawerType = null;
     refreshLibraryDrawer();
+    const apiClient = getCurrentApiClient();
+    headerSettingsButton?.classList.toggle('hide', !apiClient?.getCurrentUserId() || readKidsSettings(apiClient).enabled);
 });
 window.addEventListener('resize', () => {
     const page = document.querySelector('.page:not(.hide)');
@@ -873,6 +885,7 @@ let headerUserButton;
 let currentUser;
 let headerCastButton;
 let headerSearchButton;
+let headerSettingsButton;
 let headerAudioPlayerButton;
 let headerSyncButton;
 let currentTimeText;
