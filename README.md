@@ -19,8 +19,8 @@ accessible, and the home screen now has a personal Watchlist row backed by the
 existing server plugin. Focused home titles use their backdrop or thumbnail;
 otherwise movie/show backdrops rotate every minute. These changes still require
 runtime QA and do not yet complete Android TV feature parity.
-The desktop Deck now excludes watched episodes; the Android app's older-season
-selection rules remain to be ported.
+The desktop Deck excludes watched and partially resumed episodes and follows
+recent progress in an older unwatched season using Android's selection rules.
 Desktop color palettes and intro/recap/preview/outro choices now use the same
 per-profile settings record as Android TV. Playback problem warnings and reports
 use the existing Family Flix server plugin. The native Windows shell checks for
