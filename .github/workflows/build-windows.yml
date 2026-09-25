@@ -42,7 +42,7 @@ jobs:
         submodules: recursive
     - uses: actions/checkout@v7
       with:
-        ref: familyflix-desktop-web
+        ref: 38776ec7ce7c59c00e28e9d109e181cffbbdfce3
         path: desktop-web
         persist-credentials: false
     - uses: actions/setup-node@v4
