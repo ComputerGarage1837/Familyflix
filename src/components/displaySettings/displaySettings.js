@@ -132,8 +132,6 @@ function loadForm(context, user, userSettings) {
 
     context.querySelector('#txtLibraryPageSize').value = userSettings.libraryPageSize();
 
-    context.querySelector('#txtMaxDaysForNextUp').value = userSettings.maxDaysForNextUp();
-    context.querySelector('#chkRewatchingNextUp').checked = userSettings.enableRewatchingInNextUp();
     context.querySelector('#chkUseEpisodeImagesInNextUp').checked = userSettings.useEpisodeImagesInNextUpAndResume();
 
     context.querySelector('.selectLayout').value = layoutManager.getSavedLayout() || '';
@@ -162,8 +160,6 @@ function saveUser(context, user, userSettingsInstance, apiClient) {
 
     userSettingsInstance.libraryPageSize(context.querySelector('#txtLibraryPageSize').value);
 
-    userSettingsInstance.maxDaysForNextUp(context.querySelector('#txtMaxDaysForNextUp').value);
-    userSettingsInstance.enableRewatchingInNextUp(context.querySelector('#chkRewatchingNextUp').checked);
     userSettingsInstance.useEpisodeImagesInNextUpAndResume(context.querySelector('#chkUseEpisodeImagesInNextUp').checked);
 
     userSettingsInstance.enableFastFadein(context.querySelector('#chkFadein').checked);

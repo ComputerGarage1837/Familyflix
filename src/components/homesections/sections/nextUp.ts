@@ -14,13 +14,10 @@ import type { SectionContainerElement, SectionOptions } from './section';
 
 function getNextUpFetchFn(
     serverId: string,
-    userSettings: UserSettings,
     { enableOverflow }: SectionOptions
 ) {
     return function () {
         const apiClient = ServerConnections.getApiClient(serverId);
-        const oldestDateForNextUp = new Date();
-        oldestDateForNextUp.setDate(oldestDateForNextUp.getDate() - userSettings.maxDaysForNextUp());
         const displayLimit = enableOverflow ? 24 : 15;
         return getFamilyDeck(apiClient, {
             Fields: 'PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount',
@@ -29,7 +26,6 @@ function getNextUpFetchFn(
             EnableImageTypes: 'Primary,Backdrop,Banner,Thumb',
             EnableTotalRecordCount: false,
             DisableFirstEpisode: false,
-            NextUpDateCutoff: oldestDateForNextUp.toISOString(),
             EnableResumable: false
         }, displayLimit);
     };
@@ -101,7 +97,7 @@ export function loadNextUp(
 
     const itemsContainer: SectionContainerElement | null = elem.querySelector('.itemsContainer');
     if (!itemsContainer) return;
-    itemsContainer.fetchData = getNextUpFetchFn(apiClient.serverId(), userSettings, options);
+    itemsContainer.fetchData = getNextUpFetchFn(apiClient.serverId(), options);
     itemsContainer.getItemsHtml = getNextUpItemsHtmlFn(userSettings.useEpisodeImagesInNextUpAndResume(), options);
     itemsContainer.parentContainer = elem;
 }
