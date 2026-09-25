@@ -30,7 +30,8 @@ function getNextUpFetchFn(
             DisableFirstEpisode: false,
             NextUpDateCutoff: oldestDateForNextUp.toISOString(),
             EnableResumable: false,
-            EnableRewatching: userSettings.enableRewatchingInNextUp()
+            // Family Flix Deck never resurrects episodes already watched.
+            EnableRewatching: false
         });
     };
 }
@@ -42,7 +43,7 @@ function getNextUpItemsHtmlFn(
     return function (items: BaseItemDto[]) {
         const cardLayout = false;
         return cardBuilder.getCardsHtml({
-            items: items,
+            items: items.filter(item => !item.UserData?.Played),
             preferThumb: true,
             inheritThumb: !useEpisodeImages,
             shape: getBackdropShape(enableOverflow),
