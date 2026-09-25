@@ -14,7 +14,9 @@ The home screen now places Continue Watching, Deck, and recent library rows in
 the Family Flix sequence; recent library rows and the navigation menu use the
 Android profile's saved library order and visibility. Recent movie/show cards
 prefer wide backdrops. The header shows a date and clock, and Live TV's menu
-entry opens the guide. These changes still require runtime QA and do not yet
+entry opens the guide. An All Libraries page keeps hidden menu libraries
+accessible, and the home screen now has a personal Watchlist row backed by the
+existing server plugin. These changes still require runtime QA and do not yet
 complete Android TV feature parity.
 
 This is the **only active Family Flix for Windows project**. The older
