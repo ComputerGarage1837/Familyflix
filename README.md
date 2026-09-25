@@ -22,7 +22,8 @@ runtime QA and do not yet complete Android TV feature parity.
 The desktop Deck excludes watched and partially resumed episodes and follows
 recent progress in an older unwatched season using Android's selection rules.
 Desktop color palettes and intro/recap/preview/outro choices now use the same
-per-profile settings record as Android TV. Playback problem warnings and reports
+per-profile settings record as Android TV, as do clock visibility and backdrop
+choices. Playback problem warnings and reports
 use the existing Family Flix server plugin. The native Windows shell checks for
 updates at startup. Detail backgrounds prefer backdrops and wide thumbnails,
 and the Windows guide uses a two-hour timeline on large screens. All of these
