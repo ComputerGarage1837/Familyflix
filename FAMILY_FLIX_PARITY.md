@@ -15,8 +15,13 @@ categories, and stream release; visible-user profile chooser; saved login
 switching; Watching Together selection, feed owner, shared presets and playback
 reporting; Kids Mode bedtime and episode-limit guards with parent PIN; and a
 Family Night picker sourced from the current and selected participants'
-Watchlists. Automated builds, static checks, and picker/Deck tests pass. These
-new integrations have **not** yet passed an on-screen Windows playback test.
+Watchlists. It also has an Android-style, keyboard-operable library rail with
+ordered/hidden libraries, Watchlist, Live TV, Family Night, Playlists, and
+Settings, plus a loader for the server's existing Watchlist browser UI in the
+packaged desktop client. Automated builds, static checks, and picker/Deck/
+Watchlist-loader tests pass. These integrations have **not** yet passed an
+on-screen Windows playback test: the Windows screen-control helper could not
+capture the portable application's window in the last QA attempt.
 The native Qt implementation described below is still retired and is not
 evidence of parity in the active packaged client.
 
