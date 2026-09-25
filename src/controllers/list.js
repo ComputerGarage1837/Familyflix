@@ -720,6 +720,10 @@ class ItemsView {
                 return globalize.translate('Episodes');
             }
 
+            if (params.type === 'Playlist') {
+                return globalize.translate('Playlists');
+            }
+
             if (params.type === 'MusicArtist') {
                 return globalize.translate('Artists');
             }
