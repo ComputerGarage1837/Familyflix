@@ -1,0 +1,133 @@
+@media (min-width: 42em) {
+    body.familyRailMode .mainDrawer {
+        position: fixed !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: auto !important;
+        width: 0 !important;
+        min-width: 0 !important;
+        transform: none !important;
+        overflow: hidden;
+        visibility: hidden;
+        pointer-events: none;
+        z-index: 1001 !important;
+        border-right: 1px solid var(--ff-line, #2b424b);
+        background: linear-gradient(165deg, var(--ff-surface, #102028), var(--ff-screen, #071116)) !important;
+        transition: width 160ms ease, visibility 160ms ease;
+    }
+
+    body.familyRailMode.familyRailExpanded .mainDrawer {
+        width: var(--family-rail-width, 16rem) !important;
+        visibility: visible;
+        pointer-events: auto;
+        box-shadow: 0 0 2.2rem #0009;
+    }
+
+    body.familyRailMode .mainDrawer-scrollContainer {
+        box-sizing: border-box;
+        height: 100%;
+        padding: .8rem .7rem 1rem;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+
+    body.familyRailMode .familyRailBrand {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        margin: .25rem .2rem .65rem;
+        padding: .4rem .55rem;
+        border: 1px solid var(--ff-line, #2b424b);
+        border-radius: .75rem;
+        font-size: 1rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    body.familyRailMode .familyRailBrandMark {
+        display: grid;
+        place-items: center;
+        flex: 0 0 1.75rem;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: .5rem;
+        background: linear-gradient(135deg, var(--ff-accent, #20c5c7), var(--ff-secondary, #9585ff));
+        color: var(--ff-on-accent, #042326);
+        font-weight: 800;
+    }
+
+    body.familyRailMode .sidebarHeader {
+        margin: .45rem .45rem .2rem;
+        padding: 0 !important;
+        color: var(--ff-muted, #9eb1b6);
+        font-size: .7rem;
+        line-height: 1.1rem;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+    }
+
+    body.familyRailMode .navMenuOption {
+        box-sizing: border-box;
+        min-height: var(--family-rail-item-height, 2.45rem);
+        padding: .3rem .55rem !important;
+        border-radius: .55rem !important;
+        color: var(--ff-text, #f0f7f8);
+        font-size: .9rem;
+        line-height: 1.1rem;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    body.familyRailMode .navMenuOptionIcon {
+        margin-right: .55rem !important;
+        font-size: 1.15rem;
+    }
+
+    body.familyRailMode .navMenuOption:focus-visible,
+    body.familyRailMode .navMenuOption:hover,
+    body.familyRailMode .navMenuOption-selected {
+        background: color-mix(in srgb, var(--ff-accent, #20c5c7) 26%, transparent) !important;
+        color: var(--ff-text, #f0f7f8) !important;
+        outline: 2px solid var(--ff-accent, #20c5c7);
+        outline-offset: -2px;
+    }
+
+    body.familyRailMode .familyLibraryGrid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: .12rem;
+    }
+
+    body.familyRailMode .familyLibraryGrid.familyLibraryGridCompact {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.familyRailMode .familyLibraryGridCompact .navMenuOption {
+        padding-inline: .35rem !important;
+        font-size: .8rem;
+    }
+
+    body.familyRailMode .familyLibraryGridCompact .navMenuOptionIcon {
+        margin-right: .3rem !important;
+        font-size: 1rem;
+    }
+
+    body.familyRailMode .familyRailDivider {
+        height: 1px;
+        margin: .45rem .65rem;
+        background: linear-gradient(90deg, transparent, var(--ff-accent, #20c5c7), transparent);
+    }
+
+    body.familyRailMode .adminMenuOptions,
+    body.familyRailMode .userMenuOptions {
+        margin-top: .4rem;
+    }
+
+    body.familyRailMode .tmla-mask { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.familyRailMode .mainDrawer { transition: none; }
+}

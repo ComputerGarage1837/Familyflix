@@ -1,5 +1,6 @@
 import cardBuilder from 'components/cardbuilder/cardBuilder';
 import { getBackdropShape } from 'utils/card';
+import { openWatchlist } from 'familyflix/watchlistClient';
 
 function read(object, camelName, pascalName) {
     return object?.[camelName] ?? object?.[pascalName];
@@ -18,7 +19,7 @@ export function loadFamilyWatchlist(elem, apiClient, { enableOverflow }) {
     </div>`;
 
     elem.querySelector('.familyFlixOpenWatchlist').addEventListener('click', event => {
-        window['familyFlixWatchlist/instance']?.openOverlay(event.currentTarget);
+        openWatchlist(event.currentTarget, apiClient).catch(error => window.alert(error.message));
     });
 
     const itemsContainer = elem.querySelector('.itemsContainer');

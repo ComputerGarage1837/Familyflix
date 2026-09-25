@@ -32,6 +32,8 @@ import datetime from '../scripts/datetime';
 import * as userSettings from '../scripts/settings/userSettings';
 import { readKidsSettings } from '../familyflix/kidsMode';
 import { partyFor, savedProfile } from '../familyflix/profiles';
+import { openWatchlist } from '../familyflix/watchlistClient';
+import '../familyflix/familyRail.scss';
 
 import '../elements/emby-button/paper-icon-button-light';
 
@@ -314,6 +316,11 @@ function getItemHref(item, context) {
 }
 
 function toggleMainDrawer() {
+    if (document.body.classList.contains('familyRailMode')) {
+        if (document.body.classList.contains('familyRailExpanded')) closeMainDrawer();
+        else openMainDrawer();
+        return;
+    }
     if (navDrawerInstance.isVisible) {
         closeMainDrawer();
     } else {
@@ -322,6 +329,10 @@ function toggleMainDrawer() {
 }
 
 function openMainDrawer() {
+    if (document.body.classList.contains('familyRailMode')) {
+        expandFamilyRail(true);
+        return;
+    }
     navDrawerInstance.open();
 }
 
@@ -332,8 +343,122 @@ function onMainDrawerOpened() {
 }
 
 function closeMainDrawer() {
+    if (document.body.classList.contains('familyRailMode')) {
+        collapseFamilyRail();
+        return;
+    }
     navDrawerInstance.close();
 }
+
+let familyRailLastKey = 'home';
+let familyRailReturnFocus;
+
+function familyRailLinks() {
+    return [...(navDrawerScrollContainer?.querySelectorAll('.navMenuOption') || [])]
+        .filter(link => !link.classList.contains('hide') && link.getBoundingClientRect().height > 0);
+}
+
+function collapseFamilyRail() {
+    document.body.classList.remove('familyRailExpanded');
+}
+
+function expandFamilyRail(focusMenu = false) {
+    if (!document.body.classList.contains('familyRailMode')) return;
+    if (focusMenu && !navDrawerElement?.contains(document.activeElement)) {
+        familyRailReturnFocus = document.activeElement;
+    }
+    document.body.classList.add('familyRailExpanded');
+    if (focusMenu) {
+        const links = familyRailLinks();
+        (links.find(link => link.dataset.itemid === familyRailLastKey)
+            || links.find(link => link.classList.contains('navMenuOption-selected'))
+            || links[0])?.focus();
+    }
+}
+
+function focusContentFromRail() {
+    collapseFamilyRail();
+    if (familyRailReturnFocus?.isConnected) {
+        familyRailReturnFocus.focus();
+    } else {
+        document.querySelector('.page:not(.hide) .card, .headerSearchButton:not(.hide)')?.focus();
+    }
+}
+
+function hasFocusableItemToLeft(active) {
+    const row = active.closest('.focuscontainer-x, .itemsContainer, .scrollSlider');
+    if (!row) return false;
+    const rect = active.getBoundingClientRect();
+    return [...row.querySelectorAll('a[href], button:not(:disabled), [tabindex="0"]')]
+        .some(candidate => {
+            if (candidate === active) return false;
+            const candidateRect = candidate.getBoundingClientRect();
+            const sharesRow = candidateRect.bottom > rect.top + rect.height * 0.25
+                && candidateRect.top < rect.bottom - rect.height * 0.25;
+            return candidateRect.width > 0 && sharesRow && candidateRect.right <= rect.left + 4;
+        });
+}
+
+function onFamilyRailKeydown(event) {
+    if (!document.body.classList.contains('familyRailMode') || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (navDrawerElement?.contains(target)) {
+        if (event.key === 'ArrowRight' || event.key === 'Escape') {
+            event.preventDefault();
+            focusContentFromRail();
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const links = familyRailLinks();
+            const index = links.indexOf(target.closest('.navMenuOption'));
+            const next = links[index + (event.key === 'ArrowDown' ? 1 : -1)];
+            if (index >= 0 && next) {
+                event.preventDefault();
+                next.focus();
+                next.scrollIntoView({ block: 'nearest' });
+            }
+        }
+        return;
+    }
+    if (event.key !== 'ArrowLeft' || target.closest('input, textarea, select, [contenteditable], .skinHeader, [role="dialog"]')) return;
+    if (!target.closest('.page') || hasFocusableItemToLeft(target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    expandFamilyRail(true);
+}
+
+function setFamilyRailMode(page) {
+    const eligible = layoutManager.desktop && window.innerWidth >= 672
+        && (page.classList.contains('homePage') || page.classList.contains('libraryPage'))
+        && !page.classList.contains('itemDetailPage')
+        && !page.classList.contains('type-interior');
+    document.body.classList.toggle('familyRailMode', eligible);
+    if (!eligible) collapseFamilyRail();
+}
+
+document.addEventListener('keydown', onFamilyRailKeydown, true);
+document.addEventListener('mousemove', event => {
+    if (document.body.classList.contains('familyRailMode') && event.clientX <= 12) expandFamilyRail();
+});
+document.addEventListener('focusin', event => {
+    if (document.body.classList.contains('familyRailMode') && navDrawerElement?.contains(event.target)) {
+        expandFamilyRail();
+        event.target.closest('.navMenuOption')?.scrollIntoView({ block: 'nearest' });
+    }
+});
+document.addEventListener('focusout', event => {
+    if (!navDrawerElement?.contains(event.target)) return;
+    window.setTimeout(() => {
+        if (!navDrawerElement?.contains(document.activeElement)) collapseFamilyRail();
+    }, 0);
+});
+document.addEventListener('familyflix-kids-updated', () => {
+    currentDrawerType = null;
+    refreshLibraryDrawer();
+});
+window.addEventListener('resize', () => {
+    const page = document.querySelector('.page:not(.hide)');
+    if (page) setFamilyRailMode(page);
+});
 
 function onMainDrawerSelect() {
     if (navDrawerInstance.isVisible) {
@@ -344,21 +469,27 @@ function onMainDrawerSelect() {
 }
 
 function refreshLibraryInfoInDrawer(user) {
+    const kidsMode = readKidsSettings(getCurrentApiClient()).enabled;
     let html = '';
-    html += '<div style="height:.5em;"></div>';
-    html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" href="#/home"><span class="material-icons navMenuOptionIcon home" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Home')}</span></a>`;
+    html += '<div class="familyRailBrand"><span class="familyRailBrandMark" aria-hidden="true">F</span><span>Family Flix</span></div>';
+    html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="home" href="#/home"><span class="material-icons navMenuOptionIcon home" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Home')}</span></a>`;
+    html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="search" href="#/search"><span class="material-icons navMenuOptionIcon search" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Search')}</span></a>`;
 
-    // placeholder for custom menu links
-    html += '<div class="customMenuOptions"></div>';
-
-    // libraries are added here
     html += '<div class="libraryMenuOptions"></div>';
     html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="alllibraries" href="#/home?tab=2"><span class="material-icons navMenuOptionIcon apps" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('AllLibraries')}</span></a>`;
-    if (!readKidsSettings(getCurrentApiClient()).enabled) {
+    html += '<div class="familyRailDivider"></div>';
+    html += '<div class="customMenuOptions"><button type="button" class="navMenuOption lnkMediaFolder familyWatchlistMenuButton" data-itemid="watchlist" data-familyflix-watchlist-nav="stable"><span class="material-icons navMenuOptionIcon bookmark" aria-hidden="true"></span><span class="navMenuOptionText">Watchlist</span></button></div>';
+    html += '<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="livetv" href="#/livetv?tab=1"><span class="material-icons navMenuOptionIcon live_tv" aria-hidden="true"></span><span class="navMenuOptionText">Live TV</span></a>';
+    if (!kidsMode) {
         html += '<button type="button" class="navMenuOption lnkMediaFolder familyNightMenuButton" data-itemid="familynight"><span class="material-icons navMenuOptionIcon casino" aria-hidden="true"></span><span class="navMenuOptionText">Family Night</span></button>';
     }
+    const serverId = encodeURIComponent(getCurrentApiClient()?.serverId() || '');
+    html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="playlists" href="#/list?type=Playlist&serverId=${serverId}"><span class="material-icons navMenuOptionIcon queue" aria-hidden="true"></span><span class="navMenuOptionText">Playlists</span></a>`;
+    if (!kidsMode) {
+        html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder btnSettings" data-itemid="settings" href="#/mypreferencesmenu"><span class="material-icons navMenuOptionIcon settings" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Settings')}</span></a>`;
+    }
 
-    if (user.localUser?.Policy.IsAdministrator) {
+    if (!kidsMode && user.localUser?.Policy.IsAdministrator) {
         html += '<div class="adminMenuOptions">';
         html += '<h3 class="sidebarHeader">';
         html += globalize.translate('HeaderAdmin');
@@ -368,7 +499,7 @@ function refreshLibraryInfoInDrawer(user) {
         html += '</div>';
     }
 
-    if (user.localUser) {
+    if (!kidsMode && user.localUser) {
         html += '<div class="userMenuOptions">';
         html += '<h3 class="sidebarHeader">';
         html += globalize.translate('HeaderUser');
@@ -378,7 +509,6 @@ function refreshLibraryInfoInDrawer(user) {
             html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder btnSelectServer" data-itemid="selectserver" href="#"><span class="material-icons navMenuOptionIcon storage" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('SelectServer')}</span></a>`;
         }
 
-        html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder btnSettings" data-itemid="settings" href="#"><span class="material-icons navMenuOptionIcon settings" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Settings')}</span></a>`;
         html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder btnLogout" data-itemid="logout" href="#"><span class="material-icons navMenuOptionIcon exit_to_app" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('ButtonSignOut')}</span></a>`;
 
         if (appHost.supports(AppFeature.ExitMenu)) {
@@ -390,6 +520,10 @@ function refreshLibraryInfoInDrawer(user) {
 
     // add buttons to navigation drawer
     navDrawerScrollContainer.innerHTML = html;
+    navDrawerScrollContainer.querySelector('.familyWatchlistMenuButton')?.addEventListener('click', event => {
+        closeMainDrawer();
+        openWatchlist(event.currentTarget, getCurrentApiClient()).catch(error => window.alert(error.message));
+    });
     navDrawerScrollContainer.querySelector('.familyNightMenuButton')?.addEventListener('click', () => {
         closeMainDrawer();
         import('../familyflix/familyNight').then(({ openFamilyNight }) => openFamilyNight());
@@ -439,7 +573,8 @@ function orderedMenuLibraries(items) {
         .split(',').map(normalizeId));
 
     return items
-        .filter(item => !hidden.has(normalizeId(item.Id)))
+        .filter(item => !hidden.has(normalizeId(item.Id))
+            && !['livetv', 'music', 'musicvideos', 'playlists'].includes(item.CollectionType))
         .map((item, index) => ({ item, index }))
         .sort((left, right) => {
             const leftPosition = positions.get(normalizeId(left.item.Id));
@@ -504,6 +639,7 @@ function updateLibraryMenu(user) {
         getUserViews(apiClient, userId).then(function (result) {
             const items = orderedMenuLibraries(result);
             let html = `<h3 class="sidebarHeader">${globalize.translate('HeaderMedia')}</h3>`;
+            html += `<div class="familyLibraryGrid${items.length > 10 ? ' familyLibraryGridCompact' : ''}">`;
             html += items.map(function (i) {
                 const icon = i.CollectionType === 'livetv' ? 'live_tv' : imageHelper.getLibraryIcon(i.CollectionType);
                 const itemId = i.Id;
@@ -514,7 +650,11 @@ function updateLibraryMenu(user) {
                                     <span class="sectionName navMenuOptionText">${escapeHtml(i.Name)}</span>
                                   </a>`;
             }).join('');
+            html += '</div>';
             libraryMenuOptions.innerHTML = html;
+            document.body.style.setProperty('--family-rail-width', items.length > 10 ? '22.5rem' : '16rem');
+            const rows = Math.ceil(items.length / (items.length > 10 ? 2 : 1)) + 8;
+            document.body.style.setProperty('--family-rail-item-height', `clamp(2rem, calc((100vh - 12rem) / ${rows}), 2.45rem)`);
             const elem = libraryMenuOptions;
             const sidebarLinks = elem.querySelectorAll('.navMenuOption');
 
@@ -531,6 +671,8 @@ function getTopParentId() {
 }
 
 function onMainDrawerClick(e) {
+    const option = e.target.closest('.navMenuOption');
+    if (option?.dataset.itemid) familyRailLastKey = option.dataset.itemid;
     if (dom.parentWithTag(e.target, 'A')) {
         setTimeout(closeMainDrawer, 30);
     }
@@ -676,17 +818,14 @@ function initHeadRoom(elem) {
 }
 
 function refreshLibraryDrawer(user) {
-    loadNavDrawer();
     currentDrawerType = 'library';
-
-    if (user) {
-        Promise.resolve(user);
-    } else {
-        ServerConnections.user(getCurrentApiClient()).then(function (userResult) {
+    loadNavDrawer().then(() => {
+        const userPromise = user ? Promise.resolve(user) : ServerConnections.user(getCurrentApiClient());
+        return userPromise.then(function (userResult) {
             refreshLibraryInfoInDrawer(userResult);
             updateLibraryMenu(userResult.localUser);
         });
-    }
+    }).catch(error => console.warn('Could not refresh Family Flix navigation', error));
 }
 
 function getNavDrawerOptions() {
@@ -849,6 +988,7 @@ pageClassOn('pageshow', 'page', function (e) {
     }
 
     updateMenuForPageType(isDashboardPage, isLibraryPage);
+    setFamilyRailMode(page);
 
     // TODO: Seems to do nothing? Check if needed (also in other views).
     if (!e.detail.isRestored) {

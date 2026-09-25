@@ -22,6 +22,7 @@ import { getPlugins } from './scripts/settings/webSettings';
 import taskButton from './scripts/taskbutton';
 import { pageClassOn, serverAddress } from './utils/dashboard';
 import Events from './utils/events';
+import { loadWatchlistClient } from './familyflix/watchlistClient';
 
 import RootApp from './RootApp';
 
@@ -70,6 +71,9 @@ build: ${__JF_BUILD_VERSION__}`);
     const serverUrl = await serverAddress();
     if (serverUrl) {
         ServerConnections.initApiClient(serverUrl);
+        // Packaged desktop pages do not receive server-side web asset injection.
+        // The loader is idempotent if the browser page already has the plugin.
+        void loadWatchlistClient(ServerConnections.currentApiClient());
     }
 
     // Initialize automatic (default) cast target
