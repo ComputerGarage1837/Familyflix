@@ -358,7 +358,7 @@ function closeMainDrawer() {
     navDrawerInstance.close();
 }
 
-let familyRailLastKey = 'home';
+let familyRailLastKey = null;
 let familyRailReturnFocus;
 
 function familyRailLinks() {
@@ -738,12 +738,19 @@ function updateLibraryNavLinks(page) {
     const isMySyncPage = page.classList.contains('mySyncPage');
     const id = isLiveTvPage || isChannelsPage || isEditorPage || isMySyncPage || page.classList.contains('allLibraryPage') ? '' : getTopParentId() || '';
     const elems = document.getElementsByClassName('lnkMediaFolder');
+    const hash = window.location.hash;
 
     for (let i = 0, length = elems.length; i < length; i++) {
         const lnkMediaFolder = elems[i];
         const itemId = lnkMediaFolder.getAttribute('data-itemid');
 
-        if (itemId === 'alllibraries' && /^#\/home\?tab=2(?:&|$)/.test(window.location.hash)) {
+        if (itemId === 'home' && /^#\/home(?:\?tab=0(?:&|$)|$)/.test(hash)) {
+            lnkMediaFolder.classList.add('navMenuOption-selected');
+        } else if (itemId === 'search' && /^#\/search(?:\?|$)/.test(hash)) {
+            lnkMediaFolder.classList.add('navMenuOption-selected');
+        } else if (itemId === 'playlists' && hash.startsWith('#/list?') && /[?&]type=Playlist(?:&|$)/.test(hash)) {
+            lnkMediaFolder.classList.add('navMenuOption-selected');
+        } else if (itemId === 'alllibraries' && /^#\/home\?tab=2(?:&|$)/.test(hash)) {
             lnkMediaFolder.classList.add('navMenuOption-selected');
         } else if (isChannelsPage && itemId === 'channels') {
             lnkMediaFolder.classList.add('navMenuOption-selected');
