@@ -34,6 +34,7 @@ Window
     if (components && components.settings) {
       webUrl = components.settings.getWebClientUrl(webDesktopMode)
     }
+    familyApi.checkWindowsUpdate(false)
   }
 
   onClosing: function(close) {
@@ -418,6 +419,53 @@ Window
   }
 
   property QtObject webChannel: web.webChannel
+
+  Rectangle {
+    id: familyUpdatePrompt
+    anchors.fill: parent
+    z: 200
+    visible: !!familyApi.windowsUpdate.downloadUrl
+    color: "#d9050c16"
+    MouseArea { anchors.fill: parent }
+    Rectangle {
+      anchors.centerIn: parent
+      width: Math.min(parent.width - 48, 590)
+      height: 230
+      radius: 14
+      color: "#102028"
+      border.color: "#20c5c7"
+      Column {
+        anchors.fill: parent
+        anchors.margins: 22
+        spacing: 15
+        Text { text: "Family Flix update"; color: "#f4fbfc"; font.pixelSize: 27; font.bold: true }
+        Text {
+          width: parent.width
+          text: "Version " + (familyApi.windowsUpdate.tag || "") + " is available for Windows."
+          color: "#f4fbfc"; font.pixelSize: 18; wrapMode: Text.WordWrap
+        }
+        Text {
+          width: parent.width
+          text: "Download the installer when you're ready. Your saved settings stay in your Windows profile."
+          color: "#b8cbd0"; font.pixelSize: 15; wrapMode: Text.WordWrap
+        }
+        Row {
+          spacing: 12
+          NativeAction {
+            id: familyUpdateDownload
+            width: 235
+            text: "Download installer"
+            onClicked: {
+              Qt.openUrlExternally(familyApi.windowsUpdate.downloadUrl)
+              familyApi.dismissWindowsUpdate()
+            }
+          }
+          NativeAction { width: 145; text: "Not now"; onClicked: familyApi.dismissWindowsUpdate() }
+        }
+      }
+    }
+    onVisibleChanged: if (visible) familyUpdateDownload.forceActiveFocus()
+  }
 
   Labs.SystemTrayIcon {
     visible: showSystemTrayIcon

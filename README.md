@@ -21,6 +21,11 @@ otherwise movie/show backdrops rotate every minute. These changes still require
 runtime QA and do not yet complete Android TV feature parity.
 The desktop Deck now excludes watched episodes; the Android app's older-season
 selection rules remain to be ported.
+Desktop color palettes and intro/recap/preview/outro choices now use the same
+per-profile settings record as Android TV. Playback problem warnings and reports
+use the existing Family Flix server plugin. The native Windows shell checks for
+updates at startup. All of these additions remain under runtime QA; no finished
+Windows release should be published from this branch yet.
 
 This is the **only active Family Flix for Windows project**. The older
 `../familyflix-windows` WebView2 launcher is retired and must not be shipped.
