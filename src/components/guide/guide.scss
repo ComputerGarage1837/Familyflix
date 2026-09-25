@@ -117,7 +117,9 @@
 @media all and (min-width: 80em) {
     .channelPrograms,
     .timeslotHeadersInner {
-        width: 810vw;
+        // 48 half-hour slots across the 24-hour grid; four fit in the
+        // available 88vw beside the channel rail, matching Android's guide.
+        width: 1056vw;
     }
 }
 
