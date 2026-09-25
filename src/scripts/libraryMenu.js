@@ -445,15 +445,20 @@ function setFamilyRailMode(page) {
 
 document.addEventListener('keydown', onFamilyRailKeydown, true);
 document.addEventListener('mousemove', event => {
-    if (document.body.classList.contains('familyRailMode') && event.clientX <= 12) expandFamilyRail();
+    if (!document.body.classList.contains('familyRailMode')) return;
+    if (event.clientX <= 12) expandFamilyRail();
+    else if (document.body.classList.contains('familyRailExpanded')
+        && event.clientX > (navDrawerElement?.getBoundingClientRect().right || 0) + 12
+        && !navDrawerElement?.contains(document.activeElement)) collapseFamilyRail();
 });
 document.addEventListener('focusin', event => {
-    if (document.body.classList.contains('familyRailMode') && navDrawerElement?.contains(event.target)) {
+    if (!document.body.classList.contains('familyRailMode')) return;
+    if (navDrawerElement?.contains(event.target)) {
         expandFamilyRail();
         const option = event.target.closest('.navMenuOption');
         if (option?.dataset.itemid) familyRailLastKey = option.dataset.itemid;
         option?.scrollIntoView({ block: 'nearest' });
-    }
+    } else collapseFamilyRail();
 });
 document.addEventListener('focusout', event => {
     if (!navDrawerElement?.contains(event.target)) return;
