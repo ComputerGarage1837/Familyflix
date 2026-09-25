@@ -427,7 +427,7 @@ function onFamilyRailKeydown(event) {
 }
 
 function setFamilyRailMode(page) {
-    const eligible = layoutManager.desktop && window.innerWidth >= 672
+    const eligible = (layoutManager.desktop || Boolean(window.NativeShell)) && window.innerWidth >= 672
         && (page.classList.contains('homePage') || page.classList.contains('libraryPage'))
         && !page.classList.contains('itemDetailPage')
         && !page.classList.contains('type-interior');
@@ -851,7 +851,7 @@ function loadNavDrawer() {
         import('../lib/navdrawer/navdrawer').then(({ default: NavDrawer }) => {
             navDrawerInstance = new NavDrawer(getNavDrawerOptions());
 
-            if (!layoutManager.tv) {
+            if (!layoutManager.tv || window.NativeShell) {
                 navDrawerElement.classList.remove('hide');
             }
 
@@ -876,8 +876,8 @@ let headerSearchButton;
 let headerAudioPlayerButton;
 let headerSyncButton;
 let currentTimeText;
-const enableLibraryNavDrawer = layoutManager.desktop;
-const enableLibraryNavDrawerHome = !layoutManager.tv;
+const enableLibraryNavDrawer = layoutManager.desktop || Boolean(window.NativeShell);
+const enableLibraryNavDrawerHome = !layoutManager.tv || Boolean(window.NativeShell);
 const skinHeader = document.querySelector('.skinHeader');
 let requiresUserRefresh = true;
 
