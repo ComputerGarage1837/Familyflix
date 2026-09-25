@@ -1,0 +1,64 @@
+.ffIssueWarning:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    margin: 0.8em 0 1.2em;
+    padding: 0.8em 1em;
+    border: 1px solid #f0a548;
+    border-radius: 0.6em;
+    background: #332414;
+    color: #fff4e4;
+    line-height: 1.35;
+}
+
+.ffIssueWarning strong {
+    font-size: 1.06em;
+}
+
+.ffIssueReportButton {
+    display: block;
+    margin: 0.4em 0 1em;
+    border: 1px solid currentColor;
+    border-radius: 0.4em;
+    padding: 0.45em 0.7em;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.ffIssueReportButton[hidden] { display: none; }
+
+.ffIssueReportDialog {
+    width: min(32em, 90vw);
+    border: 1px solid #f0a548;
+    border-radius: 0.7em;
+    padding: 1.2em;
+    background: #18232a;
+    color: #fff;
+}
+
+.ffIssueReportDialog::backdrop { background: #000b; }
+.ffIssueReportDialog form { display: grid; gap: 1em; }
+.ffIssueReportDialog label { display: grid; gap: 0.4em; }
+.ffIssueReportDialog select,
+.ffIssueReportDialog textarea { padding: 0.6em; font: inherit; }
+.ffIssueReportActions { display: flex; justify-content: flex-end; gap: 0.7em; }
+.ffIssueReportActions button { padding: 0.6em 0.9em; }
+
+.ffIssueCardBadge {
+    position: absolute;
+    top: 0.4em;
+    left: 0.4em;
+    z-index: 5;
+    max-width: calc(100% - 0.8em);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0.25em 0.5em;
+    border-radius: 0.3em;
+    background: #792d12;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    pointer-events: none;
+}

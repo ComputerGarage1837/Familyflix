@@ -34,6 +34,7 @@ import { getPortraitShape, getSquareShape } from 'utils/card';
 import Dashboard from 'utils/dashboard';
 import Events from 'utils/events';
 import { getItemBackdropImageUrl } from 'utils/jellyfin-apiclient/backdropImage';
+import { bindIssueReport, loadIssueWarning } from 'familyflix/issues';
 
 import 'elements/emby-itemscontainer/emby-itemscontainer';
 import 'elements/emby-checkbox/emby-checkbox';
@@ -546,6 +547,8 @@ function renderHeaderBackdrop(page, item, apiClient) {
 
 function reloadFromItem(instance, page, params, item, user) {
     const apiClient = ServerConnections.getApiClient(item.ServerId);
+    loadIssueWarning(page, item, apiClient);
+    bindIssueReport(page, item, apiClient);
 
     libraryMenu.setTitle('');
 

@@ -11,6 +11,7 @@ import Events from 'utils/events.ts';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { clearFamilyTheme, loadFamilyTheme } from 'familyflix/theme';
 import { loadFamilySegmentActions } from 'familyflix/mediaSegments';
+import { startIssueDecorations, stopIssueDecorations } from 'familyflix/issues';
 
 import ConnectionManager from './connectionManager';
 
@@ -43,6 +44,7 @@ class ServerConnections extends ConnectionManager {
         Events.on(this, 'localusersignedout', (_e, logoutInfo) => {
             setUserInfo(null, null);
             clearFamilyTheme();
+            stopIssueDecorations();
             // Ensure the updated credentials are persisted to storage
             credentialProvider.credentials(credentialProvider.credentials());
 
@@ -147,6 +149,7 @@ class ServerConnections extends ConnectionManager {
             loadFamilySegmentActions(apiClient, user.Id).catch(error => {
                 console.warn('Family Flix skip settings could not be loaded:', error);
             });
+            startIssueDecorations(apiClient);
             if (window.NativeShell && typeof window.NativeShell.onLocalUserSignedIn === 'function') {
                 return window.NativeShell.onLocalUserSignedIn(user, apiClient.accessToken());
             }
