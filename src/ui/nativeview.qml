@@ -2127,7 +2127,8 @@ Window {
                 contentWidth: movieRow.width
                 clip: true
                 Text {
-                    anchors.centerIn: parent
+                    x: Math.max(0, (movieWatchlistScroll.width - implicitWidth) / 2)
+                    y: 70
                     visible: movieWatchlistRepeater.count === 0
                     text: watchlistMode === "household" ? "No movies on the Family List yet." : "No movies on your Watchlist yet."
                     color: familyApi.themeText
@@ -2195,7 +2196,8 @@ Window {
                 contentWidth: showRow.width
                 clip: true
                 Text {
-                    anchors.centerIn: parent
+                    x: Math.max(0, (showWatchlistScroll.width - implicitWidth) / 2)
+                    y: 70
                     visible: showWatchlistRepeater.count === 0
                     text: watchlistMode === "household" ? "No shows on the Family List yet." : "No shows on your Watchlist yet."
                     color: familyApi.themeText
