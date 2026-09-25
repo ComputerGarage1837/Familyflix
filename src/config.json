@@ -30,7 +30,7 @@
     }
   ],
   "menuLinks": [],
-  "servers": [],
+  "servers": ["https://myfamilyflix.duckdns.org"],
   "plugins": [
     "playAccessValidation/plugin",
     "experimentalWarnings/plugin",
