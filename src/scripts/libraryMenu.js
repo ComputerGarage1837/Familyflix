@@ -458,7 +458,9 @@ document.addEventListener('focusin', event => {
         const option = event.target.closest('.navMenuOption');
         if (option?.dataset.itemid) familyRailLastKey = option.dataset.itemid;
         option?.scrollIntoView({ block: 'nearest' });
-    } else collapseFamilyRail();
+    } else {
+        collapseFamilyRail();
+    }
 });
 document.addEventListener('focusout', event => {
     if (!navDrawerElement?.contains(event.target)) return;
