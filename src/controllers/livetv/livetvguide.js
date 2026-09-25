@@ -24,4 +24,9 @@ export default function (view, params, tabContent) {
             guideInstance.pause();
         }
     };
+
+    self.destroy = function () {
+        guideInstance?.destroy();
+        guideInstance = null;
+    };
 }

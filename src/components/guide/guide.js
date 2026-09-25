@@ -28,6 +28,7 @@ import '../../elements/emby-scroller/emby-scroller';
 import '../../styles/flexstyles.scss';
 import 'webcomponents.js/webcomponents-lite';
 import template from './tvguide.template.html';
+import { loadChannels, openPreview, previewProfile } from './livePreview';
 
 function updateProgramCellOnScroll(cell, scrollPct) {
     let left = cell.posLeft;
@@ -302,9 +303,12 @@ function Guide(options) {
 
     function openFullscreen(channelId) {
         const playInMainPlayer = function () {
-            const channel = visibleChannelsById.get(channelId);
             releasePreview();
-            playbackManager.play(channel ? { items: [channel] } : { ids: [channelId], serverId: options.serverId });
+            // Fetch full playback metadata rather than using the lightweight guide DTO.
+            playbackManager.play({ ids: [channelId], serverId: options.serverId }).catch(function () {
+                showPreviewMessage('Unable to play this channel. Please try another channel.');
+                console.warn('Family Flix Live TV full-screen playback failed', channelId);
+            });
         };
         if (previewVideo.readyState >= 2 && previewContainer.requestFullscreen) {
             previewVideo.muted = false;
@@ -330,8 +334,11 @@ function Guide(options) {
         showPreviewMessage('Loading preview…');
         const requestId = previewRequestId;
         const apiClient = ServerConnections.getApiClient(options.serverId);
-        apiClient.getLiveTvChannel(channelId, apiClient.getCurrentUserId())
-            .then(function (item) { return playbackManager.getPlaybackInfo(item, { forceHls: true }); })
+        Promise.resolve().then(function () {
+            const mediaSource = window.MediaSource || window.ManagedMediaSource;
+            const profile = previewProfile(type => Boolean(mediaSource?.isTypeSupported(type)));
+            return openPreview(apiClient, channelId, profile);
+        })
             .then(function (stream) {
                 if (requestId !== previewRequestId) {
                     stopPreviewStream(stream?.playSessionId, stream?.liveStreamId);
@@ -351,9 +358,19 @@ function Guide(options) {
                                 backBufferLength: 300,
                                 liveBackBufferLength: 300
                             });
+                            let recoveryAttempts = 0;
                             previewHls.on(Hls.Events.ERROR, function (_event, error) {
                                 if (!error.fatal) return;
-                                if (error.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                                if (requestId !== previewRequestId) return;
+                                if (++recoveryAttempts > 2) {
+                                    previewHls?.destroy();
+                                    previewHls = null;
+                                    stopPreviewStream(previewSessionId, previewLiveStreamId);
+                                    previewSessionId = null;
+                                    previewLiveStreamId = null;
+                                    showPreviewMessage('Preview unavailable. Select again for full screen.');
+                                    console.warn('Family Flix live preview decoder failed', error.type, error.details);
+                                } else if (error.type === Hls.ErrorTypes.NETWORK_ERROR) {
                                     previewHls.startLoad();
                                 } else if (error.type === Hls.ErrorTypes.MEDIA_ERROR) {
                                     previewHls.recoverMediaError();
@@ -382,8 +399,12 @@ function Guide(options) {
                 if (requestId !== previewRequestId) return;
                 return startPreviewPlayback();
             })
-            .catch(function () {
+            .catch(function (error) {
                 if (requestId === previewRequestId) {
+                    stopPreviewStream(previewSessionId, previewLiveStreamId);
+                    previewSessionId = null;
+                    previewLiveStreamId = null;
+                    console.warn('Family Flix Live TV preview failed', channelId, error?.name, error?.status);
                     showPreviewMessage('Preview unavailable. Select again for full screen.');
                 }
             });
@@ -488,8 +509,8 @@ function Guide(options) {
 
         channelQuery.UserId = apiClient.getCurrentUserId();
 
-        // Family Flix's five IPTV groups total fewer than 1,000 channels.
-        // Fetch once, then ask for programme data only for the selected group.
+        // Page through all configured categories once, then ask for programme
+        // data only for the selected group.
         const channelLimit = 1000;
 
         showLoading();
@@ -562,7 +583,7 @@ function Guide(options) {
 
         const channelsPromise = channelCache && Date.now() - channelCacheTime < 300000 ?
             Promise.resolve(channelCache) :
-            apiClient.getLiveTvChannels(channelQuery).then(function (result) {
+            loadChannels(apiClient, channelQuery).then(function (result) {
                 channelCache = result;
                 channelCacheTime = Date.now();
                 return result;
@@ -715,6 +736,10 @@ function Guide(options) {
         const outerCssClass = layoutManager.tv ? 'channelPrograms channelPrograms-tv' : 'channelPrograms';
 
         html += '<div class="' + outerCssClass + '" data-channelid="' + channel.Id + '">';
+
+        if (!programs.length) {
+            html += '<button type="button" class="programCell" data-channelid="' + channel.Id + '" style="left:0;width:100%"><span class="guideProgramName">No listings available · Select to watch</span></button>';
+        }
 
         const clickAction = layoutManager.tv ? 'link' : 'programdialog';
 
@@ -1252,7 +1277,7 @@ function Guide(options) {
 
     const guideContext = options.element;
 
-    guideContext.classList.add('tvguide');
+    guideContext.classList.add('tvguide', 'familyLiveTvGuide');
 
     guideContext.innerHTML = globalize.translateHtml(template, 'core');
     previewVideo = guideContext.querySelector('.familyGuideVideo');
