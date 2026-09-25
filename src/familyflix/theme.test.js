@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention -- Assert Android's shared wire-format keys. */
 import { describe, expect, it } from 'vitest';
 
 import { saveFamilyProfileValues } from './theme';
@@ -47,3 +48,4 @@ describe('shared Family Flix settings', () => {
         }, { pref_clock_behavior: 'ALWAYS' })).rejects.toThrow('changed on another device');
     });
 });
+/* eslint-enable @typescript-eslint/naming-convention */

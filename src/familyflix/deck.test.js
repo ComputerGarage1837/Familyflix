@@ -16,9 +16,9 @@ describe('Family Flix Deck', () => {
         const client = {
             getCurrentUserId: () => 'user',
             getNextUpEpisodes: async () => ({ Items: [normal, rewatch] }),
-            getItems: async (_userId, options) => options.ParentId
-                ? { Items: [rewatch, nextOlder] }
-                : { Items: [episode('s20e03', 20, 3, true, '2026-09-25T10:00:00Z')] }
+            getItems: async (_userId, options) => options.ParentId ?
+                { Items: [rewatch, nextOlder] } :
+                { Items: [episode('s20e03', 20, 3, true, '2026-09-25T10:00:00Z')] }
         };
         const result = await getFamilyDeck(client, {}, 15);
         expect(result.Items.map(item => item.Id)).toEqual(['s20e04']);
@@ -34,5 +34,17 @@ describe('Family Flix Deck', () => {
         };
         const result = await getFamilyDeck(client, {}, 15);
         expect(result.Items).toEqual([]);
+    });
+
+    it('keeps an untouched episode when the server omits playback position', async () => {
+        const untouched = episode('s01e01', 1, 1, false);
+        delete untouched.UserData.PlaybackPositionTicks;
+        const client = {
+            getCurrentUserId: () => 'user',
+            getNextUpEpisodes: async () => ({ Items: [untouched] }),
+            getItems: async () => ({ Items: [] })
+        };
+        const result = await getFamilyDeck(client, {}, 15);
+        expect(result.Items).toEqual([untouched]);
     });
 });
