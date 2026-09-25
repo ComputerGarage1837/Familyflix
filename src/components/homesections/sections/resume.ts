@@ -5,6 +5,7 @@ import type { ApiClient } from 'jellyfin-apiclient';
 import cardBuilder from 'components/cardbuilder/cardBuilder';
 import globalize from 'lib/globalize';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
+import { homeFeedClient } from 'familyflix/homeFeed';
 import type { UserSettings } from 'scripts/settings/userSettings';
 import { getBackdropShape, getPortraitShape } from 'utils/card';
 
@@ -21,7 +22,7 @@ function getItemsToResumeFn(
     { enableOverflow }: SectionOptions
 ) {
     return function () {
-        const apiClient = ServerConnections.getApiClient(serverId);
+        const apiClient = homeFeedClient(ServerConnections.getApiClient(serverId));
 
         const limit = enableOverflow ? 12 : 5;
 

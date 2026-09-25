@@ -1,0 +1,47 @@
+.familyProfileOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1250;
+    display: grid;
+    place-items: center;
+    padding: 2rem;
+    background: rgb(0 0 0 / 86%);
+}
+
+.familyProfilePanel {
+    width: min(62rem, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    padding: 1.5rem;
+    border: 1px solid var(--ff-accent, #20c5c7);
+    border-radius: 1rem;
+    background: var(--ff-surface, #102028);
+    color: var(--ff-text, #fff);
+
+    header, .familyProfileActions, .familyPartyMembers {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    header { justify-content: space-between; }
+    h1 { margin: 0; }
+    .familyProfileCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1rem; margin: 2rem 0; }
+    .familyProfileCard { display: grid; justify-items: center; gap: .5rem; }
+    .familyProfileCard img { width: 5rem; height: 5rem; border-radius: 50%; object-fit: cover; }
+    .familyProfileCard.is-current { border-color: var(--ff-secondary, #9585ff); }
+    .familyProfileActions, .familyPartyMembers { flex-wrap: wrap; }
+    .familyProfileExtras { display: grid; gap: .8rem; margin: 1rem 0; }
+    .familyProfilePassword { display: flex; align-items: end; gap: .5rem; flex-wrap: wrap; }
+    .familyProfilePassword label { display: grid; gap: .4rem; }
+    button, select, input[type='password'], .familyProfileExtras input:not([type='checkbox']) {
+        min-height: 2.6rem;
+        padding: .4rem .8rem;
+        border: 1px solid var(--ff-accent, #20c5c7);
+        border-radius: .5rem;
+        background: var(--ff-screen, #071116);
+        color: var(--ff-text, #fff);
+    }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--ff-secondary, #9585ff); }
+    .familyProfileMessage { min-height: 1.5rem; }
+    .hide { display: none !important; }
+}

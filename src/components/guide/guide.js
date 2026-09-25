@@ -11,6 +11,7 @@ import datetime from '../../scripts/datetime';
 import focusManager from '../focusManager';
 import { playbackManager } from '../playback/playbackmanager';
 import * as userSettings from '../../scripts/settings/userSettings';
+import appSettings from '../../scripts/settings/appSettings';
 import imageLoader from '../images/imageLoader';
 import layoutManager from '../layoutManager';
 import itemShortcuts from '../shortcuts';
@@ -27,14 +28,6 @@ import '../../elements/emby-scroller/emby-scroller';
 import '../../styles/flexstyles.scss';
 import 'webcomponents.js/webcomponents-lite';
 import template from './tvguide.template.html';
-
-function showViewSettings(instance) {
-    import('./guide-settings').then(({ default: guideSettingsDialog }) => {
-        guideSettingsDialog.show(instance.categoryOptions).then(function () {
-            instance.refresh();
-        });
-    });
-}
 
 function updateProgramCellOnScroll(cell, scrollPct) {
     let left = cell.posLeft;
@@ -98,34 +91,6 @@ function updateProgramCellsOnScroll(programGrid, programCells) {
     });
 }
 
-function onProgramGridClick(e) {
-    if (!layoutManager.tv) {
-        return;
-    }
-
-    const programCell = dom.parentWithClass(e.target, 'programCell');
-    if (programCell) {
-        let startDate = programCell.getAttribute('data-startdate');
-        let endDate = programCell.getAttribute('data-enddate');
-        startDate = datetime.parseISO8601Date(startDate, { toLocal: true }).getTime();
-        endDate = datetime.parseISO8601Date(endDate, { toLocal: true }).getTime();
-
-        const now = new Date().getTime();
-        if (now >= startDate && now < endDate) {
-            const channelId = programCell.getAttribute('data-channelid');
-            const serverId = programCell.getAttribute('data-serverid');
-
-            e.preventDefault();
-            e.stopPropagation();
-
-            playbackManager.play({
-                ids: [channelId],
-                serverId: serverId
-            });
-        }
-    }
-}
-
 function Guide(options) {
     const self = this;
     let items = {};
@@ -136,23 +101,311 @@ function Guide(options) {
     // 30 mins
     const cellCurationMinutes = 30;
     const cellDurationMs = cellCurationMinutes * 60 * 1000;
-    const msPerDay = 86400000;
+    const guideDurationMs = 6 * 60 * 60 * 1000;
 
     let currentDate;
     let currentStartIndex = 0;
-    let currentChannelLimit = 0;
+    let currentBand = 1;
+    let destroyed = false;
     let autoRefreshInterval;
     let programCells;
     let lastFocusDirection;
+    let channelCache;
+    let channelCacheTime = 0;
+    let loadRequestId = 0;
+    let previewChannelId;
+    let previewRequestId = 0;
+    let previewHls;
+    let previewSessionId;
+    let previewLiveStreamId;
+    let previewStarted = false;
+    let previewBufferRegistered = false;
+    let previewVideo = null;
+    let previewContainer = null;
+    let previewEmpty = null;
+    let previewLabel = null;
+    let previewBehindLive = null;
+    let previewControls = null;
+    let previewTimeline = null;
+    const previewClock = setInterval(updatePreviewControls, 1000);
+    let visibleChannelsById = new Map();
+
+    const maxTimeshiftSeconds = appSettings.liveBufferMinutes() * 60;
+    const liveThresholdSeconds = 15;
+
+    function getPreviewWindow() {
+        if (!previewVideo || !previewVideo.seekable.length) return null;
+        const last = previewVideo.seekable.length - 1;
+        const end = previewVideo.seekable.end(last);
+        const start = Math.max(previewVideo.seekable.start(last), end - maxTimeshiftSeconds);
+        return Number.isFinite(start) && Number.isFinite(end) && end > start ? { start, end } : null;
+    }
+
+    function updatePreviewControls() {
+        if (!previewVideo || !previewControls) return;
+        // A seek can temporarily drop readyState to HAVE_NOTHING. Keep recovery
+        // controls enabled for a stream that has already started.
+        const ready = Boolean(previewChannelId) && previewStarted;
+        const window = getPreviewWindow();
+        const behind = window ? Math.max(0, window.end - previewVideo.currentTime) : 0;
+        const canSeek = ready && Boolean(window);
+        const paused = ready && previewVideo.paused;
+        const playing = ready && !paused;
+        const playButton = previewControls.querySelector('.familyGuidePlayPause');
+        const audioButton = previewControls.querySelector('.familyGuideAudio');
+        playButton.disabled = !ready;
+        playButton.textContent = playing ? 'Pause' : 'Play';
+        playButton.setAttribute('aria-label', playing ? 'Pause live TV' : 'Resume live TV');
+        previewControls.querySelector('.familyGuideRewind').disabled = !canSeek || previewVideo.currentTime <= window.start + 1;
+        previewControls.querySelector('.familyGuideForward').disabled = !canSeek || behind <= liveThresholdSeconds;
+        previewControls.querySelector('.familyGuideGoLive').disabled = !canSeek || behind <= liveThresholdSeconds;
+        audioButton.disabled = !ready;
+        audioButton.textContent = previewVideo.muted ? 'Sound on' : 'Mute';
+        audioButton.setAttribute('aria-label', previewVideo.muted ? 'Turn preview sound on' : 'Mute preview sound');
+        previewTimeline.disabled = !canSeek;
+        previewTimeline.max = window ? String(Math.floor(window.end - window.start)) : '0';
+        previewTimeline.value = window ? String(Math.max(0, Math.floor(previewVideo.currentTime - window.start))) : '0';
+        if (paused || behind > liveThresholdSeconds) {
+            const minutes = Math.floor(behind / 60);
+            const seconds = Math.floor(behind % 60);
+            previewBehindLive.textContent = `${paused ? 'PAUSED · ' : ''}${minutes}:${String(seconds).padStart(2, '0')} behind live`;
+            previewBehindLive.classList.add('is-behind');
+        } else {
+            previewBehindLive.textContent = 'LIVE';
+            previewBehindLive.classList.remove('is-behind');
+        }
+    }
+
+    function seekPreview(seconds) {
+        const window = getPreviewWindow();
+        if (!window) return;
+        const safeEnd = Math.max(window.start, window.end - 6);
+        const safeStart = Math.min(safeEnd, window.start + 3);
+        previewVideo.currentTime = Math.max(safeStart, Math.min(safeEnd, seconds));
+        updatePreviewControls();
+    }
+
+    function stopPreviewStream(sessionId, liveStreamId) {
+        const apiClient = ServerConnections.getApiClient(options.serverId);
+        // A normal ajax request is cancelled when the browser tab closes. Keep
+        // the close request alive across pagehide so abandoned previews do not
+        // consume all of an IPTV provider's limited stream slots.
+        if (liveStreamId) {
+            fetch(apiClient.getUrl('LiveStreams/Close', { liveStreamId }), {
+                method: 'POST',
+                headers: { 'X-Emby-Token': apiClient.accessToken() },
+                keepalive: true
+            }).then(function (response) {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            }).catch(function () {
+                console.warn('Unable to close the previous live preview stream');
+            });
+        }
+        if (sessionId) {
+            apiClient.stopActiveEncodings(sessionId).catch(function () {
+                console.warn('Unable to stop the previous live preview encoding');
+            });
+        }
+    }
+
+    function onPageHide() {
+        releasePreview();
+    }
+
+    function onPreviewFullscreenChange() {
+        if (!document.fullscreenElement && previewVideo) {
+            previewVideo.controls = false;
+            updatePreviewControls();
+        }
+    }
+
+    function releasePreview() {
+        previewRequestId++;
+        previewChannelId = null;
+        previewStarted = false;
+        const closingSessionId = previewSessionId;
+        if (previewBufferRegistered && closingSessionId) {
+            const apiClient = ServerConnections.getApiClient(options.serverId);
+            fetch(apiClient.getUrl('FamilyFlix/Buffer/Live/Unregister'), {
+                method: 'POST',
+                headers: { 'X-Emby-Token': apiClient.accessToken(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playSessionId: closingSessionId, minutes: appSettings.liveBufferMinutes() }),
+                keepalive: true
+            }).catch(() => {
+                console.warn('Unable to release Live TV buffer registration');
+            });
+        }
+        previewBufferRegistered = false;
+        const closingLiveStreamId = previewLiveStreamId;
+        previewSessionId = null;
+        previewLiveStreamId = null;
+        previewHls?.destroy();
+        previewHls = null;
+        if (previewVideo) {
+            previewVideo.pause();
+            previewVideo.removeAttribute('src');
+            previewVideo.load();
+            previewVideo.classList.remove('is-playing');
+            previewVideo.muted = true;
+            previewVideo.controls = false;
+        }
+        stopPreviewStream(closingSessionId, closingLiveStreamId);
+        updatePreviewControls();
+    }
+
+    function showPreviewMessage(message) {
+        previewEmpty.textContent = message;
+        previewEmpty.classList.remove('hide');
+    }
+
+    function startPreviewPlayback() {
+        // The channel click usually permits sound. If the browser's autoplay
+        // policy rejects that delayed request, keep video working and offer
+        // the explicit Sound on button for the next user gesture.
+        previewVideo.muted = false;
+        return previewVideo.play().catch(function () {
+            previewVideo.muted = true;
+            return previewVideo.play();
+        }).then(function () {
+            previewStarted = true;
+            previewVideo.classList.add('is-playing');
+            previewEmpty.classList.add('hide');
+            updatePreviewControls();
+            if (previewSessionId && !previewBufferRegistered) {
+                const apiClient = ServerConnections.getApiClient(options.serverId);
+                const registeringSessionId = previewSessionId;
+                fetch(apiClient.getUrl('FamilyFlix/Buffer/Live/Register'), {
+                    method: 'POST',
+                    headers: { 'X-Emby-Token': apiClient.accessToken(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ playSessionId: registeringSessionId, minutes: appSettings.liveBufferMinutes() })
+                }).then(response => {
+                    if (previewSessionId === registeringSessionId) {
+                        previewBufferRegistered = response.ok;
+                    } else if (response.ok) {
+                        fetch(apiClient.getUrl('FamilyFlix/Buffer/Live/Unregister'), {
+                            method: 'POST',
+                            headers: { 'X-Emby-Token': apiClient.accessToken(), 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playSessionId: registeringSessionId, minutes: appSettings.liveBufferMinutes() }),
+                            keepalive: true
+                        }).catch(() => {
+                            console.warn('Unable to release a previous Live TV buffer registration');
+                        });
+                    }
+                }).catch(() => {
+                    if (previewSessionId === registeringSessionId) {
+                        previewBufferRegistered = false;
+                    }
+                });
+            }
+        });
+    }
+
+    function openFullscreen(channelId) {
+        const playInMainPlayer = function () {
+            const channel = visibleChannelsById.get(channelId);
+            releasePreview();
+            playbackManager.play(channel ? { items: [channel] } : { ids: [channelId], serverId: options.serverId });
+        };
+        if (previewVideo.readyState >= 2 && previewContainer.requestFullscreen) {
+            previewVideo.muted = false;
+            updatePreviewControls();
+            previewContainer.requestFullscreen().catch(function () {
+                playInMainPlayer();
+            });
+        } else {
+            playInMainPlayer();
+        }
+    }
+
+    function previewSelection(channelId) {
+        if (!channelId) return;
+        if (previewChannelId === channelId) {
+            openFullscreen(channelId);
+            return;
+        }
+        releasePreview();
+        previewChannelId = channelId;
+        const channel = visibleChannelsById.get(channelId);
+        previewLabel.textContent = channel?.Name || 'Selected channel';
+        showPreviewMessage('Loading preview…');
+        const requestId = previewRequestId;
+        const apiClient = ServerConnections.getApiClient(options.serverId);
+        apiClient.getLiveTvChannel(channelId, apiClient.getCurrentUserId())
+            .then(function (item) { return playbackManager.getPlaybackInfo(item, { forceHls: true }); })
+            .then(function (stream) {
+                if (requestId !== previewRequestId) {
+                    stopPreviewStream(stream?.playSessionId, stream?.liveStreamId);
+                    return;
+                }
+                if (!stream?.url) throw new Error('No live preview stream URL');
+                previewSessionId = stream.playSessionId;
+                previewLiveStreamId = stream.liveStreamId;
+                if (stream.mimeType === 'application/x-mpegURL' || /\.m3u8(?:\?|$)/i.test(stream.url)) {
+                    return import('hls.js').then(function ({ default: Hls }) {
+                        if (requestId !== previewRequestId) return;
+                        if (Hls.isSupported()) {
+                            previewHls = new Hls({
+                                enableWorker: true,
+                                lowLatencyMode: false,
+                                maxBufferLength: 30,
+                                backBufferLength: 300,
+                                liveBackBufferLength: 300
+                            });
+                            previewHls.on(Hls.Events.ERROR, function (_event, error) {
+                                if (!error.fatal) return;
+                                if (error.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                                    previewHls.startLoad();
+                                } else if (error.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                                    previewHls.recoverMediaError();
+                                } else {
+                                    showPreviewMessage('Preview unavailable. Select again for full screen.');
+                                }
+                            });
+                            previewHls.on(Hls.Events.MANIFEST_PARSED, function () {
+                                if (requestId !== previewRequestId) return;
+                                startPreviewPlayback().catch(function () {
+                                    showPreviewMessage('Preview unavailable. Select again for full screen.');
+                                });
+                            });
+                            previewHls.loadSource(stream.url);
+                            previewHls.attachMedia(previewVideo);
+                            return true;
+                        } else {
+                            previewVideo.src = stream.url;
+                        }
+                    });
+                }
+                previewVideo.src = stream.url;
+            })
+            .then(function (waitForHls) {
+                if (waitForHls) return;
+                if (requestId !== previewRequestId) return;
+                return startPreviewPlayback();
+            })
+            .catch(function () {
+                if (requestId === previewRequestId) {
+                    showPreviewMessage('Preview unavailable. Select again for full screen.');
+                }
+            });
+    }
+
+    function onGuideCellClick(event) {
+        const cell = dom.parentWithClass(event.target, 'programCell')
+            || dom.parentWithClass(event.target, 'guide-channelHeaderCell');
+        if (!cell) return;
+        event.preventDefault();
+        event.stopPropagation();
+        previewSelection(cell.getAttribute('data-channelid') || cell.getAttribute('data-id'));
+    }
 
     self.refresh = function () {
-        currentDate = null;
         reloadPage(options.element);
         restartAutoRefresh();
     };
 
     self.pause = function () {
         stopAutoRefresh();
+        releasePreview();
     };
 
     self.resume = function (refreshData) {
@@ -164,7 +417,12 @@ function Guide(options) {
     };
 
     self.destroy = function () {
+        destroyed = true;
         stopAutoRefresh();
+        releasePreview();
+        clearInterval(previewClock);
+        window.removeEventListener('pagehide', onPageHide);
+        document.removeEventListener('fullscreenchange', onPreviewFullscreenChange);
 
         Events.off(serverNotifications, 'TimerCreated', onTimerCreated);
         Events.off(serverNotifications, 'TimerCancelled', onTimerCancelled);
@@ -213,6 +471,7 @@ function Guide(options) {
     }
 
     function reloadGuide(context, newStartDate, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs, focusProgramOnRender) {
+        const requestId = ++loadRequestId;
         const apiClient = ServerConnections.getApiClient(options.serverId);
 
         const channelQuery = {
@@ -223,8 +482,9 @@ function Guide(options) {
 
         channelQuery.UserId = apiClient.getCurrentUserId();
 
-        const channelLimit = 500;
-        currentChannelLimit = channelLimit;
+        // Family Flix's five IPTV groups total fewer than 1,000 channels.
+        // Fetch once, then ask for programme data only for the selected group.
+        const channelLimit = 1000;
 
         showLoading();
 
@@ -278,7 +538,7 @@ function Guide(options) {
         date = new Date(date.getTime() + 1000);
 
         // Subtract to avoid getting programs that are starting when the grid ends
-        const nextDay = new Date(date.getTime() + msPerDay - 2000);
+        const nextDay = new Date(date.getTime() + guideDurationMs - 2000);
 
         // Normally we'd want to just let responsive css handle this,
         // but since mobile browsers are often underpowered,
@@ -294,30 +554,22 @@ function Guide(options) {
             showEpisodeTitle: !layoutManager.tv
         };
 
-        apiClient.getLiveTvChannels(channelQuery).then(function (channelsResult) {
-            const btnPreviousPage = context.querySelector('.btnPreviousPage');
-            const btnNextPage = context.querySelector('.btnNextPage');
+        const channelsPromise = channelCache && Date.now() - channelCacheTime < 300000 ?
+            Promise.resolve(channelCache) :
+            apiClient.getLiveTvChannels(channelQuery).then(function (result) {
+                channelCache = result;
+                channelCacheTime = Date.now();
+                return result;
+            });
 
-            if (channelsResult.TotalRecordCount > channelLimit) {
-                context.querySelector('.guideOptions').classList.remove('hide');
-
-                btnPreviousPage.classList.remove('hide');
-                btnNextPage.classList.remove('hide');
-
-                if (channelQuery.StartIndex) {
-                    context.querySelector('.btnPreviousPage').disabled = false;
-                } else {
-                    context.querySelector('.btnPreviousPage').disabled = true;
-                }
-
-                if ((channelQuery.StartIndex + channelLimit) < channelsResult.TotalRecordCount) {
-                    btnNextPage.disabled = false;
-                } else {
-                    btnNextPage.disabled = true;
-                }
-            } else {
-                context.querySelector('.guideOptions').classList.add('hide');
-            }
+        channelsPromise.then(function (channelsResult) {
+            if (requestId !== loadRequestId) return;
+            const visibleChannels = (channelsResult.Items || []).filter(function (channel) {
+                if (!currentBand) return true;
+                const number = Number(channel.Number || channel.ChannelNumber);
+                return Number.isFinite(number) && Math.floor(number / 1000) === currentBand;
+            });
+            visibleChannelsById = new Map(visibleChannels.map(channel => [channel.Id, channel]));
 
             const programFields = [];
 
@@ -325,7 +577,7 @@ function Guide(options) {
                 UserId: apiClient.getCurrentUserId(),
                 MaxStartDate: nextDay.toISOString(),
                 MinEndDate: date.toISOString(),
-                channelIds: channelsResult.Items.map(function (c) {
+                channelIds: visibleChannels.map(function (c) {
                     return c.Id;
                 }).join(','),
                 ImageTypeLimit: 1,
@@ -344,13 +596,24 @@ function Guide(options) {
                 programQuery.Fields = programFields.join('');
             }
 
+            if (!visibleChannels.length) {
+                renderGuide(context, date, [], [], renderOptions, { focusProgramOnRender, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs }, apiClient);
+                hideLoading();
+                return;
+            }
+
             apiClient.getLiveTvPrograms(programQuery).then(function (programsResult) {
+                if (requestId !== loadRequestId) return;
                 const guideOptions = { focusProgramOnRender, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs };
 
-                renderGuide(context, date, channelsResult.Items, programsResult.Items, renderOptions, guideOptions, apiClient);
+                renderGuide(context, date, visibleChannels, programsResult.Items, renderOptions, guideOptions, apiClient);
 
                 hideLoading();
+            }).catch(function () {
+                if (requestId === loadRequestId) hideLoading();
             });
+        }).catch(function () {
+            if (requestId === loadRequestId) hideLoading();
         });
     }
 
@@ -431,11 +694,11 @@ function Guide(options) {
         return '<span class="material-icons programIcon timerIcon fiber_manual_record" aria-hidden="true"></span>';
     }
 
-    function getChannelProgramsHtml(context, date, channel, programs, programOptions, listInfo) {
+    function getChannelProgramsHtml(context, date, channel, programs, programOptions) {
         let html = '';
 
         const startMs = date.getTime();
-        const endMs = startMs + msPerDay - 1;
+        const endMs = startMs + guideDurationMs - 1;
 
         const outerCssClass = layoutManager.tv ? 'channelPrograms channelPrograms-tv' : 'channelPrograms';
 
@@ -451,23 +714,9 @@ function Guide(options) {
         const displaySeriesContent = !categories.length || categories.indexOf('series') !== -1;
         const enableColorCodedBackgrounds = userSettings.get('guide-colorcodedbackgrounds') === 'true';
 
-        let programsFound;
         const now = new Date().getTime();
 
-        for (let i = listInfo.startIndex, length = programs.length; i < length; i++) {
-            const program = programs[i];
-
-            if (program.ChannelId !== channel.Id) {
-                if (programsFound) {
-                    break;
-                }
-
-                continue;
-            }
-
-            programsFound = true;
-            listInfo.startIndex++;
-
+        for (const program of programs) {
             parseDates(program);
 
             const startDateLocalMs = program.StartDateLocal.getTime();
@@ -484,12 +733,12 @@ function Guide(options) {
             items[program.Id] = program;
 
             const renderStartMs = Math.max(startDateLocalMs, startMs);
-            let startPercent = (startDateLocalMs - startMs) / msPerDay;
+            let startPercent = (startDateLocalMs - startMs) / guideDurationMs;
             startPercent *= 100;
             startPercent = Math.max(startPercent, 0);
 
             const renderEndMs = Math.min(endDateLocalMs, endMs);
-            let endPercent = (renderEndMs - renderStartMs) / msPerDay;
+            let endPercent = (renderEndMs - renderStartMs) / guideDurationMs;
             endPercent *= 100;
 
             let cssClass = 'programCell itemAction';
@@ -636,14 +885,15 @@ function Guide(options) {
     }
 
     function renderPrograms(context, date, channels, programs, programOptions) {
-        const listInfo = {
-            startIndex: 0
-        };
-
+        const programsByChannel = new Map();
+        for (const program of programs) {
+            if (!programsByChannel.has(program.ChannelId)) programsByChannel.set(program.ChannelId, []);
+            programsByChannel.get(program.ChannelId).push(program);
+        }
         const html = [];
 
         for (const channel of channels) {
-            html.push(getChannelProgramsHtml(context, date, channel, programs, programOptions, listInfo));
+            html.push(getChannelProgramsHtml(context, date, channel, programsByChannel.get(channel.Id) || [], programOptions));
         }
 
         programGrid.innerHTML = html.join('');
@@ -653,27 +903,7 @@ function Guide(options) {
         updateProgramCellsOnScroll(programGrid, programCells);
     }
 
-    function getProgramSortOrder(program, channels) {
-        const channelId = program.ChannelId;
-        let channelIndex = -1;
-
-        for (let i = 0, length = channels.length; i < length; i++) {
-            if (channelId === channels[i].Id) {
-                channelIndex = i;
-                break;
-            }
-        }
-
-        const start = datetime.parseISO8601Date(program.StartDate, { toLocal: true });
-
-        return (channelIndex * 10000000) + (start.getTime() / 60000);
-    }
-
     function renderGuide(context, date, channels, programs, renderOptions, guideOptions, apiClient) {
-        programs.sort(function (a, b) {
-            return getProgramSortOrder(a, channels) - getProgramSortOrder(b, channels);
-        });
-
         const activeElement = document.activeElement;
         const itemId = activeElement?.getAttribute ? activeElement.getAttribute('data-id') : null;
         let channelRowId = null;
@@ -686,7 +916,7 @@ function Guide(options) {
         renderChannelHeaders(context, channels, apiClient);
 
         const startDate = date;
-        const endDate = new Date(startDate.getTime() + msPerDay);
+        const endDate = new Date(startDate.getTime() + guideDurationMs);
         context.querySelector('.timeslotHeaders').innerHTML = getTimeslotHeadersHtml(startDate, endDate);
         items = {};
         renderPrograms(context, date, channels, programs, renderOptions);
@@ -701,7 +931,7 @@ function Guide(options) {
     function scrollProgramGridToTimeMs(context, scrollToTimeMs, startTimeOfDayMs) {
         scrollToTimeMs -= startTimeOfDayMs;
 
-        const pct = scrollToTimeMs / msPerDay;
+        const pct = scrollToTimeMs / guideDurationMs;
 
         programGrid.scrollTop = 0;
 
@@ -731,7 +961,7 @@ function Guide(options) {
 
             focusToTimeMs -= startTimeOfDayMs;
 
-            const pct = (focusToTimeMs / msPerDay) * 100;
+            const pct = (focusToTimeMs / guideDurationMs) * 100;
 
             let programCell = autoFocusParent.querySelector('.programCell');
 
@@ -791,93 +1021,12 @@ function Guide(options) {
         }
     }
 
-    function changeDate(page, date, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs, focusProgramOnRender) {
-        const newStartDate = normalizeDateToTimeslot(date);
-        currentDate = newStartDate;
-
-        reloadGuide(page, newStartDate, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs, focusProgramOnRender);
-    }
-
-    function getDateTabText(date, isActive, tabIndex) {
-        const cssClass = isActive ? 'emby-tab-button guide-date-tab-button emby-tab-button-active' : 'emby-tab-button guide-date-tab-button';
-
-        let html = '<button is="emby-button" class="' + cssClass + '" data-index="' + tabIndex + '" data-date="' + date.getTime() + '">';
-        let tabText = datetime.toLocaleDateString(date, { weekday: 'short' });
-
-        tabText += '<br/>';
-        tabText += date.getDate();
-        html += '<div class="emby-button-foreground">' + tabText + '</div>';
-        html += '</button>';
-
-        return html;
-    }
-
-    function setDateRange(page, guideInfo) {
-        const today = new Date();
-        const nowHours = today.getHours();
-        today.setHours(nowHours, 0, 0, 0);
-
-        let start = datetime.parseISO8601Date(guideInfo.StartDate, { toLocal: true });
-        const end = datetime.parseISO8601Date(guideInfo.EndDate, { toLocal: true });
-
-        start.setHours(nowHours, 0, 0, 0);
-        end.setHours(0, 0, 0, 0);
-
-        if (start.getTime() >= end.getTime()) {
-            end.setDate(start.getDate() + 1);
-        }
-
-        start = new Date(Math.max(today, start));
-
-        let dateTabsHtml = '';
-        let tabIndex = 0;
-
-        // TODO: Use date-fns
-        const date = new Date();
-
-        if (currentDate) {
-            date.setTime(currentDate.getTime());
-        }
-
-        date.setHours(nowHours, 0, 0, 0);
-
-        let startTimeOfDayMs = (start.getHours() * 60 * 60 * 1000);
-        startTimeOfDayMs += start.getMinutes() * 60 * 1000;
-
-        while (start <= end) {
-            const isActive = date.getDate() === start.getDate() && date.getMonth() === start.getMonth() && date.getFullYear() === start.getFullYear();
-
-            dateTabsHtml += getDateTabText(start, isActive, tabIndex);
-
-            start.setDate(start.getDate() + 1);
-            start.setHours(0, 0, 0, 0);
-            tabIndex++;
-        }
-
-        page.querySelector('.emby-tabs-slider').innerHTML = dateTabsHtml;
-        page.querySelector('.guideDateTabs').refresh();
-
-        const newDate = new Date();
-        const newDateHours = newDate.getHours();
-        let scrollToTimeMs = newDateHours * 60 * 60 * 1000;
-
-        const minutes = newDate.getMinutes();
-        if (minutes >= 30) {
-            scrollToTimeMs += 30 * 60 * 1000;
-        }
-
-        const focusToTimeMs = ((newDateHours * 60) + minutes) * 60 * 1000;
-        changeDate(page, date, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs, layoutManager.tv);
-    }
-
     function reloadPage(page) {
-        showLoading();
-
-        const apiClient = ServerConnections.getApiClient(options.serverId);
-
-        apiClient.getLiveTvGuideInfo().then(function (guideInfo) {
-            setDateRange(page, guideInfo);
-        });
+        if (!currentDate) currentDate = normalizeDateToTimeslot(new Date());
+        const end = new Date(currentDate.getTime() + guideDurationMs);
+        page.querySelector('.familyGuideWindowLabel').textContent =
+            getDisplayTime(currentDate) + ' – ' + getDisplayTime(end);
+        reloadGuide(page, currentDate, 0, 0, 0, false);
     }
 
     function getChannelProgramsFocusableElements(container) {
@@ -1094,6 +1243,102 @@ function Guide(options) {
     guideContext.classList.add('tvguide');
 
     guideContext.innerHTML = globalize.translateHtml(template, 'core');
+    previewVideo = guideContext.querySelector('.familyGuideVideo');
+    previewContainer = guideContext.querySelector('.familyGuideSidebar');
+    previewEmpty = guideContext.querySelector('.familyGuidePreviewEmpty');
+    previewLabel = guideContext.querySelector('.familyGuidePreviewLabel');
+    previewBehindLive = guideContext.querySelector('.familyGuideBehindLive');
+    previewControls = guideContext.querySelector('.familyGuidePlaybackControls');
+    previewTimeline = guideContext.querySelector('.familyGuideTimeline');
+    window.addEventListener('pagehide', onPageHide);
+    document.addEventListener('fullscreenchange', onPreviewFullscreenChange);
+    for (const eventName of ['loadedmetadata', 'loadeddata', 'timeupdate', 'progress', 'durationchange', 'seeked', 'play', 'pause', 'waiting', 'volumechange']) {
+        previewVideo.addEventListener(eventName, updatePreviewControls);
+    }
+    previewVideo.addEventListener('error', function () {
+        if (previewChannelId) showPreviewMessage('Preview unavailable. Select again for full screen.');
+    });
+    previewControls.querySelector('.familyGuidePlayPause').addEventListener('click', function () {
+        if (previewVideo.paused) {
+            previewVideo.play().catch(function () {
+                showPreviewMessage('Unable to resume this channel.');
+            });
+        } else {
+            previewVideo.pause();
+        }
+    });
+    previewControls.querySelector('.familyGuideRewind').addEventListener('click', function () {
+        seekPreview(previewVideo.currentTime - 30);
+    });
+    previewControls.querySelector('.familyGuideForward').addEventListener('click', function () {
+        seekPreview(previewVideo.currentTime + 30);
+    });
+    previewControls.querySelector('.familyGuideGoLive').addEventListener('click', function () {
+        const window = getPreviewWindow();
+        if (window) seekPreview(window.end);
+        previewVideo.play().catch(function () {
+            showPreviewMessage('Unable to resume this channel.');
+        });
+    });
+    previewControls.querySelector('.familyGuideAudio').addEventListener('click', function () {
+        previewVideo.muted = !previewVideo.muted;
+        updatePreviewControls();
+    });
+    previewTimeline.addEventListener('input', function () {
+        const window = getPreviewWindow();
+        if (window) seekPreview(window.start + Number(previewTimeline.value));
+    });
+
+    function wireCategoryButton(button) {
+        button.addEventListener('click', function () {
+            const band = Number(button.getAttribute('data-band'));
+            if (band === currentBand) return;
+            currentBand = band;
+            currentStartIndex = 0;
+            for (const category of guideContext.querySelectorAll('.familyGuideCategory')) {
+                category.classList.toggle('is-selected', category === button);
+            }
+            self.refresh();
+            button.focus();
+        });
+    }
+    for (const button of guideContext.querySelectorAll('.familyGuideCategory')) {
+        wireCategoryButton(button);
+    }
+
+    const apiClientForCategories = ServerConnections.getApiClient(options.serverId);
+    fetch(apiClientForCategories.getUrl('FamilyFlix/Iptv/Categories'), {
+        headers: { 'X-Emby-Token': apiClientForCategories.accessToken() }
+    }).then(function (response) {
+        if (!response.ok) throw new Error('Categories unavailable');
+        return response.json();
+    }).then(function (result) {
+        if (destroyed || !Array.isArray(result.categories) || !result.categories.length) return;
+        const categories = result.categories.filter(category => category.enabled && Number.isInteger(category.band)
+            && category.band > 0 && typeof category.name === 'string');
+        if (!categories.length) return;
+        const allButton = guideContext.querySelector('.familyGuideCategory[data-band="0"]');
+        for (const button of guideContext.querySelectorAll('.familyGuideCategory:not([data-band="0"])')) button.remove();
+        for (const category of categories) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'familyGuideCategory';
+            button.dataset.band = String(category.band);
+            button.textContent = category.name;
+            allButton.before(button);
+            wireCategoryButton(button);
+        }
+        if (!categories.some(category => category.band === currentBand) && currentBand !== 0) {
+            currentBand = categories[0].band;
+            currentStartIndex = 0;
+            self.refresh();
+        }
+        for (const button of guideContext.querySelectorAll('.familyGuideCategory')) {
+            button.classList.toggle('is-selected', Number(button.dataset.band) === currentBand);
+        }
+    }).catch(function () {
+        // The five-category guide remains usable before the server component is activated.
+    });
 
     const programGrid = guideContext.querySelector('.programGrid');
     const timeslotHeaders = guideContext.querySelector('.timeslotHeaders');
@@ -1125,56 +1370,17 @@ function Guide(options) {
         passive: true
     });
 
-    programGrid.addEventListener('click', onProgramGridClick);
+    programGrid.addEventListener('click', onGuideCellClick);
+    guideContext.querySelector('.channelsContainer').addEventListener('click', onGuideCellClick);
 
-    guideContext.querySelector('.btnNextPage').addEventListener('click', function () {
-        currentStartIndex += currentChannelLimit;
+    guideContext.querySelector('.familyGuideLater').addEventListener('click', function () {
+        currentDate = new Date(currentDate.getTime() + guideDurationMs);
         reloadPage(guideContext);
-        restartAutoRefresh();
     });
-
-    guideContext.querySelector('.btnPreviousPage').addEventListener('click', function () {
-        currentStartIndex = Math.max(currentStartIndex - currentChannelLimit, 0);
+    guideContext.querySelector('.familyGuideEarlier').addEventListener('click', function () {
+        const earliest = normalizeDateToTimeslot(new Date());
+        currentDate = new Date(Math.max(earliest.getTime(), currentDate.getTime() - guideDurationMs));
         reloadPage(guideContext);
-        restartAutoRefresh();
-    });
-
-    guideContext.querySelector('.btnGuideViewSettings').addEventListener('click', function () {
-        showViewSettings(self);
-        restartAutoRefresh();
-    });
-
-    guideContext.querySelector('.guideDateTabs').addEventListener('tabchange', function (e) {
-        const allTabButtons = e.target.querySelectorAll('.guide-date-tab-button');
-
-        const tabButton = allTabButtons[parseInt(e.detail.selectedTabIndex, 10)];
-        if (tabButton) {
-            const previousButton = e.detail.previousIndex == null ? null : allTabButtons[parseInt(e.detail.previousIndex, 10)];
-
-            const date = new Date();
-            date.setTime(parseInt(tabButton.getAttribute('data-date'), 10));
-
-            const scrollWidth = programGrid.scrollWidth;
-            let scrollToTimeMs;
-            if (scrollWidth) {
-                scrollToTimeMs = (programGrid.scrollLeft / scrollWidth) * msPerDay;
-            } else {
-                scrollToTimeMs = 0;
-            }
-
-            if (previousButton) {
-                const previousDate = new Date();
-                previousDate.setTime(parseInt(previousButton.getAttribute('data-date'), 10));
-
-                scrollToTimeMs += (previousDate.getHours() * 60 * 60 * 1000);
-                scrollToTimeMs += (previousDate.getMinutes() * 60 * 1000);
-            }
-
-            let startTimeOfDayMs = (date.getHours() * 60 * 60 * 1000);
-            startTimeOfDayMs += (date.getMinutes() * 60 * 1000);
-
-            changeDate(guideContext, date, scrollToTimeMs, scrollToTimeMs, startTimeOfDayMs, false);
-        }
     });
 
     setScrollEvents(guideContext, true);

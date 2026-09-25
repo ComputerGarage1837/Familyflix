@@ -5,8 +5,6 @@ import loading from 'components/loading/loading';
 import * as mainTabsManager from 'components/maintabsmanager';
 import globalize from 'lib/globalize';
 import inputManager from 'scripts/inputManager';
-import * as userSettings from 'scripts/settings/userSettings';
-import { LibraryTab } from 'types/libraryTab';
 import Dashboard from 'utils/dashboard';
 import { getBackdropShape, getPortraitShape } from 'utils/card';
 
@@ -189,23 +187,6 @@ function setScrollClasses(elem, scrollX) {
     }
 }
 
-function getDefaultTabIndex(folderId) {
-    switch (userSettings.get('landing-' + folderId)) {
-        case LibraryTab.Guide:
-            return 1;
-        case LibraryTab.Channels:
-            return 2;
-        case LibraryTab.Recordings:
-            return 3;
-        case LibraryTab.Schedule:
-            return 4;
-        case LibraryTab.SeriesTimers:
-            return 5;
-        default:
-            return 0;
-    }
-}
-
 export default function (view, params) {
     function enableFullRender() {
         return new Date().getTime() - lastFullRender > 3e5;
@@ -329,7 +310,8 @@ export default function (view, params) {
 
     let isViewRestored;
     const self = this;
-    let currentTabIndex = parseInt(params.tab || getDefaultTabIndex('livetv'), 10);
+    // Family Flix enters Live TV at the full guide, regardless of Jellyfin's old landing-tab setting.
+    let currentTabIndex = parseInt(params.tab || '1', 10);
     let initialTabIndex = currentTabIndex;
     let lastFullRender = 0;
     [].forEach.call(view.querySelectorAll('.sectionTitleTextButton-programs'), function (link) {

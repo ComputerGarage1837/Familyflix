@@ -44,3 +44,27 @@ html[data-family-clock='IN_VIDEO'] .skinHeader:not(.osdHeader) .currentTimeText,
 html[data-family-clock='IN_MENUS'] .skinHeader.osdHeader .currentTimeText {
     display: none;
 }
+.familyToolbarParty {
+    display: grid;
+    gap: .05rem;
+    max-width: 13rem;
+    margin-left: .5rem;
+    overflow: hidden;
+    color: var(--ff-text, #fff);
+    font-size: .85rem;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    small { color: var(--ff-accent, #20c5c7); font-size: .7rem; }
+}
+
+.familyPartyHeader {
+    align-self: center;
+    max-width: 16rem;
+    overflow: hidden;
+    color: var(--ff-accent, #20c5c7);
+    font-size: .8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

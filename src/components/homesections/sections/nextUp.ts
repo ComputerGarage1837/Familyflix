@@ -6,7 +6,7 @@ import layoutManager from 'components/layoutManager';
 import { appRouter } from 'components/router/appRouter';
 import globalize from 'lib/globalize';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
-import { getFamilyDeck } from 'familyflix/deck';
+import { homeDeck } from 'familyflix/homeFeed';
 import type { UserSettings } from 'scripts/settings/userSettings';
 import { getBackdropShape } from 'utils/card';
 
@@ -19,7 +19,7 @@ function getNextUpFetchFn(
     return function () {
         const apiClient = ServerConnections.getApiClient(serverId);
         const displayLimit = enableOverflow ? 24 : 15;
-        return getFamilyDeck(apiClient, {
+        return homeDeck(apiClient, {
             Fields: 'PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount',
             UserId: apiClient.getCurrentUserId(),
             ImageTypeLimit: 1,

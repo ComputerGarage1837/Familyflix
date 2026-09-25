@@ -1,38 +1,48 @@
-<div class="tvGuideHeader">
-
-    <div class="guideHeaderDateSelection">
-        <div is="emby-tabs" class="guideDateTabs focuscontainer-x" data-selectionbar="false">
-            <div class="emby-tabs-slider guideDateTabsSlider">
-            </div>
+<aside class="familyGuideSidebar" aria-label="Live TV controls">
+    <div class="familyGuidePreview" aria-label="Selected channel preview">
+        <video class="familyGuideVideo" playsinline muted></video>
+        <div class="familyGuidePreviewEmpty">Select a live channel to preview</div>
+        <div class="familyGuidePreviewLabel">No channel selected</div>
+        <div class="familyGuideBehindLive" aria-live="off">LIVE</div>
+    </div>
+    <div class="familyGuidePlaybackControls" aria-label="Live TV playback controls">
+        <button type="button" class="familyGuidePlayPause" aria-label="Pause live TV" disabled>Pause</button>
+        <button type="button" class="familyGuideRewind" aria-label="Rewind 30 seconds" disabled>−30s</button>
+        <button type="button" class="familyGuideForward" aria-label="Forward 30 seconds" disabled>+30s</button>
+        <button type="button" class="familyGuideGoLive" aria-label="Go to live" disabled>Live</button>
+        <button type="button" class="familyGuideAudio" aria-label="Turn preview sound on" disabled>Sound on</button>
+    </div>
+    <input class="familyGuideTimeline" type="range" min="0" max="0" value="0" step="1" aria-label="Live TV rewind position" disabled>
+    <div class="familyGuidePreviewHint">Select once to preview · select again for full screen · rewind up to 1 hour from when you tuned in</div>
+    <div class="familyGuideSidebarTitle">Categories</div>
+    <button type="button" class="familyGuideCategory is-selected" data-band="1">General Channels</button>
+    <button type="button" class="familyGuideCategory" data-band="2">Kids</button>
+    <button type="button" class="familyGuideCategory" data-band="3">News</button>
+    <button type="button" class="familyGuideCategory" data-band="4">Movies</button>
+    <button type="button" class="familyGuideCategory" data-band="5">Sports</button>
+    <button type="button" class="familyGuideCategory" data-band="0">All Channels</button>
+</aside>
+<div class="familyGuideContent">
+    <div class="familyGuideTopbar">
+        <div class="familyGuideBrand">Family <span>Flix</span> <small>Live TV</small></div>
+        <a class="familyGuideHome" href="#/home">Return Home</a>
+        <div class="familyGuideTimeNavigation">
+            <button type="button" class="familyGuideEarlier" aria-label="Previous six hours">‹</button>
+            <span class="familyGuideWindowLabel"></span>
+            <button type="button" class="familyGuideLater" aria-label="Next six hours">›</button>
         </div>
     </div>
-
-    <div class="guide-headerTimeslots">
-        <div class="guide-channelTimeslotHeader">
-            <button is="paper-icon-button-light" type="button" class="btnGuideViewSettings" title="${ButtonMore}">
-                <span class="material-icons btnGuideViewSettingsIcon more_vert" aria-hidden="true"></span>
-            </button>
-        </div>
-        <div class="timeslotHeaders scrollX guideScroller"></div>
-    </div>
-</div>
-
-<div is="emby-scroller" class="guideVerticalScroller flex flex-grow programContainer guideScroller" data-skipfocuswhenvisible="true" data-horizontal="false">
-    <div class="scrollSlider flex flex-grow flex-direction-row" style="overflow:hidden;contain: layout style paint;">
-        <div class="channelsContainer">
-            <div class="channelList"></div>
-        </div>
-
-        <div class="programGrid scrollX guideScroller flex-grow focuscontainer-right" style="white-space: nowrap;">
+    <div class="tvGuideHeader">
+        <div class="guide-headerTimeslots">
+            <div class="guide-channelTimeslotHeader">Channel</div>
+            <div class="timeslotHeaders scrollX guideScroller"></div>
         </div>
     </div>
-</div>
-
-<div class="guideOptions hide">
-    <button is="paper-icon-button-light" type="button" class="btnPreviousPage" title="${Previous}">
-        <span class="material-icons arrow_back" aria-hidden="true"></span>
-    </button>
-    <button is="paper-icon-button-light" type="button" class="btnNextPage" title="${Next}">
-        <span class="material-icons arrow_forward" aria-hidden="true"></span>
-    </button>
+    <div is="emby-scroller" class="guideVerticalScroller flex flex-grow programContainer guideScroller" data-skipfocuswhenvisible="true" data-horizontal="false">
+        <div class="scrollSlider flex flex-grow flex-direction-row" style="overflow:hidden;contain: layout style paint;">
+            <div class="channelsContainer"><div class="channelList"></div></div>
+            <div class="programGrid scrollX guideScroller flex-grow focuscontainer-right" style="white-space: nowrap;"></div>
+        </div>
+    </div>
+    <div class="familyGuideFooter">← → Browse time · ↑ ↓ Browse channels · Select once to preview · Select again for full screen · pause and rewind up to 1 hour</div>
 </div>

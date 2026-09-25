@@ -1,7 +1,75 @@
 .tvguide {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: initial;
+}
+
+.familyGuideContent {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.familyGuideSidebar {
+    box-sizing: border-box;
+    display: flex;
+    flex: 0 0 11.5em;
+    flex-direction: column;
+    gap: 0.35em;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 1em 0.65em;
+    background: #142033;
+    border-right: 1px solid #3b5974;
+}
+
+.familyGuideHome,
+.familyGuideCategory {
+    box-sizing: border-box;
+    display: block;
+    min-height: 2.9em;
+    width: 100%;
+    padding: 0.6em 0.8em;
+    border: 1px solid transparent;
+    border-radius: 0.35em;
+    background: transparent;
+    color: #f7f9fc;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+}
+
+.familyGuideHome {
+    margin-bottom: 0.9em;
+    background: #245985;
+    font-weight: 700;
+}
+
+.familyGuideSidebarTitle {
+    padding: 0.3em 0.8em;
+    color: #bfd5e9;
+    font-weight: 700;
+}
+
+.familyGuideCategory.is-selected {
+    background: #244a6b;
+    border-color: #6498c7;
+}
+
+.familyGuideHome:focus,
+.familyGuideCategory:focus {
+    outline: 3px solid #85c5ff;
+    outline-offset: 2px;
+    background: #276caa;
+}
+
+@media (max-width: 50em) {
+    .familyGuideSidebar {
+        flex-basis: 8.5em;
+        font-size: 0.9em;
+    }
 }
 
 .tvGuideHeader {
@@ -117,9 +185,7 @@
 @media all and (min-width: 80em) {
     .channelPrograms,
     .timeslotHeadersInner {
-        // 48 half-hour slots across the 24-hour grid; four fit in the
-        // available 88vw beside the channel rail, matching Android's guide.
-        width: 1056vw;
+        width: 810vw;
     }
 }
 
@@ -453,4 +519,282 @@
 .guide-date-tab-button.show-focus:focus {
     border-radius: 0.15em !important;
     transform: none !important;
+}
+
+/* Family Flix's guide-only, two-hour viewport. The underlying data window is
+   six hours wide; category changes do not create another navigation layer. */
+.familyLiveTvPage {
+    padding-top: 3.5em !important;
+    padding-bottom: 0 !important;
+    overflow: hidden;
+    background: #13191f;
+}
+
+.familyLiveTvGuide.tvguide {
+    box-sizing: border-box;
+    height: calc(100vh - 3.5em);
+    width: 100%;
+    color: #f2f5f7;
+}
+
+.familyLiveTvGuide .familyGuideSidebar {
+    flex: 0 0 clamp(16em, 24vw, 25em);
+    gap: 0.18em;
+    overflow: hidden;
+    padding: 0.75em;
+    background: #191f27;
+    border-right: 1px solid #3b454f;
+}
+
+.familyGuidePreview {
+    position: relative;
+    flex: 0 0 auto;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: #080d12;
+    border: 1px solid #52606a;
+}
+
+.familyGuideVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #080d12;
+}
+
+.familyGuidePreviewEmpty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1em;
+    color: #c9d0d6;
+    text-align: center;
+    background: #0d141b;
+}
+
+.familyGuidePreviewLabel {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    padding: 0.35em 0.55em;
+    overflow: hidden;
+    background: #05080bcc;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.familyGuideBehindLive {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    padding: 0.2em 0.5em;
+    border-radius: 0.2em;
+    background: #b51f31;
+    color: #fff;
+    font-size: 0.8em;
+    font-weight: 800;
+    text-shadow: 0 1px 2px #000;
+}
+
+.familyGuideBehindLive.is-behind { background: #111c27e6; }
+
+.familyGuidePlaybackControls {
+    display: grid;
+    flex: 0 0 auto;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.2em;
+    padding-top: 0.35em;
+}
+
+.familyGuidePlaybackControls button {
+    min-width: 0;
+    min-height: 2.3em;
+    padding: 0.15em;
+    border: 1px solid #596877;
+    border-radius: 0.15em;
+    background: #27333e;
+    color: #fff;
+    font-size: 0.76em;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.familyGuidePlaybackControls button:disabled { opacity: 0.5; cursor: default; }
+.familyGuidePlaybackControls button:focus-visible,
+.familyGuideTimeline:focus-visible { outline: 3px solid #ff6974; outline-offset: 1px; }
+
+.familyGuideTimeline {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0.3em 0 0;
+    accent-color: #ef4150;
+}
+
+.familyGuidePreviewHint {
+    padding: 0.6em 0.25em 0.8em;
+    color: #c6ced5;
+    font-size: 0.87em;
+    white-space: normal;
+}
+
+.familyLiveTvGuide .familyGuideSidebar:fullscreen {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    background: #070a0e;
+}
+
+.familyGuideSidebar:fullscreen .familyGuidePreview {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 0;
+    aspect-ratio: auto;
+}
+
+.familyGuideSidebar:fullscreen .familyGuidePlaybackControls {
+    display: flex;
+    justify-content: center;
+    padding: 0.5em 1em 0;
+}
+
+.familyGuideSidebar:fullscreen .familyGuidePlaybackControls button { min-width: 5em; font-size: 1em; }
+.familyGuideSidebar:fullscreen .familyGuideTimeline { width: calc(100% - 2em); margin: 0.3em 1em 0.7em; }
+.familyGuideSidebar:fullscreen .familyGuideSidebarTitle,
+.familyGuideSidebar:fullscreen .familyGuideCategory,
+.familyGuideSidebar:fullscreen .familyGuidePreviewHint { display: none; }
+.familyGuideSidebar:fullscreen .familyGuideBehindLive { font-size: 1em; }
+
+.familyLiveTvGuide .familyGuideSidebarTitle {
+    padding: 0.4em 0.65em;
+    color: #9faab4;
+    font-size: 0.92em;
+    text-transform: uppercase;
+}
+
+.familyLiveTvGuide .familyGuideCategory,
+.familyLiveTvGuide .familyGuideHome {
+    flex: 0 0 auto;
+    min-height: 2.6em;
+    margin: 0;
+    padding: 0.45em 0.7em;
+    border: 1px solid #2d3843;
+    border-radius: 0.15em;
+    background: #242d36;
+    color: #f0f4f6;
+    font-weight: 500;
+}
+
+.familyLiveTvGuide .familyGuideCategory.is-selected {
+    border-color: #f34b57;
+    background: #672631;
+    font-weight: 700;
+}
+
+.familyLiveTvGuide .familyGuideCategory:focus-visible,
+.familyLiveTvGuide .familyGuideHome:focus-visible,
+.familyGuideTimeNavigation button:focus-visible {
+    outline: 3px solid #ff6974;
+    outline-offset: 1px;
+    background: #7b3039;
+}
+
+.familyLiveTvGuide .familyGuideHome {
+    width: auto;
+    min-width: 8em;
+    text-align: center;
+    background: #303b45;
+}
+
+.familyLiveTvGuide .familyGuideContent {
+    background: #13191f;
+}
+
+.familyGuideTopbar {
+    box-sizing: border-box;
+    display: flex;
+    flex: 0 0 3.6em;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    padding: 0 1em;
+    background: #1d252d;
+    border-bottom: 1px solid #3a4550;
+}
+
+.familyGuideBrand {
+    font-size: 1.25em;
+    font-weight: 800;
+}
+
+.familyGuideBrand span { color: #f34b57; }
+.familyGuideBrand small { margin-left: 0.6em; color: #b4bec7; font-size: 0.65em; font-weight: 500; }
+
+.familyGuideTimeNavigation { display: flex; align-items: center; gap: 0.5em; }
+.familyGuideTimeNavigation button {
+    min-width: 2.3em;
+    min-height: 2.3em;
+    border: 1px solid #66727e;
+    border-radius: 0.15em;
+    background: #27333e;
+    color: #fff;
+    cursor: pointer;
+    font-size: 1.1em;
+}
+.familyGuideWindowLabel { min-width: 9em; text-align: center; }
+
+.familyLiveTvGuide .tvGuideHeader { margin: 0; }
+.familyLiveTvGuide .guide-headerTimeslots { height: 3em; background: #263039; }
+.familyLiveTvGuide .guide-channelTimeslotHeader {
+    justify-content: flex-start;
+    padding-left: 0.8em !important;
+    color: #c7d0d7;
+    font-size: 1em;
+    font-weight: 700;
+}
+.familyLiveTvGuide .timeslotHeaders {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.familyLiveTvGuide .programGrid {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.familyLiveTvGuide .channelPrograms,
+.familyLiveTvGuide .timeslotHeadersInner { width: 300% !important; }
+.familyLiveTvGuide .timeslotHeader { width: 8.333333% !important; }
+.familyLiveTvGuide .channelsContainer,
+.familyLiveTvGuide .guide-channelTimeslotHeader { width: clamp(10em, 13vw, 15em); }
+.familyLiveTvGuide .channelPrograms,
+.familyLiveTvGuide .guide-channelHeaderCell { height: 4.1em; }
+.familyLiveTvGuide .programCell,
+.familyLiveTvGuide .guide-channelHeaderCell { background: #252e37; border: 1px solid #141a20; }
+.familyLiveTvGuide .programCell:focus-visible,
+.familyLiveTvGuide .guide-channelHeaderCell:focus-visible {
+    outline: 3px solid #ff5b66 !important;
+    outline-offset: -3px;
+    z-index: 3;
+    background: #34323a;
+}
+.familyGuideFooter {
+    flex: 0 0 auto;
+    padding: 0.45em 1em;
+    color: #aeb8c0;
+    font-size: 0.88em;
+    background: #1c252d;
+}
+
+@media (max-height: 700px) {
+    .familyLiveTvGuide .familyGuideCategory,
+    .familyLiveTvGuide .familyGuideHome { min-height: 2.25em; }
+    .familyGuidePreviewHint { font-size: 0.78em; }
 }

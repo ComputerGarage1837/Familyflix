@@ -12,6 +12,8 @@ import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { clearFamilyTheme, loadFamilyTheme } from 'familyflix/theme';
 import { loadFamilySegmentActions } from 'familyflix/mediaSegments';
 import { startIssueDecorations, stopIssueDecorations } from 'familyflix/issues';
+import { reconcileParty, rememberProfile } from 'familyflix/profiles';
+import { reportCoWatchPlayed } from 'familyflix/cowatch';
 
 import ConnectionManager from './connectionManager';
 
@@ -56,6 +58,17 @@ class ServerConnections extends ConnectionManager {
         Events.on(this, 'apiclientcreated', (_e, apiClient) => {
             apiClient.getMaxBandwidth = getMaxBandwidth;
             apiClient.normalizeImageOptions = normalizeImageOptions;
+            for (const [method, played] of [['markPlayed', true], ['markUnplayed', false]]) {
+                const original = apiClient[method].bind(apiClient);
+                apiClient[method] = (...args) => original(...args).then(result => {
+                    if (args[0] === apiClient.getCurrentUserId()) {
+                        void reportCoWatchPlayed(apiClient, args[1], played).catch(error => {
+                            console.warn('Watching Together watched-state update was not delivered:', error);
+                        });
+                    }
+                    return result;
+                });
+            }
         });
     }
 
@@ -142,6 +155,10 @@ class ServerConnections extends ConnectionManager {
     onLocalUserSignedIn(user) {
         const apiClient = this.getApiClient(user.ServerId);
         this.setLocalApiClient(apiClient);
+        rememberProfile(user.ServerId, user, apiClient.accessToken());
+        reconcileParty(apiClient).catch(error => {
+            console.warn('Watching Together users could not be refreshed:', error);
+        });
         return setUserInfo(user.Id, apiClient).then(() => {
             loadFamilyTheme(apiClient, user.Id).catch(error => {
                 console.warn('Family Flix theme could not be loaded:', error);

@@ -20,6 +20,8 @@ import { getPlaystateApi } from '@jellyfin/sdk/lib/utils/api/playstate-api';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import datetime from 'scripts/datetime';
 import globalize from 'lib/globalize';
+import { ServerConnections } from 'lib/jellyfin-apiclient';
+import { reportCoWatchPlayed } from 'familyflix/cowatch';
 
 import { type JellyfinApiContext, useApi } from './useApi';
 import { getAlphaPickerQuery, getFieldsQuery, getFiltersQuery, getLimitQuery } from 'utils/items';
@@ -554,12 +556,16 @@ const fetchUpdatePlayedState = async (
                 userId: user.Id,
                 itemId: itemId
             });
+            const client = ServerConnections.currentApiClient();
+            if (client?.getCurrentUserId() === user.Id) void reportCoWatchPlayed(client, itemId, false).catch(console.warn);
             return response.data.Played;
         } else {
             const response = await getPlaystateApi(api).markPlayedItem({
                 userId: user.Id,
                 itemId: itemId
             });
+            const client = ServerConnections.currentApiClient();
+            if (client?.getCurrentUserId() === user.Id) void reportCoWatchPlayed(client, itemId, true).catch(console.warn);
             return response.data.Played;
         }
     }

@@ -5,18 +5,27 @@ import React, { useCallback, useState } from 'react';
 import UserAvatar from 'components/UserAvatar';
 import { useApi } from 'hooks/useApi';
 import globalize from 'lib/globalize';
+import { openProfileChooser } from 'familyflix/profileChooser';
+import { partyFor, savedProfile } from 'familyflix/profiles';
+import { ServerConnections } from 'lib/jellyfin-apiclient';
+import { readKidsSettings } from 'familyflix/kidsMode';
 
 import AppUserMenu, { ID } from './AppUserMenu';
 
 const UserMenuButton = () => {
     const { user } = useApi();
+    const apiClient = ServerConnections.currentApiClient();
+    const party = apiClient?.getCurrentUserId() && !readKidsSettings(apiClient).enabled ? partyFor(apiClient) : null;
+    const partyNames = party?.participantUserIds?.map((id: string) => savedProfile(apiClient?.serverId(), id)?.name).filter(Boolean) || [];
+    const label = partyNames.length ? `${user?.Name || 'Profile'} / ${partyNames.join(' / ')}` : null;
 
     const [ userMenuAnchorEl, setUserMenuAnchorEl ] = useState<null | HTMLElement>(null);
     const isUserMenuOpen = Boolean(userMenuAnchorEl);
 
     const onUserButtonClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
-        setUserMenuAnchorEl(event.currentTarget);
-    }, [ setUserMenuAnchorEl ]);
+        event.preventDefault();
+        void openProfileChooser();
+    }, []);
 
     const onUserMenuClose = useCallback(() => {
         setUserMenuAnchorEl(null);
@@ -35,6 +44,7 @@ const UserMenuButton = () => {
                     sx={{ padding: 0 }}
                 >
                     <UserAvatar user={user} />
+                    {label && <span className='familyToolbarParty'><span>{label}</span><small>Watching Together</small></span>}
                 </IconButton>
             </Tooltip>
 

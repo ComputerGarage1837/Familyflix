@@ -30,6 +30,8 @@ import Events from '../utils/events.ts';
 import { getParameterByName } from '../utils/url.ts';
 import datetime from '../scripts/datetime';
 import * as userSettings from '../scripts/settings/userSettings';
+import { readKidsSettings } from '../familyflix/kidsMode';
+import { partyFor, savedProfile } from '../familyflix/profiles';
 
 import '../elements/emby-button/paper-icon-button-light';
 
@@ -53,6 +55,7 @@ function renderHeader() {
     html += '<button is="paper-icon-button-light" class="headerCastButton castButton headerButton headerButtonRight hide"><span class="material-icons cast" aria-hidden="true"></span></button>';
     html += '<button type="button" is="paper-icon-button-light" class="headerButton headerButtonRight headerSearchButton hide"><span class="material-icons search" aria-hidden="true"></span></button>';
     html += '<button is="paper-icon-button-light" class="headerButton headerButtonRight headerUserButton hide"><span class="material-icons person" aria-hidden="true"></span></button>';
+    html += '<span class="familyPartyHeader hide"></span>';
     html += '<div class="currentTimeText hide"></div>';
     html += '</div>';
     html += '</div>';
@@ -155,6 +158,15 @@ function updateUserInHeader(user) {
         updateHeaderUserButton(null);
     }
 
+    const partyLabel = skinHeader.querySelector('.familyPartyHeader');
+    const apiClient = getCurrentApiClient();
+    const party = apiClient?.getCurrentUserId() && !readKidsSettings(apiClient).enabled ? partyFor(apiClient) : null;
+    const names = party?.participantUserIds?.map(id => savedProfile(apiClient.serverId(), id)?.name).filter(Boolean) || [];
+    partyLabel?.classList.toggle('hide', !names.length);
+    if (partyLabel && names.length) {
+        partyLabel.textContent = `${user?.name || 'Profile'} / ${names.join(' / ')} · Watching Together`;
+    }
+
     if (user?.localUser) {
         if (headerHomeButton) {
             headerHomeButton.classList.remove('hide');
@@ -227,7 +239,7 @@ function showSearch() {
 }
 
 function onHeaderUserButtonClick() {
-    Dashboard.navigate('mypreferencesmenu');
+    import('../familyflix/profileChooser').then(({ openProfileChooser }) => openProfileChooser());
 }
 
 function onHeaderHomeButtonClick() {
@@ -342,6 +354,9 @@ function refreshLibraryInfoInDrawer(user) {
     // libraries are added here
     html += '<div class="libraryMenuOptions"></div>';
     html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="alllibraries" href="#/home?tab=2"><span class="material-icons navMenuOptionIcon apps" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('AllLibraries')}</span></a>`;
+    if (!readKidsSettings(getCurrentApiClient()).enabled) {
+        html += '<button type="button" class="navMenuOption lnkMediaFolder familyNightMenuButton" data-itemid="familynight"><span class="material-icons navMenuOptionIcon casino" aria-hidden="true"></span><span class="navMenuOptionText">Family Night</span></button>';
+    }
 
     if (user.localUser?.Policy.IsAdministrator) {
         html += '<div class="adminMenuOptions">';
@@ -375,6 +390,10 @@ function refreshLibraryInfoInDrawer(user) {
 
     // add buttons to navigation drawer
     navDrawerScrollContainer.innerHTML = html;
+    navDrawerScrollContainer.querySelector('.familyNightMenuButton')?.addEventListener('click', () => {
+        closeMainDrawer();
+        import('../familyflix/familyNight').then(({ openFamilyNight }) => openFamilyNight());
+    });
 
     const btnSelectServer = navDrawerScrollContainer.querySelector('.btnSelectServer');
     if (btnSelectServer) {

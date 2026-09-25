@@ -32,6 +32,8 @@ import { MediaError } from 'types/mediaError';
 import { getMediaError } from 'utils/mediaError';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { bindSkipSegment } from './skipsegment.ts';
+import { kidsPlaybackReason, recordKidsPlayback, resetKidsPlayback } from 'familyflix/kidsMode';
+import { reportCoWatch } from 'familyflix/cowatch';
 
 const UNLIMITED_ITEMS = -1;
 
@@ -93,6 +95,9 @@ function reportPlayback(playbackManagerInstance, state, player, reportPlaylist, 
 
     const apiClient = ServerConnections.getApiClient(serverId);
     const reportPlaybackPromise = apiClient[method](info);
+    void reportCoWatch(apiClient, method, info).catch(error => {
+        console.warn('Watching Together playback report was not delivered:', error);
+    });
     // Notify that report has been sent
     reportPlaybackPromise.then(() => {
         Events.trigger(playbackManagerInstance, 'reportplayback', [true]);
@@ -2345,6 +2350,13 @@ export class PlaybackManager {
         }
 
         function playInternal(item, playOptions, onPlaybackStartedFn, prevSource) {
+            const kidsApiClient = ServerConnections.getApiClient(item.ServerId);
+            const kidsReason = kidsPlaybackReason(kidsApiClient, item);
+            if (kidsReason) {
+                loading.hide();
+                alert({ title: 'Kids Mode', text: kidsReason });
+                return Promise.reject(new Error(kidsReason));
+            }
             if (item.IsPlaceHolder) {
                 loading.hide();
                 showPlaybackInfoErrorMessage(self, 'PlaybackErrorPlaceHolder');
@@ -3128,6 +3140,13 @@ export class PlaybackManager {
             const newItemInfo = self._playQueueManager.getNextItemInfo();
 
             if (newItemInfo) {
+                const nextItem = newItemInfo.item;
+                const kidsApiClient = ServerConnections.getApiClient(nextItem.ServerId);
+                const kidsReason = kidsPlaybackReason(kidsApiClient, nextItem, true);
+                if (kidsReason) {
+                    alert({ title: 'Kids Mode', text: kidsReason });
+                    return;
+                }
                 console.debug('playing next track');
 
                 const newItemPlayOptions = newItemInfo.item.playOptions || getDefaultPlayOptions();
@@ -3286,6 +3305,7 @@ export class PlaybackManager {
             const fullscreen = playOptions.fullscreen;
 
             const state = self.getPlayerState(player, streamInfo.item, streamInfo.mediaSource);
+            recordKidsPlayback(ServerConnections.getApiClient(streamInfo.item.ServerId), streamInfo.item);
 
             reportPlayback(self, state, player, true, state.NowPlayingItem.ServerId, 'reportPlaybackStart');
 
@@ -3317,6 +3337,7 @@ export class PlaybackManager {
             streamInfo.playbackStartTimeTicks = new Date().getTime() * 10000;
 
             const state = self.getPlayerState(player, item, mediaSource);
+            recordKidsPlayback(ServerConnections.getApiClient(item.ServerId), item);
 
             reportPlayback(self, state, player, true, state.NowPlayingItem.ServerId, 'reportPlaybackStart');
 
@@ -3346,6 +3367,10 @@ export class PlaybackManager {
                 nextItem: (nextItem ? nextItem.item : null),
                 nextMediaType: nextMediaType
             };
+
+            if (!nextItem && playerStopInfo.item?.ServerId) {
+                resetKidsPlayback(ServerConnections.getApiClient(playerStopInfo.item.ServerId));
+            }
 
             state.NextMediaType = nextMediaType;
 
@@ -3475,6 +3500,7 @@ export class PlaybackManager {
 
             if (!nextItem) {
                 self._playQueueManager.reset();
+                if (streamInfo?.item?.ServerId) resetKidsPlayback(ServerConnections.getApiClient(streamInfo.item.ServerId));
             }
 
             Events.trigger(player, 'playbackstop', [state]);
