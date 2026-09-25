@@ -12,6 +12,7 @@ import { loadLiveTV } from './sections/liveTv';
 import { loadNextUp } from './sections/nextUp';
 import { loadRecentlyAdded } from './sections/recentlyAdded';
 import { loadResume } from './sections/resume';
+import { loadFamilyWatchlist } from './sections/familyWatchlist';
 
 import 'elements/emby-button/paper-icon-button-light';
 import 'elements/emby-itemscontainer/emby-itemscontainer';
@@ -33,8 +34,22 @@ function getAllSectionsToShow(userSettings) {
     const sections = [];
     if (!hidden.has('continue')) sections.push(HomeSectionType.Resume);
     if (!hidden.has('deck')) sections.push(HomeSectionType.NextUp);
+    if (!hidden.has('watchlist')) sections.push('familywatchlist');
     sections.push(HomeSectionType.LatestMedia);
-    return sections;
+    const rowOrder = String(userSettings.get('familyTvHomeRowOrderV1') || '').split('|');
+    const positions = new Map(rowOrder.map((row, index) => [row, index]));
+    const latestPosition = rowOrder.findIndex(row => row.startsWith('latest:'));
+    if (latestPosition !== -1) positions.set('latest', latestPosition);
+    const keys = new Map([
+        [HomeSectionType.Resume, 'continue'],
+        [HomeSectionType.NextUp, 'deck'],
+        ['familywatchlist', 'watchlist'],
+        [HomeSectionType.LatestMedia, 'latest']
+    ]);
+    const defaults = new Map(sections.map((section, index) => [section, index]));
+    return sections.sort((left, right) =>
+        (positions.get(keys.get(left)) ?? 100 + defaults.get(left))
+        - (positions.get(keys.get(right)) ?? 100 + defaults.get(right)));
 }
 
 function orderedLatestLibraries(userViews, userSettings) {
@@ -165,6 +180,9 @@ function loadSection(page, apiClient, user, userSettings, userViews, allSections
             break;
         case HomeSectionType.Resume:
             return loadResume(elem, apiClient, 'HeaderContinueWatching', 'Video', userSettings, options);
+        case 'familywatchlist':
+            loadFamilyWatchlist(elem, apiClient, options);
+            break;
         case HomeSectionType.ResumeAudio:
             return loadResume(elem, apiClient, 'HeaderContinueListening', 'Audio', userSettings, options);
         case HomeSectionType.ResumeBook:

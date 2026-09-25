@@ -19,7 +19,12 @@ class HomeTab {
             const sectionsContainer = this.sectionsContainer;
 
             if (sectionsContainer) {
-                return homeSections.resume(sectionsContainer, options);
+                return homeSections.resume(sectionsContainer, options).then(() => {
+                    // Reconcile only the Watchlist after returning from a title;
+                    // the other home rows and their scroll positions stay put.
+                    return sectionsContainer.querySelector('.familyFlixWatchlistSection .itemsContainer')
+                        ?.resume({ refresh: true });
+                });
             }
 
             return Promise.resolve();
