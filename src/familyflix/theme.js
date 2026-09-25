@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention -- Android uses stable wire-format preference keys. */
 import './theme.scss';
 
 const PREFERENCES_ID = 'familyflix-profile-settings-v1';
@@ -110,3 +111,4 @@ export function clearFamilyTheme() {
         document.documentElement.style.removeProperty(`--ff-${name}`);
     }
 }
+/* eslint-enable @typescript-eslint/naming-convention */

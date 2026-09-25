@@ -47,7 +47,7 @@ const FamilyClock: FC = () => {
     const playing = /#\/video(?:\?|$)/.test(location);
     if (behavior === 'NEVER' || (behavior === 'IN_VIDEO' && !playing)
         || (behavior === 'IN_MENUS' && playing)) return null;
-    const inGuide = /#\/livetv(?:\?|$)/.test(location) && /(?:\?|&)tab=1(?:&|$)/.test(location);
+    const inGuide = /#\/livetv(?:\?|$)/.test(location) && /[?&]tab=1(?:&|$)/.test(location);
     const date = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(stamp);
     const time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(stamp);
     return <Box sx={{ position: 'absolute', left: inGuide ? 'auto' : '50%', right: inGuide ? 94 : 'auto',

@@ -214,7 +214,7 @@ function updateClock() {
         currentTimeText.innerText = `${date}  •  ${datetime.getDisplayTime(now)}`;
         currentTimeText.classList.toggle('guideClock',
             /^#\/livetv(?:\?|$)/.test(window.location.hash)
-                && /(?:\?|&)tab=1(?:&|$)/.test(window.location.hash));
+                && /[?&]tab=1(?:&|$)/.test(window.location.hash));
     };
     refresh();
     window.setInterval(refresh, 30_000);

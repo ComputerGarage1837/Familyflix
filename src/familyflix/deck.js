@@ -1,20 +1,20 @@
 // Keep this selection in step with FamilyDeck.kt in the Android TV client.
 const MAX_ACTIVE_SERIES = 12;
 
-const identity = item => item.SeriesId
-    ? `series:${item.SeriesId}`
-    : item.SeriesName
-        ? `series-name:${item.SeriesName.trim().toLowerCase()}`
-        : `item:${item.Id}`;
+function identity(item) {
+    if (item.SeriesId) return `series:${item.SeriesId}`;
+    if (item.SeriesName) return `series-name:${item.SeriesName.trim().toLowerCase()}`;
+    return `item:${item.Id}`;
+}
 
-const isEligible = item => !item.UserData?.Played && !(item.UserData?.PlaybackPositionTicks > 0);
+const isEligible = item => !item.UserData?.Played && Number(item.UserData?.PlaybackPositionTicks || 0) <= 0;
 const isResume = item => !item.UserData?.Played && item.UserData?.PlaybackPositionTicks > 0;
 const episodeNumber = item => item.IndexNumberEnd || item.IndexNumber;
 
 function latestActivity(items) {
     const latest = new Map();
     for (const item of items) {
-        if (item.Type !== 'Episode' || !(item.ParentIndexNumber > 0)
+        if (item.Type !== 'Episode' || Number(item.ParentIndexNumber || 0) <= 0
             || item.IndexNumber == null || !item.UserData?.LastPlayedDate) continue;
         const key = identity(item);
         const previous = latest.get(key);
@@ -25,14 +25,14 @@ function latestActivity(items) {
 
 function isObviousSuccessor(candidate, anchor) {
     if (!isEligible(candidate) || isResume(anchor) || identity(candidate) !== identity(anchor)) return false;
-    if (!(candidate.ParentIndexNumber > 0) || candidate.ParentIndexNumber !== anchor.ParentIndexNumber) return false;
+    if (Number(candidate.ParentIndexNumber || 0) <= 0 || candidate.ParentIndexNumber !== anchor.ParentIndexNumber) return false;
     const anchorNumber = episodeNumber(anchor);
     return anchorNumber > 0 && candidate.IndexNumber === (anchor.UserData.Played ? anchorNumber + 1 : anchorNumber);
 }
 
 function nextInSeason(episodes, anchor) {
     const threshold = episodeNumber(anchor) + (anchor.UserData?.Played ? 1 : 0);
-    if (!(threshold > 0)) return null;
+    if (threshold <= 0) return null;
     return episodes.filter(item => item.Type === 'Episode'
         && item.ParentIndexNumber === anchor.ParentIndexNumber
         && item.IndexNumber >= threshold && isEligible(item))

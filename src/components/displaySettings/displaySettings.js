@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention -- Keep Android's shared preference keys unchanged. */
 import escapeHtml from 'escape-html';
 
 import { AppFeature } from 'constants/appFeature';
@@ -286,3 +287,4 @@ class DisplaySettings {
 }
 
 export default DisplaySettings;
+/* eslint-enable @typescript-eslint/naming-convention */

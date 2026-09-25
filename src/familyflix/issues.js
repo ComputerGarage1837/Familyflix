@@ -15,6 +15,17 @@ let decorationGeneration = 0;
 const decorationCache = new Map();
 let decorationApiClient;
 
+function operationId() {
+    const bytes = new Uint8Array(16);
+    // This client is packaged with modern Qt WebEngine on Windows.
+    // eslint-disable-next-line compat/compat
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, value => (`0${value.toString(16)}`).slice(-2)).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function read(value, camel, pascal) {
     return value?.[camel] ?? value?.[pascal];
 }
@@ -119,9 +130,12 @@ export async function loadIssueWarning(page, item, apiClient) {
         const categories = read(summary, 'categories', 'Categories') || [];
         const affected = Number(read(summary, 'affectedEpisodeCount', 'AffectedEpisodeCount') || 0);
         const heading = document.createElement('strong');
-        heading.textContent = item.Type === 'Series' || item.Type === 'Season'
-            ? `${affected} ${affected === 1 ? 'episode has' : 'episodes have'} reported problems`
-            : 'Playback problem reported';
+        if (item.Type === 'Series' || item.Type === 'Season') {
+            const noun = affected === 1 ? 'episode has' : 'episodes have';
+            heading.textContent = `${affected} ${noun} reported problems`;
+        } else {
+            heading.textContent = 'Playback problem reported';
+        }
         const description = document.createElement('span');
         description.textContent = categories.map(category => CATEGORIES[category] || 'Playback problem').join(' · ');
         banner.append(heading, description);
@@ -191,7 +205,7 @@ function openIssueReport(page, item, apiClient) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Emby-Token': apiClient.accessToken() },
                 body: JSON.stringify({
-                    operationId: crypto.randomUUID(),
+                    operationId: operationId(),
                     itemId: item.Id,
                     category: category.value,
                     note: note.value.trim(),
