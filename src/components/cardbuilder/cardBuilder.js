@@ -1098,17 +1098,19 @@ function buildCard(index, item, apiClient, options) {
         timerAttributes += ' data-seriestimerid="' + item.SeriesTimerId + '"';
     }
 
+    const hideKidsSpoiler = document.documentElement.dataset.familyKidsSpoilers === 'true'
+        && item.Type === 'Episode' && !item.UserData?.Played;
     let actionAttribute;
     let ariaLabelAttribute = '';
 
     if (tagName === 'button') {
         actionAttribute = ' data-action="' + action + '"';
-        ariaLabelAttribute = ` aria-label="${escapeHtml(item.Name)}"`;
+        ariaLabelAttribute = ` aria-label="${hideKidsSpoiler ? 'Unwatched episode' : escapeHtml(item.Name)}"`;
     } else {
         actionAttribute = '';
     }
 
-    const className = resolveCardCssClasses({
+    let className = resolveCardCssClasses({
         shape: shape,
         cardCssClass: options.cardCssClass,
         cardClass: options.cardClass,
@@ -1120,6 +1122,14 @@ function buildCard(index, item, apiClient, options) {
         tagName: tagName,
         itemType: item.Type
     });
+    if (item.Type === 'Episode' && !item.UserData?.Played) className += ' familyKidsUnwatchedEpisode';
+
+    let kidsCode = '';
+    if (item.Type === 'Episode') {
+        kidsCode = item.ParentIndexNumber != null && item.IndexNumber != null ?
+            ` data-kids-code="S${String(item.ParentIndexNumber).padStart(2, '0')}E${String(item.IndexNumber).padStart(2, '0')} · Unwatched episode"` :
+            ' data-kids-code="Unwatched episode"';
+    }
 
     const positionTicksData = item.UserData?.PlaybackPositionTicks ? (' data-positionticks="' + item.UserData.PlaybackPositionTicks + '"') : '';
     const collectionIdData = options.collectionId ? (' data-collectionid="' + options.collectionId + '"') : '';
@@ -1139,7 +1149,7 @@ function buildCard(index, item, apiClient, options) {
         additionalCardContent += getHoverMenuHtml(item, action);
     }
 
-    return '<' + tagName + ' data-index="' + index + '"' + timerAttributes + actionAttribute + ' data-isfolder="' + (item.IsFolder || false) + '" data-serverid="' + (item.ServerId || options.serverId) + '" data-id="' + (item.Id || item.ItemId) + '" data-type="' + item.Type + '"' + mediaTypeData + collectionTypeData + channelIdData + pathData + positionTicksData + collectionIdData + playlistIdData + contextData + parentIdData + startDate + endDate + ' data-prefix="' + escapeHtml(prefix) + '" class="' + className + '"' + ariaLabelAttribute + '>' + cardImageContainerOpen + innerCardFooter + cardImageContainerClose + overlayButtons + additionalCardContent + cardScalableClose + outerCardFooter + cardBoxClose + '</' + tagName + '>';
+    return '<' + tagName + ' data-index="' + index + '"' + timerAttributes + actionAttribute + ' data-isfolder="' + (item.IsFolder || false) + '" data-serverid="' + (item.ServerId || options.serverId) + '" data-id="' + (item.Id || item.ItemId) + '" data-type="' + item.Type + '"' + kidsCode + mediaTypeData + collectionTypeData + channelIdData + pathData + positionTicksData + collectionIdData + playlistIdData + contextData + parentIdData + startDate + endDate + ' data-prefix="' + escapeHtml(prefix) + '" class="' + className + '"' + ariaLabelAttribute + '>' + cardImageContainerOpen + innerCardFooter + cardImageContainerClose + overlayButtons + additionalCardContent + cardScalableClose + outerCardFooter + cardBoxClose + '</' + tagName + '>';
 }
 
 /**

@@ -19,10 +19,30 @@ async function loadOneWatchlist(apiClient) {
     const entries = value(value(bundle, 'personal', 'Personal'), 'entries', 'Entries') || [];
     const ids = entries.map(entry => value(entry, 'itemId', 'ItemId')).filter(Boolean);
     if (!ids.length) return [];
-    const result = await apiClient.getItems(apiClient.getCurrentUserId(), {
+    const userId = apiClient.getCurrentUserId();
+    const result = await apiClient.getItems(userId, {
         Ids: ids.join(','), Fields: 'Genres,OfficialRating,RunTimeTicks', Recursive: true
     });
-    return (result.Items || []).filter(item => item.Type === 'Movie' || item.Type === 'Series');
+    const resolved = new Map((result.Items || []).map(item => [String(item.Id).replaceAll('-', '').toLowerCase(), item]));
+    const missing = entries.filter(entry => !resolved.has(String(value(entry, 'itemId', 'ItemId')).replaceAll('-', '').toLowerCase()));
+    await Promise.allSettled(missing.map(async entry => {
+        const title = value(entry, 'title', 'Title');
+        if (!title) return;
+        const type = value(entry, 'itemType', 'ItemType');
+        const requestedType = type === 0 || String(type).toLowerCase() === 'movie' ? 'Movie' : 'Series';
+        const candidates = await apiClient.getItems(userId, {
+            SearchTerm: title, Recursive: true, IncludeItemTypes: requestedType,
+            Fields: 'ProviderIds,Genres,OfficialRating,RunTimeTicks', Limit: 12
+        });
+        const providers = value(entry, 'providerIds', 'ProviderIds') || {};
+        const matchByProvider = (candidates.Items || []).find(item => item.Type === requestedType
+            && Object.entries(providers).some(([key, providerId]) => item.ProviderIds?.[key] === providerId));
+        const exactTitles = (candidates.Items || []).filter(item => item.Type === requestedType
+            && String(item.Name).toLowerCase() === String(title).toLowerCase());
+        const match = matchByProvider || (exactTitles.length === 1 ? exactTitles[0] : null);
+        if (match) resolved.set(String(match.Id).replaceAll('-', '').toLowerCase(), match);
+    }));
+    return [...resolved.values()].filter(item => item.Type === 'Movie' || item.Type === 'Series');
 }
 
 async function loadCandidates(apiClient) {

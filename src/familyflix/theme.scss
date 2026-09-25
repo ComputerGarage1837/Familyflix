@@ -68,3 +68,22 @@ html[data-family-clock='IN_MENUS'] .skinHeader.osdHeader .currentTimeText {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+html[data-family-kids-spoilers='true'] .familyKidsUnwatchedEpisode {
+    .cardImage { filter: blur(1.1rem); }
+    .cardText { filter: blur(.4rem); }
+    &::after {
+        content: attr(data-kids-code);
+        position: absolute;
+        bottom: .2rem;
+        left: .3rem;
+        right: .3rem;
+        z-index: 3;
+        padding: .25rem;
+        border-radius: .2rem;
+        background: var(--ff-screen, #071116);
+        color: var(--ff-text, #fff);
+        font-size: .8rem;
+        text-align: center;
+    }
+}

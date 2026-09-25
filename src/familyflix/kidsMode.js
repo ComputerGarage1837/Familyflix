@@ -3,6 +3,7 @@ import { ServerConnections } from 'lib/jellyfin-apiclient';
 import './profileChooser.scss';
 
 const KEY = 'familyflix-desktop-kids-settings-v1';
+const SLEEP_KEY = 'familyflix-desktop-kids-sleep-v1';
 const sessions = new Map();
 const cleanId = id => String(id || '').replaceAll('-', '').toLowerCase();
 
@@ -32,7 +33,27 @@ export function saveKidsSettings(apiClient, settings) {
     }
     all[owner(apiClient)] = settings;
     localStorage.setItem(KEY, JSON.stringify(all));
+    document.documentElement.dataset.familyKidsSpoilers = String(Boolean(settings.enabled && settings.hideUnwatchedEpisodeSpoilers));
     document.dispatchEvent(new Event('familyflix-kids-updated'));
+}
+
+export function applyKidsPresentation(apiClient) {
+    const settings = readKidsSettings(apiClient);
+    document.documentElement.dataset.familyKidsSpoilers = String(Boolean(settings.enabled && settings.hideUnwatchedEpisodeSpoilers));
+}
+
+export function setKidsSleepTimer(apiClient, minutes) {
+    const key = owner(apiClient);
+    const saved = JSON.parse(sessionStorage.getItem(SLEEP_KEY) || '{}');
+    if (minutes > 0) saved[key] = Date.now() + minutes * 60000;
+    else delete saved[key];
+    sessionStorage.setItem(SLEEP_KEY, JSON.stringify(saved));
+}
+
+export function kidsSleepExpired(apiClient) {
+    if (!apiClient) return false;
+    const deadline = JSON.parse(sessionStorage.getItem(SLEEP_KEY) || '{}')[owner(apiClient)];
+    return Boolean(deadline && Date.now() >= deadline);
 }
 
 async function hashPin(pin, salt) {
@@ -74,6 +95,7 @@ export function kidsPlaybackReason(apiClient, item, automatic = false, now = new
     if (!apiClient) return null;
     const settings = readKidsSettings(apiClient);
     if (!settings.enabled) return null;
+    if (kidsSleepExpired(apiClient)) return 'The Kids Mode sleep timer has ended.';
     if (insideBedtime(settings, now)) return 'Kids Mode bedtime is active.';
     const session = sessions.get(owner(apiClient));
     if (automatic && item?.Type === 'Episode' && settings.maxEpisodesPerSession > 0
@@ -118,9 +140,12 @@ export async function openKidsSettings() {
         <form class="familyProfileExtras familyKidsForm">
             <label><input type="checkbox" name="enabled"> Enable Kids Mode</label>
             <label>Episodes before automatic next stops <input type="number" name="limit" min="0" max="30" value="0"></label>
+            <label><input type="checkbox" name="spoilers"> Hide unwatched episode artwork and titles</label>
+            <label>Sleep timer for this session <select name="sleep"><option value="0">Off</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option></select></label>
             <label>Bedtime starts <input type="time" name="start"></label>
             <label>Bedtime ends <input type="time" name="end"></label>
             <label>Parent PIN (optional, 4–8 digits) <input type="password" name="pin" inputmode="numeric" minlength="4" maxlength="8" autocomplete="new-password"></label>
+            <label><input type="checkbox" name="removePin"> Remove existing parent PIN</label>
             <button type="submit">Save Kids Mode</button>
         </form><p class="familyProfileMessage" aria-live="polite"></p>
     </section>`;
@@ -129,6 +154,7 @@ export async function openKidsSettings() {
     const form = root.querySelector('form');
     form.elements.enabled.checked = settings.enabled;
     form.elements.limit.value = settings.maxEpisodesPerSession;
+    form.elements.spoilers.checked = settings.hideUnwatchedEpisodeSpoilers !== false;
     const toTime = minutes => minutes < 0 ? '' : `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
     form.elements.start.value = toTime(settings.bedtimeStartMinutes);
     form.elements.end.value = toTime(settings.bedtimeEndMinutes);
@@ -151,15 +177,22 @@ export async function openKidsSettings() {
             return;
         }
         try {
-            const updated = await withKidsPin({
+            const nextSettings = {
                 ...settings,
                 enabled: form.elements.enabled.checked,
                 maxEpisodesPerSession: Math.max(0, Math.min(30, Number(form.elements.limit.value) || 0)),
+                hideUnwatchedEpisodeSpoilers: form.elements.spoilers.checked,
                 bedtimeStartMinutes: start,
                 bedtimeEndMinutes: end
-            }, form.elements.pin.value);
+            };
+            if (form.elements.removePin.checked) {
+                nextSettings.pinSalt = null;
+                nextSettings.pinHash = null;
+            }
+            const updated = await withKidsPin(nextSettings, form.elements.pin.value);
             saveKidsSettings(apiClient, updated);
             resetKidsPlayback(apiClient);
+            setKidsSleepTimer(apiClient, Number(form.elements.sleep.value));
             close();
             window.location.reload();
         } catch (error) {

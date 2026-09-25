@@ -32,7 +32,7 @@ import { MediaError } from 'types/mediaError';
 import { getMediaError } from 'utils/mediaError';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { bindSkipSegment } from './skipsegment.ts';
-import { kidsPlaybackReason, recordKidsPlayback, resetKidsPlayback } from 'familyflix/kidsMode';
+import { kidsPlaybackReason, kidsSleepExpired, recordKidsPlayback, resetKidsPlayback } from 'familyflix/kidsMode';
 import { reportCoWatch } from 'familyflix/cowatch';
 
 const UNLIMITED_ITEMS = -1;
@@ -3261,6 +3261,12 @@ export class PlaybackManager {
 
         function onPlayerProgressInterval() {
             const player = this;
+            const item = self.currentItem(player);
+            if (item?.ServerId && kidsSleepExpired(ServerConnections.getApiClient(item.ServerId))) {
+                alert({ title: 'Kids Mode', text: 'The sleep timer has ended.' });
+                void self.stop(player);
+                return;
+            }
             sendProgressUpdate(player, 'timeupdate');
         }
 

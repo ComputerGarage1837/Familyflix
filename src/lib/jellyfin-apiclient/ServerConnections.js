@@ -14,6 +14,7 @@ import { loadFamilySegmentActions } from 'familyflix/mediaSegments';
 import { startIssueDecorations, stopIssueDecorations } from 'familyflix/issues';
 import { reconcileParty, rememberProfile } from 'familyflix/profiles';
 import { reportCoWatchPlayed } from 'familyflix/cowatch';
+import { applyKidsPresentation } from 'familyflix/kidsMode';
 
 import ConnectionManager from './connectionManager';
 
@@ -156,6 +157,7 @@ class ServerConnections extends ConnectionManager {
         const apiClient = this.getApiClient(user.ServerId);
         this.setLocalApiClient(apiClient);
         rememberProfile(user.ServerId, user, apiClient.accessToken());
+        applyKidsPresentation(apiClient);
         reconcileParty(apiClient).catch(error => {
             console.warn('Watching Together users could not be refreshed:', error);
         });
