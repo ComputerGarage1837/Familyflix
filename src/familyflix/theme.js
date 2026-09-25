@@ -35,9 +35,13 @@ function parseDocument(preferences) {
 }
 
 export async function readFamilyTheme(apiClient, userId) {
+    const values = await readFamilyProfileValues(apiClient, userId);
+    return familyThemes[values.app_theme] ? values.app_theme : 'DARK';
+}
+
+export async function readFamilyProfileValues(apiClient, userId) {
     const preferences = await apiClient.getDisplayPreferences(PREFERENCES_ID, userId, PREFERENCES_CLIENT);
-    const document = parseDocument(preferences);
-    return familyThemes[document.values.app_theme] ? document.values.app_theme : 'DARK';
+    return parseDocument(preferences).values;
 }
 
 export function applyFamilyTheme(name) {
@@ -62,21 +66,31 @@ export async function loadFamilyTheme(apiClient, userId) {
 
 export async function saveFamilyTheme(apiClient, userId, selected, expected) {
     if (!familyThemes[selected]) throw new Error('Unknown Family Flix theme.');
+    await saveFamilyProfileValues(apiClient, userId, { app_theme: selected }, { app_theme: expected });
+    if (apiClient.getCurrentUserId() === userId) applyFamilyTheme(selected);
+    return selected;
+}
+
+export async function saveFamilyProfileValues(apiClient, userId, changes, expected = {}) {
     // Refresh immediately before writing. Keep every unrelated Android setting.
     const preferences = await apiClient.getDisplayPreferences(PREFERENCES_ID, userId, PREFERENCES_CLIENT);
     const document = parseDocument(preferences);
-    const remote = familyThemes[document.values.app_theme] ? document.values.app_theme : 'DARK';
-    if (expected && expected !== remote) throw new Error('Theme changed on another device. Reload settings first.');
-    if (selected !== remote) {
+    const updated = { ...document.values };
+    for (const [key, value] of Object.entries(changes)) {
+        if (expected[key] !== undefined && expected[key] !== (document.values[key] ?? (key === 'app_theme' ? 'DARK' : ''))) {
+            throw new Error('A Family Flix setting changed on another device. Reload settings first.');
+        }
+        updated[key] = value;
+    }
+    if (Object.keys(changes).some(key => updated[key] !== document.values[key])) {
         document.revision = Number(document.revision || 0) + 1;
         document.updatedAtEpochMillis = Date.now();
         document.writerDeviceId = apiClient.deviceId?.() || 'familyflix-windows';
-        document.values = { ...document.values, app_theme: selected };
+        document.values = updated;
         preferences.CustomPrefs = { ...preferences.CustomPrefs, [PREFERENCES_KEY]: JSON.stringify(document) };
         await apiClient.updateDisplayPreferences(PREFERENCES_ID, preferences, userId, PREFERENCES_CLIENT);
     }
-    if (apiClient.getCurrentUserId() === userId) applyFamilyTheme(selected);
-    return selected;
+    return updated;
 }
 
 export function clearFamilyTheme() {

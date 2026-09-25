@@ -3,6 +3,7 @@ import escapeHTML from 'escape-html';
 
 import { MediaSegmentAction } from 'apps/stable/features/playback/constants/mediaSegmentAction';
 import { getId, getMediaSegmentAction } from 'apps/stable/features/playback/utils/mediaSegmentSettings';
+import { familySegmentActionsFromForm, loadFamilySegmentActions, saveFamilySegmentActions } from 'familyflix/mediaSegments';
 import { AppFeature } from 'constants/appFeature';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 
@@ -322,14 +323,20 @@ function save(instance, context, userId, userSettings, apiClient, enableSaveConf
     loading.show();
 
     apiClient.getUser(userId).then(user => {
-        saveUser(context, user, userSettings, apiClient).then(() => {
+        saveUser(context, user, userSettings, apiClient).then(async () => {
+            if (instance.familySegmentActionsAtLoad !== null) {
+                instance.familySegmentActionsAtLoad = await saveFamilySegmentActions(apiClient, userId,
+                    familySegmentActionsFromForm(context), instance.familySegmentActionsAtLoad);
+            }
             loading.hide();
             if (enableSaveConfirmation) {
                 toast(globalize.translate('SettingsSaved'));
             }
 
             Events.trigger(instance, 'saved');
-        }, () => {
+        }).catch(error => {
+            console.error('Family Flix playback settings could not be saved:', error);
+            toast(error.message || 'Playback settings could not be saved.');
             loading.hide();
         });
     });
@@ -372,6 +379,7 @@ function embed(options, self) {
 class PlaybackSettings {
     constructor(options) {
         this.options = options;
+        this.familySegmentActionsAtLoad = null;
         embed(options, this);
     }
 
@@ -387,7 +395,13 @@ class PlaybackSettings {
 
         apiClient.getUser(userId).then(user => {
             apiClient.getSystemInfo().then(systemInfo => {
-                userSettings.setUserInfo(userId, apiClient).then(() => {
+                userSettings.setUserInfo(userId, apiClient).then(async () => {
+                    try {
+                        self.familySegmentActionsAtLoad = await loadFamilySegmentActions(apiClient, userId);
+                    } catch (error) {
+                        console.warn('Family Flix skip settings could not be loaded:', error);
+                        self.familySegmentActionsAtLoad = null;
+                    }
                     self.dataLoaded = true;
 
                     loadForm(context, user, userSettings, systemInfo, apiClient);

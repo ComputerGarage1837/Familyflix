@@ -10,6 +10,7 @@ import Dashboard from 'utils/dashboard';
 import Events from 'utils/events.ts';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { clearFamilyTheme, loadFamilyTheme } from 'familyflix/theme';
+import { loadFamilySegmentActions } from 'familyflix/mediaSegments';
 
 import ConnectionManager from './connectionManager';
 
@@ -142,6 +143,9 @@ class ServerConnections extends ConnectionManager {
         return setUserInfo(user.Id, apiClient).then(() => {
             loadFamilyTheme(apiClient, user.Id).catch(error => {
                 console.warn('Family Flix theme could not be loaded:', error);
+            });
+            loadFamilySegmentActions(apiClient, user.Id).catch(error => {
+                console.warn('Family Flix skip settings could not be loaded:', error);
             });
             if (window.NativeShell && typeof window.NativeShell.onLocalUserSignedIn === 'function') {
                 return window.NativeShell.onLocalUserSignedIn(user, apiClient.accessToken());
