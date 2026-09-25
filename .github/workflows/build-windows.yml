@@ -53,6 +53,9 @@ jobs:
     - name: Build dedicated desktop client
       run: |
         npm ci
+        npx tsc --noEmit
+        npx vitest run src/familyflix/deck.test.js src/familyflix/theme.test.js
+        npx eslint src/familyflix/deck.js src/familyflix/deck.test.js src/familyflix/theme.js src/familyflix/theme.test.js src/familyflix/issues.js src/components/toolbar/AppToolbar.tsx src/components/homesections/sections/nextUp.ts src/components/displaySettings/displaySettings.js src/scripts/autoBackdrops.js src/scripts/libraryMenu.js
         npm run build:production
       working-directory: desktop-web
     - name: Install Qt 6
