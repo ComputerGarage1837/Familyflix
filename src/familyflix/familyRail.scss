@@ -37,8 +37,17 @@
     }
 
     body.familyRailMode .mainDrawerButton,
-    body.familyRailHome .headerTabs {
+    body.familyRailHome .headerTabs,
+    body.familyLiveGuideMode .headerTabs {
         display: none !important;
+    }
+
+    body.familyLiveGuideMode .liveTvPage.pageWithAbsoluteTabs {
+        padding-top: 4.6em !important;
+    }
+
+    body.familyLiveGuideMode .liveTvPage .absolutePageTabContent {
+        top: 4.6em !important;
     }
 
     body.familyRailHome .homePage.pageWithAbsoluteTabs {

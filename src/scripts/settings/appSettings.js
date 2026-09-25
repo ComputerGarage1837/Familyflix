@@ -1,4 +1,4 @@
-import browser from 'scripts/browser';
+import browser from '../browser';
 import Events from '../../utils/events.ts';
 import { toBoolean } from '../../utils/string.ts';
 
@@ -51,6 +51,20 @@ class AppSettings {
         }
 
         return toBoolean(this.get('enableSystemExternalPlayers'), false);
+    }
+
+    liveBufferMinutes(val) {
+        const key = 'familyflix-live-buffer-minutes';
+        if (val !== undefined) {
+            const minutes = Number(val);
+            if (!Number.isInteger(minutes) || minutes < 1 || minutes > 60) {
+                throw new RangeError('Live TV buffer must be between 1 and 60 minutes');
+            }
+            this.set(key, String(minutes));
+        }
+
+        const saved = Number(this.get(key));
+        return Number.isInteger(saved) && saved >= 1 && saved <= 60 ? saved : 60;
     }
 
     enableAutomaticBitrateDetection(isInNetwork, mediaType, val) {

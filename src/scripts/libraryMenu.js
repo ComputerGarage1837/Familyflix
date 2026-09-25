@@ -434,11 +434,13 @@ function onFamilyRailKeydown(event) {
 function setFamilyRailMode(page) {
     const eligible = (layoutManager.desktop || Boolean(window.NativeShell)) && window.innerWidth >= 672
         && (page.classList.contains('homePage') || page.classList.contains('libraryPage'))
+        && !page.classList.contains('liveTvPage')
         && page.id !== 'videoOsdPage'
         && !page.classList.contains('nowPlayingPage')
         && !page.classList.contains('type-interior');
     document.body.classList.toggle('familyRailMode', eligible);
     document.body.classList.toggle('familyRailHome', eligible && page.classList.contains('homePage'));
+    document.body.classList.toggle('familyLiveGuideMode', page.classList.contains('liveTvPage'));
     if (eligible) expandFamilyRail();
     else collapseFamilyRail();
     mainDrawerButton?.classList.toggle('hide', eligible);

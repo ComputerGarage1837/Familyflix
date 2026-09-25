@@ -470,6 +470,12 @@ function Guide(options) {
         loading.hide();
     }
 
+    function showGuideError(context, message, error) {
+        console.warn(message, error);
+        context.querySelector('.channelList').textContent = message;
+        context.querySelector('.programGrid').replaceChildren();
+    }
+
     function reloadGuide(context, newStartDate, scrollToTimeMs, focusToTimeMs, startTimeOfDayMs, focusProgramOnRender) {
         const requestId = ++loadRequestId;
         const apiClient = ServerConnections.getApiClient(options.serverId);
@@ -609,11 +615,17 @@ function Guide(options) {
                 renderGuide(context, date, visibleChannels, programsResult.Items, renderOptions, guideOptions, apiClient);
 
                 hideLoading();
-            }).catch(function () {
-                if (requestId === loadRequestId) hideLoading();
+            }).catch(function (error) {
+                if (requestId === loadRequestId) {
+                    showGuideError(context, 'TV listings could not load. Try again in a moment.', error);
+                    hideLoading();
+                }
             });
-        }).catch(function () {
-            if (requestId === loadRequestId) hideLoading();
+        }).catch(function (error) {
+            if (requestId === loadRequestId) {
+                showGuideError(context, 'Live TV channels could not load. Try again in a moment.', error);
+                hideLoading();
+            }
         });
     }
 

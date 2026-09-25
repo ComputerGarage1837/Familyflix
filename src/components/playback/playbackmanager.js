@@ -2771,13 +2771,32 @@ export class PlaybackManager {
                         audioStreamIndex: options.audioStreamIndex,
                         subtitleStreamIndex: options.subtitleStreamIndex,
                         startIndex: null,
-                        enableDirectPlay: null,
-                        enableDirectStream: null,
+                        enableDirectPlay: options.forceHls ? false : null,
+                        enableDirectStream: options.forceHls ? false : null,
                         allowVideoStreamCopy: null,
                         allowAudioStreamCopy: null
                     };
 
-                    return getPlaybackMediaSource(player, apiClient, deviceProfile, item, options.mediaSourceId, mediaOptions).then(function (mediaSource) {
+                    return getPlaybackMediaSource(player, apiClient, deviceProfile, item, options.mediaSourceId, mediaOptions).then(async function (mediaSource) {
+                        if (options.forceHls) {
+                            if (!mediaSource.TranscodingUrl || mediaSource.TranscodingSubProtocol !== 'hls') {
+                                if (mediaSource.LiveStreamId) {
+                                    try {
+                                        await apiClient.ajax({
+                                            url: apiClient.getUrl('LiveStreams/Close', { liveStreamId: mediaSource.LiveStreamId }),
+                                            type: 'POST'
+                                        });
+                                    } catch (error) {
+                                        console.warn('Unable to close rejected live preview stream', error);
+                                    }
+                                }
+                                throw new Error('Live preview HLS stream is unavailable');
+                            }
+                            // The preview uses an HTML video element even when full-screen
+                            // playback uses mpv. Never hand it the native direct-play URL.
+                            mediaSource = { ...mediaSource, enableDirectPlay: false,
+                                SupportsDirectPlay: false, SupportsDirectStream: false };
+                        }
                         return createStreamInfo(apiClient, item.MediaType, item, mediaSource, startPosition, player);
                     });
                 });
