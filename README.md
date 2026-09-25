@@ -20,7 +20,8 @@ existing server plugin. Focused home titles use their backdrop or thumbnail;
 otherwise movie/show backdrops rotate every minute. These changes still require
 runtime QA and do not yet complete Android TV feature parity.
 The desktop Deck excludes watched and partially resumed episodes and follows
-recent progress in an older unwatched season using Android's selection rules.
+recent progress in an older unwatched season using Android's selection rules,
+without the vanilla Web date cutoff.
 Desktop color palettes and intro/recap/preview/outro choices now use the same
 per-profile settings record as Android TV, as do clock visibility and backdrop
 choices. Playback problem warnings and reports
