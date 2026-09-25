@@ -1,4 +1,3 @@
-import layoutManager from 'components/layoutManager';
 import { getUserViewsQuery } from 'hooks/useUserViews';
 import globalize from 'lib/globalize';
 import { DEFAULT_SECTIONS, HomeSectionType } from 'types/homeSectionType';
@@ -26,30 +25,37 @@ export function getDefaultSection(index) {
     return DEFAULT_SECTIONS[index];
 }
 
-function getAllSectionsToShow(userSettings, sectionCount) {
+function getAllSectionsToShow(userSettings) {
+    // Keep Jellyfin's mature row implementations while matching the Family Flix
+    // home sequence. Libraries live in the persistent navigation menu instead
+    // of occupying the first home row.
+    const hidden = new Set(String(userSettings.get('familyTvHiddenHomeRowsV1') || '').split('|'));
     const sections = [];
-    for (let i = 0, length = sectionCount; i < length; i++) {
-        let section = userSettings.get('homesection' + i) || getDefaultSection(i);
-        if (section === 'folders') {
-            section = getDefaultSection(0);
-        }
-
-        sections.push(section);
-    }
-
-    // Ensure libraries are visible in TV layout
-    if (
-        layoutManager.tv
-            && !sections.includes(HomeSectionType.SmallLibraryTiles)
-            && !sections.includes(HomeSectionType.LibraryButtons)
-    ) {
-        return [
-            HomeSectionType.SmallLibraryTiles,
-            ...sections
-        ];
-    }
-
+    if (!hidden.has('continue')) sections.push(HomeSectionType.Resume);
+    if (!hidden.has('deck')) sections.push(HomeSectionType.NextUp);
+    sections.push(HomeSectionType.LatestMedia);
     return sections;
+}
+
+function orderedLatestLibraries(userViews, userSettings) {
+    const normalizeId = id => String(id || '').replaceAll('-', '').toLowerCase();
+    const rowOrder = String(userSettings.get('familyTvHomeRowOrderV1') || '')
+        .split('|').filter(row => row.startsWith('latest:'))
+        .map(row => normalizeId(row.slice(7)));
+    const libraryOrder = String(userSettings.get('familyTvLibraryMenuOrderV1') || '')
+        .split(',').map(normalizeId);
+    const preferred = rowOrder.length ? rowOrder : libraryOrder;
+    const positions = new Map(preferred.map((id, index) => [id, index]));
+    const hiddenRows = new Set(String(userSettings.get('familyTvHiddenHomeRowsV1') || '')
+        .split('|').filter(row => row.startsWith('latest:'))
+        .map(row => normalizeId(row.slice(7))));
+
+    return userViews
+        .filter(view => !hiddenRows.has(normalizeId(view.Id)))
+        .map((view, index) => ({ view, index }))
+        .sort((left, right) => (positions.get(normalizeId(left.view.Id)) ?? Infinity)
+            - (positions.get(normalizeId(right.view.Id)) ?? Infinity) || left.index - right.index)
+        .map(({ view }) => view);
 }
 
 export function loadSections(elem, apiClient, user, userSettings) {
@@ -61,10 +67,8 @@ export function loadSections(elem, apiClient, user, userSettings) {
             let html = '';
 
             if (userViews.length) {
-                const userSectionCount = 10;
-                // TV layout can have an extra section to ensure libraries are visible
-                const totalSectionCount = layoutManager.tv ? userSectionCount + 1 : userSectionCount;
-                for (let i = 0; i < totalSectionCount; i++) {
+                const sections = getAllSectionsToShow(userSettings);
+                for (let i = 0; i < sections.length; i++) {
                     html += '<div class="verticalSection section' + i + '"></div>';
                 }
 
@@ -72,7 +76,6 @@ export function loadSections(elem, apiClient, user, userSettings) {
                 elem.classList.add('homeSectionsContainer');
 
                 const promises = [];
-                const sections = getAllSectionsToShow(userSettings, userSectionCount);
                 for (let i = 0; i < sections.length; i++) {
                     promises.push(loadSection(elem, apiClient, user, userSettings, userViews, sections, i));
                 }
@@ -150,7 +153,7 @@ function loadSection(page, apiClient, user, userSettings, userViews, allSections
             loadRecordings(elem, true, apiClient, options);
             break;
         case HomeSectionType.LatestMedia:
-            loadRecentlyAdded(elem, apiClient, user, userViews, options);
+            loadRecentlyAdded(elem, apiClient, user, orderedLatestLibraries(userViews, userSettings), options);
             break;
         case HomeSectionType.LibraryButtons:
             loadLibraryButtons(elem, userViews);
