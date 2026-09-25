@@ -2934,9 +2934,11 @@ Window {
             Text {
                 text: window.detailTitle(familyApi.selectedItem.Id ? familyApi.selectedItem : focusedItem)
                 color: "white"
-                font.pixelSize: 42
+                font.pixelSize: 36
                 font.bold: true
                 width: parent.width
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
                 elide: Text.ElideRight
             }
             Text {
@@ -3150,7 +3152,7 @@ Window {
                     }
                 }
                 NativeAction {
-                    width: 78
+                    width: 104
                     fontSize: 14
                     text: "Go to show"
                     visible: familyApi.selectedItem.Type === "Episode" && !!familyApi.selectedItem.SeriesId

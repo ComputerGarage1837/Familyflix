@@ -3769,6 +3769,8 @@ void FamilyApiClient::reportPlaybackStopped(qlonglong positionMilliseconds)
 void FamilyApiClient::sendPlaybackStopped(qlonglong positionMilliseconds)
 {
   if (m_playingItemId.isEmpty()) return;
+  const QString stoppedItemId = m_playingItemId;
+  const quint64 session = m_sessionRevision;
   const auto party = m_coWatchPlayback;
   if (party && !party->abandoned) {
     party->stopMilliseconds = positionMilliseconds;
@@ -3788,10 +3790,20 @@ void FamilyApiClient::sendPlaybackStopped(qlonglong positionMilliseconds)
   };
   request("POST", QStringLiteral("Sessions/Playing/Stopped"), {},
           QJsonDocument(QJsonObject::fromVariantMap(report)).toJson(QJsonDocument::Compact),
-          [this](const QVariant&, const QString& error) {
+          [this, session, stoppedItemId](const QVariant&, const QString& error) {
+    if (session != m_sessionRevision) return;
     if (!error.isEmpty()) emit errorOccurred(QStringLiteral("Watched status could not sync with Jellyfin."));
     refreshHome();
     refreshWatchlist();
+    if (m_selectedItem.value(QStringLiteral("Id")).toString() != stoppedItemId) return;
+    const quint64 itemRevision = m_itemRevision;
+    request("GET", QStringLiteral("Users/%1/Items/%2").arg(m_userId, stoppedItemId), {}, {},
+            [this, session, itemRevision, stoppedItemId](const QVariant& data, const QString& itemError) {
+      if (session != m_sessionRevision || itemRevision != m_itemRevision || !itemError.isEmpty()
+          || m_selectedItem.value(QStringLiteral("Id")).toString() != stoppedItemId) return;
+      m_selectedItem = data.toMap();
+      emit selectedItemChanged();
+    });
   });
   m_playingItemId.clear(); m_playSessionId.clear(); m_mediaSourceId.clear();
   m_coWatchPlayback.reset();
