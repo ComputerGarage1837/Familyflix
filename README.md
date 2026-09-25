@@ -1,10 +1,11 @@
 # Family Flix for Windows
 
-Family Flix is a family-specific Windows build based on Jellyfin Desktop. Its
-Windows interface talks directly to the Jellyfin API at
-`https://myfamilyflix.duckdns.org/`; it does not display the browser client.
-The native player comes from Jellyfin Desktop and uses libmpv. The upstream project
-and its GPL-2.0 license remain credited below.
+Family Flix is a family-specific Windows build based on Jellyfin Desktop. It
+packages a dedicated Jellyfin Web 10.11.5 client from the
+`familyflix-desktop-web` branch and connects to
+`https://myfamilyflix.duckdns.org/`. It does not load the server's customized
+web interface. Jellyfin Desktop supplies the native libmpv video player. The
+upstream projects and their GPL licenses remain credited below.
 
 This is the **only active Family Flix for Windows project**. The older
 `../familyflix-windows` WebView2 launcher is retired and must not be shipped.
@@ -17,12 +18,12 @@ guide, playback controls and skip prompts, themes, settings, buffers, update
 prompts, and remote/keyboard navigation. It must also preserve user settings
 between updates. A successful compile or a website wrapper is not sufficient.
 
-The Qt/libmpv desktop base supplies native Windows playback. The entry point
-loads `nativeview.qml`, a Qt Quick interface that calls Jellyfin APIs directly.
-The inherited Qt WebEngine files are not the Family Flix interface. Windows
-screens must follow the Android TV app's rules directly; do not substitute the
-Family Flix browser implementation. Do not publish this port as complete until
-the native screens and behavior are implemented and tested.
+The Qt/libmpv desktop base supplies native Windows playback. Windows loads
+`webview.qml` with the separately packaged desktop client. The previous
+`nativeview.qml` experiment remains in the tree temporarily but is not the
+Windows entry point. Port Android TV features onto the dedicated desktop client
+without copying the server browser's customizations wholesale. Do not publish
+this port as complete until its screens and behavior are implemented and tested.
 
 # Jellyfin Desktop
 

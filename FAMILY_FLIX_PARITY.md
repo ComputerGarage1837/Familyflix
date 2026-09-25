@@ -1,5 +1,11 @@
 # Family Flix Windows parity tracker
 
+The Windows entry point now uses a dedicated, packaged vanilla Jellyfin Web
+10.11.5 client plus Jellyfin Desktop's native player. The table below describes
+the retired Qt-native experiment, not verified behavior in the new desktop
+client. Each Family Flix feature must be ported and checked again. Standard
+Jellyfin functions are retained by the vanilla baseline.
+
 This is the release gate for the Windows client. A successful build alone does
 not mean it can replace the Android TV app. Each row needs a Windows interaction
 check against the same Jellyfin server and user profiles before release.
