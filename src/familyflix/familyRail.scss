@@ -5,23 +5,39 @@
         bottom: 0 !important;
         left: 0 !important;
         right: auto !important;
-        width: 0 !important;
-        min-width: 0 !important;
+        width: var(--family-rail-width, 16rem) !important;
+        min-width: var(--family-rail-width, 16rem) !important;
         transform: none !important;
         overflow: hidden;
-        visibility: hidden;
-        pointer-events: none;
+        visibility: visible;
+        pointer-events: auto;
         z-index: 1001 !important;
         border-right: 1px solid var(--ff-line, #2b424b);
         background: linear-gradient(165deg, var(--ff-surface, #102028), var(--ff-screen, #071116)) !important;
-        transition: width 160ms ease, visibility 160ms ease;
+        box-shadow: none !important;
     }
 
-    body.familyRailMode.familyRailExpanded .mainDrawer {
-        width: var(--family-rail-width, 16rem) !important;
-        visibility: visible;
-        pointer-events: auto;
-        box-shadow: 0 0 2.2rem #0009;
+    body.familyRailMode .skinHeader {
+        left: var(--family-rail-width, 16rem);
+    }
+
+    body.familyRailMode .skinBody {
+        box-sizing: border-box;
+        margin-left: var(--family-rail-width, 16rem);
+        width: calc(100% - var(--family-rail-width, 16rem));
+    }
+
+    body.familyRailMode .mainDrawerButton,
+    body.familyRailHome .headerTabs {
+        display: none !important;
+    }
+
+    body.familyRailHome .homePage.pageWithAbsoluteTabs {
+        padding-top: 4.6em !important;
+    }
+
+    body.familyRailHome .homePage .absolutePageTabContent {
+        top: 4.6em !important;
     }
 
     body.familyRailMode .mainDrawer-scrollContainer {

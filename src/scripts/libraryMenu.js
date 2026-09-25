@@ -325,8 +325,7 @@ function getItemHref(item, context) {
 
 function toggleMainDrawer() {
     if (document.body.classList.contains('familyRailMode')) {
-        if (document.body.classList.contains('familyRailExpanded')) closeMainDrawer();
-        else openMainDrawer();
+        expandFamilyRail(true);
         return;
     }
     if (navDrawerInstance.isVisible) {
@@ -352,7 +351,6 @@ function onMainDrawerOpened() {
 
 function closeMainDrawer() {
     if (document.body.classList.contains('familyRailMode')) {
-        collapseFamilyRail();
         return;
     }
     navDrawerInstance.close();
@@ -385,7 +383,6 @@ function expandFamilyRail(focusMenu = false) {
 }
 
 function focusContentFromRail() {
-    collapseFamilyRail();
     if (familyRailReturnFocus?.isConnected) {
         familyRailReturnFocus.focus();
     } else {
@@ -437,36 +434,24 @@ function onFamilyRailKeydown(event) {
 function setFamilyRailMode(page) {
     const eligible = (layoutManager.desktop || Boolean(window.NativeShell)) && window.innerWidth >= 672
         && (page.classList.contains('homePage') || page.classList.contains('libraryPage'))
-        && !page.classList.contains('itemDetailPage')
+        && page.id !== 'videoOsdPage'
+        && !page.classList.contains('nowPlayingPage')
         && !page.classList.contains('type-interior');
     document.body.classList.toggle('familyRailMode', eligible);
-    if (!eligible) collapseFamilyRail();
+    document.body.classList.toggle('familyRailHome', eligible && page.classList.contains('homePage'));
+    if (eligible) expandFamilyRail();
+    else collapseFamilyRail();
+    mainDrawerButton?.classList.toggle('hide', eligible);
 }
 
 document.addEventListener('keydown', onFamilyRailKeydown, true);
-document.addEventListener('mousemove', event => {
-    if (!document.body.classList.contains('familyRailMode')) return;
-    if (event.clientX <= 12) expandFamilyRail();
-    else if (document.body.classList.contains('familyRailExpanded')
-        && event.clientX > (navDrawerElement?.getBoundingClientRect().right || 0) + 12
-        && !navDrawerElement?.contains(document.activeElement)) collapseFamilyRail();
-});
 document.addEventListener('focusin', event => {
     if (!document.body.classList.contains('familyRailMode')) return;
     if (navDrawerElement?.contains(event.target)) {
-        expandFamilyRail();
         const option = event.target.closest('.navMenuOption');
         if (option?.dataset.itemid) familyRailLastKey = option.dataset.itemid;
         option?.scrollIntoView({ block: 'nearest' });
-    } else {
-        collapseFamilyRail();
     }
-});
-document.addEventListener('focusout', event => {
-    if (!navDrawerElement?.contains(event.target)) return;
-    window.setTimeout(() => {
-        if (!navDrawerElement?.contains(document.activeElement)) collapseFamilyRail();
-    }, 0);
 });
 document.addEventListener('familyflix-kids-updated', () => {
     currentDrawerType = null;
@@ -493,6 +478,7 @@ function refreshLibraryInfoInDrawer(user) {
     html += '<div class="familyRailBrand"><span class="familyRailBrandMark" aria-hidden="true">F</span><span>Family Flix</span></div>';
     html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="home" href="#/home"><span class="material-icons navMenuOptionIcon home" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Home')}</span></a>`;
     html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="search" href="#/search"><span class="material-icons navMenuOptionIcon search" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Search')}</span></a>`;
+    html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="favorites" href="#/home?tab=1"><span class="material-icons navMenuOptionIcon favorite" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('Favorites')}</span></a>`;
 
     html += '<div class="libraryMenuOptions"></div>';
     html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="alllibraries" href="#/home?tab=2"><span class="material-icons navMenuOptionIcon apps" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('AllLibraries')}</span></a>`;
@@ -745,6 +731,8 @@ function updateLibraryNavLinks(page) {
         const itemId = lnkMediaFolder.getAttribute('data-itemid');
 
         if (itemId === 'home' && /^#\/home(?:\?tab=0(?:&|$)|$)/.test(hash)) {
+            lnkMediaFolder.classList.add('navMenuOption-selected');
+        } else if (itemId === 'favorites' && /^#\/home\?tab=1(?:&|$)/.test(hash)) {
             lnkMediaFolder.classList.add('navMenuOption-selected');
         } else if (itemId === 'search' && /^#\/search(?:\?|$)/.test(hash)) {
             lnkMediaFolder.classList.add('navMenuOption-selected');
