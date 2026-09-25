@@ -18,7 +18,9 @@
     }
 
     body.familyRailMode .skinHeader {
+        box-sizing: border-box;
         left: var(--family-rail-width, 16rem);
+        width: calc(100% - var(--family-rail-width, 16rem));
     }
 
     body.familyRailMode .skinBody {
