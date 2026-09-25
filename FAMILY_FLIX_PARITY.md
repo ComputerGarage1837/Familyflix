@@ -18,7 +18,8 @@ Family Night picker sourced from the current and selected participants'
 Watchlists. It also has an Android-style, keyboard-operable library rail with
 ordered/hidden libraries, Watchlist, Live TV, Family Night, Playlists, and
 Settings. The rail is enabled for this Windows shell even when its inherited
-Jellyfin web setting reports TV layout. The client also loads the server's Watchlist browser UI in the
+Jellyfin web setting reports TV layout. The top bar has a direct Settings gear
+outside Kids Mode. The client also loads the server's Watchlist browser UI in the
 packaged desktop client. Automated builds, static checks, and picker/Deck/
 Watchlist-loader tests pass. These integrations have **not** yet passed an
 on-screen Windows playback test: the Windows screen-control helper could not
