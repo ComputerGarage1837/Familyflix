@@ -6,6 +6,7 @@ import layoutManager from 'components/layoutManager';
 import { appRouter } from 'components/router/appRouter';
 import globalize from 'lib/globalize';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
+import { getFamilyDeck } from 'familyflix/deck';
 import type { UserSettings } from 'scripts/settings/userSettings';
 import { getBackdropShape } from 'utils/card';
 
@@ -20,8 +21,8 @@ function getNextUpFetchFn(
         const apiClient = ServerConnections.getApiClient(serverId);
         const oldestDateForNextUp = new Date();
         oldestDateForNextUp.setDate(oldestDateForNextUp.getDate() - userSettings.maxDaysForNextUp());
-        return apiClient.getNextUpEpisodes({
-            Limit: enableOverflow ? 24 : 15,
+        const displayLimit = enableOverflow ? 24 : 15;
+        return getFamilyDeck(apiClient, {
             Fields: 'PrimaryImageAspectRatio,DateCreated,Path,MediaSourceCount',
             UserId: apiClient.getCurrentUserId(),
             ImageTypeLimit: 1,
@@ -29,10 +30,8 @@ function getNextUpFetchFn(
             EnableTotalRecordCount: false,
             DisableFirstEpisode: false,
             NextUpDateCutoff: oldestDateForNextUp.toISOString(),
-            EnableResumable: false,
-            // Family Flix Deck never resurrects episodes already watched.
-            EnableRewatching: false
-        });
+            EnableResumable: false
+        }, displayLimit);
     };
 }
 
