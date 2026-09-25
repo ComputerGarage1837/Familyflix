@@ -205,7 +205,8 @@ function getImageUrls(items, imageOptions) {
 }
 
 function enabled() {
-    return userSettings.enableBackdrops();
+    const shared = document.documentElement.dataset.familyBackdrops;
+    return shared == null ? userSettings.enableBackdrops() : shared === 'true';
 }
 
 let rotationInterval;

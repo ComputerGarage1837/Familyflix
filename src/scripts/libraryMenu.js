@@ -204,8 +204,9 @@ function updateHeaderUserButton(src) {
 }
 
 function updateClock() {
-    currentTimeText.classList.remove('hide');
     const refresh = () => {
+        const behavior = document.documentElement.dataset.familyClock || 'ALWAYS';
+        currentTimeText.classList.toggle('hide', behavior === 'NEVER');
         const now = new Date();
         const date = new Intl.DateTimeFormat(undefined, {
             weekday: 'short', month: 'short', day: 'numeric'
@@ -218,6 +219,7 @@ function updateClock() {
     refresh();
     window.setInterval(refresh, 30_000);
     window.addEventListener('hashchange', refresh);
+    document.addEventListener('familyflix-settings-updated', refresh);
 }
 
 function showSearch() {

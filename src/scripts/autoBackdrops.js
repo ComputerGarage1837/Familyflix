@@ -10,7 +10,8 @@ import { ServerConnections } from 'lib/jellyfin-apiclient';
 const cache = {};
 
 function enabled() {
-    return userSettings.enableBackdrops();
+    const shared = document.documentElement.dataset.familyBackdrops;
+    return shared == null ? userSettings.enableBackdrops() : shared === 'true';
 }
 
 function getBackdropItemIds(apiClient, userId, types, parentId) {

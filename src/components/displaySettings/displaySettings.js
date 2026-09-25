@@ -19,7 +19,7 @@ import '../../elements/emby-button/emby-button';
 import '../../elements/emby-textarea/emby-textarea';
 import toast from '../toast/toast';
 import template from './displaySettings.template.html';
-import { familyThemes, readFamilyTheme, saveFamilyTheme } from 'familyflix/theme';
+import { familyThemes, loadFamilyTheme, readFamilyProfileValues, saveFamilyProfileValues } from 'familyflix/theme';
 
 function fillThemes(select, selectedTheme) {
     skinManager.getThemes().then(themes => {
@@ -187,9 +187,19 @@ function save(instance, context, userId, userSettings, apiClient, enableSaveConf
 
     apiClient.getUser(userId).then(user => {
         saveUser(context, user, userSettings, apiClient).then(async () => {
-            if (instance.familyThemeAtLoad) {
-                instance.familyThemeAtLoad = await saveFamilyTheme(apiClient, userId,
-                    context.querySelector('#selectFamilyTheme').value, instance.familyThemeAtLoad);
+            if (instance.familyValuesAtLoad) {
+                const values = instance.familyValuesAtLoad;
+                const changes = {
+                    app_theme: context.querySelector('#selectFamilyTheme').value,
+                    pref_clock_behavior: context.querySelector('#selectFamilyClock').value,
+                    pref_show_backdrop: String(context.querySelector('#chkBackdrops').checked)
+                };
+                instance.familyValuesAtLoad = await saveFamilyProfileValues(apiClient, userId, changes, {
+                    app_theme: values.app_theme || 'DARK',
+                    pref_clock_behavior: values.pref_clock_behavior || 'ALWAYS',
+                    pref_show_backdrop: values.pref_show_backdrop || 'true'
+                });
+                await loadFamilyTheme(apiClient, userId);
             }
             loading.hide();
             if (enableSaveConfirmation) {
@@ -254,12 +264,15 @@ class DisplaySettings {
                 const familyThemeSelect = context.querySelector('#selectFamilyTheme');
                 familyThemeSelect.innerHTML = Object.entries(familyThemes)
                     .map(([value, [label]]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
-                return readFamilyTheme(apiClient, userId).then(theme => {
-                    self.familyThemeAtLoad = theme;
-                    familyThemeSelect.value = theme;
+                return readFamilyProfileValues(apiClient, userId).then(values => {
+                    self.familyValuesAtLoad = values;
+                    familyThemeSelect.value = familyThemes[values.app_theme] ? values.app_theme : 'DARK';
+                    context.querySelector('#selectFamilyClock').value = values.pref_clock_behavior || 'ALWAYS';
+                    context.querySelector('#chkBackdrops').checked = values.pref_show_backdrop !== 'false';
                 }).catch(error => {
-                    console.warn('Family Flix theme setting could not be loaded:', error);
+                    console.warn('Family Flix profile settings could not be loaded:', error);
                     familyThemeSelect.disabled = true;
+                    context.querySelector('#selectFamilyClock').disabled = true;
                 }).finally(() => {
                     if (autoFocus) focusManager.autoFocus(context);
                 });

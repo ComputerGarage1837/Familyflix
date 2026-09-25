@@ -59,8 +59,14 @@ export function applyFamilyTheme(name) {
 }
 
 export async function loadFamilyTheme(apiClient, userId) {
-    const selected = await readFamilyTheme(apiClient, userId);
-    if (apiClient.getCurrentUserId() === userId) applyFamilyTheme(selected);
+    const values = await readFamilyProfileValues(apiClient, userId);
+    const selected = familyThemes[values.app_theme] ? values.app_theme : 'DARK';
+    if (apiClient.getCurrentUserId() === userId) {
+        applyFamilyTheme(selected);
+        document.documentElement.dataset.familyClock = values.pref_clock_behavior || 'ALWAYS';
+        document.documentElement.dataset.familyBackdrops = values.pref_show_backdrop || 'true';
+        document.dispatchEvent(new Event('familyflix-settings-updated'));
+    }
     return selected;
 }
 
@@ -76,8 +82,10 @@ export async function saveFamilyProfileValues(apiClient, userId, changes, expect
     const preferences = await apiClient.getDisplayPreferences(PREFERENCES_ID, userId, PREFERENCES_CLIENT);
     const document = parseDocument(preferences);
     const updated = { ...document.values };
+    const defaults = { app_theme: 'DARK', pref_clock_behavior: 'ALWAYS', pref_show_backdrop: 'true' };
     for (const [key, value] of Object.entries(changes)) {
-        if (expected[key] !== undefined && expected[key] !== (document.values[key] ?? (key === 'app_theme' ? 'DARK' : ''))) {
+        if (Object.prototype.hasOwnProperty.call(expected, key)
+            && expected[key] !== (document.values[key] ?? defaults[key] ?? '')) {
             throw new Error('A Family Flix setting changed on another device. Reload settings first.');
         }
         updated[key] = value;
@@ -95,6 +103,9 @@ export async function saveFamilyProfileValues(apiClient, userId, changes, expect
 
 export function clearFamilyTheme() {
     delete document.documentElement.dataset.familyTheme;
+    delete document.documentElement.dataset.familyClock;
+    delete document.documentElement.dataset.familyBackdrops;
+    document.dispatchEvent(new Event('familyflix-settings-updated'));
     for (const name of ['screen', 'surface', 'accent', 'secondary', 'text', 'on-accent']) {
         document.documentElement.style.removeProperty(`--ff-${name}`);
     }

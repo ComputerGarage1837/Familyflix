@@ -510,10 +510,12 @@ function setTrailerButtonVisibility(page, item) {
 function renderBackdrop(page, item) {
     if (!layoutManager.mobile && dom.getWindowSize().innerWidth >= 1000) {
         const isBannerEnabled = !layoutManager.tv && userSettings.detailsBanner();
+        const sharedBackdrops = document.documentElement.dataset.familyBackdrops;
+        const backdropsEnabled = sharedBackdrops == null ? userSettings.enableBackdrops() : sharedBackdrops === 'true';
         // If backdrops are disabled, but the header banner is enabled, add a class to the page to disable the transparency
-        page.classList.toggle('noBackdropTransparency', isBannerEnabled && !userSettings.enableBackdrops());
+        page.classList.toggle('noBackdropTransparency', isBannerEnabled && !backdropsEnabled);
 
-        if (isBannerEnabled || userSettings.enableBackdrops()) {
+        if (isBannerEnabled || backdropsEnabled) {
             const apiClient = ServerConnections.getApiClient(item.ServerId);
             setBackdrop(getItemBackdropImageUrl(apiClient, item, { maxWidth: dom.getScreenWidth() }));
         } else {

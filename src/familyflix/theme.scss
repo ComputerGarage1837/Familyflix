@@ -39,3 +39,8 @@ html[data-family-theme] .button-link {
 html[data-family-theme] :focus-visible {
     outline-color: var(--ff-secondary);
 }
+
+html[data-family-clock='IN_VIDEO'] .skinHeader:not(.osdHeader) .currentTimeText,
+html[data-family-clock='IN_MENUS'] .skinHeader.osdHeader .currentTimeText {
+    display: none;
+}
