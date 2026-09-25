@@ -34,7 +34,7 @@ export async function openPreview(apiClient, channelId, profile) {
         // negotiated. Explicitly request its standard progressive endpoint.
         return {
             url: apiClient.getUrl('Videos/' + channelId + '/stream.webm', {
-                api_key: apiClient.accessToken(), DeviceId: apiClient.deviceId(),
+                ApiKey: apiClient.accessToken(), DeviceId: apiClient.deviceId(),
                 MediaSourceId: source.Id, LiveStreamId: source.LiveStreamId,
                 PlaySessionId: result.PlaySessionId, Static: false,
                 VideoCodec: 'vp8', AudioCodec: 'opus', MaxWidth: 640, MaxHeight: 360,
