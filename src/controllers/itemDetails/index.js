@@ -7,7 +7,7 @@ import markdownIt from 'markdown-it';
 import isEqual from 'lodash-es/isEqual';
 
 import { appHost } from 'components/apphost';
-import { clearBackdrop, setBackdrops } from 'components/backdrop/backdrop';
+import { clearBackdrop, setBackdrop } from 'components/backdrop/backdrop';
 import cardBuilder from 'components/cardbuilder/cardBuilder';
 import { buildCardImage } from 'components/cardbuilder/cardImage';
 import confirm from 'components/confirm/confirm';
@@ -513,7 +513,12 @@ function renderBackdrop(page, item) {
         // If backdrops are disabled, but the header banner is enabled, add a class to the page to disable the transparency
         page.classList.toggle('noBackdropTransparency', isBannerEnabled && !userSettings.enableBackdrops());
 
-        setBackdrops([item], null, isBannerEnabled);
+        if (isBannerEnabled || userSettings.enableBackdrops()) {
+            const apiClient = ServerConnections.getApiClient(item.ServerId);
+            setBackdrop(getItemBackdropImageUrl(apiClient, item, { maxWidth: dom.getScreenWidth() }));
+        } else {
+            clearBackdrop();
+        }
     } else {
         clearBackdrop();
     }

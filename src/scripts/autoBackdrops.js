@@ -122,6 +122,10 @@ document.addEventListener('focusin', event => {
             setBackdrop(apiClient.getScaledImageUrl(item.Id, {
                 type: 'Thumb', tag: item.ImageTags.Thumb, maxWidth: 1920
             }));
+        } else if (item.ParentThumbItemId && item.ParentThumbImageTag) {
+            setBackdrop(apiClient.getScaledImageUrl(item.ParentThumbItemId, {
+                type: 'Thumb', tag: item.ParentThumbImageTag, maxWidth: 1920
+            }));
         } else {
             showBackdrop('movie,series', undefined, request);
         }
