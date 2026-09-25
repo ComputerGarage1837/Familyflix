@@ -7,6 +7,10 @@ packages a dedicated Jellyfin Web 10.11.5 client from the
 web interface. Jellyfin Desktop supplies the native libmpv video player. The
 upstream projects and their GPL licenses remain credited below.
 
+The dedicated desktop client loads the existing Family Flix Watchlist plugin's
+JavaScript and CSS from the server, so personal and household Watchlists use
+the same server data as Android. This integration still requires runtime QA.
+
 This is the **only active Family Flix for Windows project**. The older
 `../familyflix-windows` WebView2 launcher is retired and must not be shipped.
 
