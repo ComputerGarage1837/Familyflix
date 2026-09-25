@@ -19,6 +19,7 @@ import '../../elements/emby-button/emby-button';
 import '../../elements/emby-textarea/emby-textarea';
 import toast from '../toast/toast';
 import template from './displaySettings.template.html';
+import { familyThemes, readFamilyTheme, saveFamilyTheme } from 'familyflix/theme';
 
 function fillThemes(select, selectedTheme) {
     skinManager.getThemes().then(themes => {
@@ -185,13 +186,19 @@ function save(instance, context, userId, userSettings, apiClient, enableSaveConf
     loading.show();
 
     apiClient.getUser(userId).then(user => {
-        saveUser(context, user, userSettings, apiClient).then(() => {
+        saveUser(context, user, userSettings, apiClient).then(async () => {
+            if (instance.familyThemeAtLoad) {
+                instance.familyThemeAtLoad = await saveFamilyTheme(apiClient, userId,
+                    context.querySelector('#selectFamilyTheme').value, instance.familyThemeAtLoad);
+            }
             loading.hide();
             if (enableSaveConfirmation) {
                 toast(globalize.translate('SettingsSaved'));
             }
             Events.trigger(instance, 'saved');
-        }, () => {
+        }).catch(error => {
+            console.error('Family Flix settings could not be saved:', error);
+            toast(error.message || 'Settings could not be saved.');
             loading.hide();
         });
     });
@@ -244,9 +251,18 @@ class DisplaySettings {
             return userSettings.setUserInfo(userId, apiClient).then(() => {
                 self.dataLoaded = true;
                 loadForm(context, user, userSettings);
-                if (autoFocus) {
-                    focusManager.autoFocus(context);
-                }
+                const familyThemeSelect = context.querySelector('#selectFamilyTheme');
+                familyThemeSelect.innerHTML = Object.entries(familyThemes)
+                    .map(([value, [label]]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
+                return readFamilyTheme(apiClient, userId).then(theme => {
+                    self.familyThemeAtLoad = theme;
+                    familyThemeSelect.value = theme;
+                }).catch(error => {
+                    console.warn('Family Flix theme setting could not be loaded:', error);
+                    familyThemeSelect.disabled = true;
+                }).finally(() => {
+                    if (autoFocus) focusManager.autoFocus(context);
+                });
             });
         });
     }

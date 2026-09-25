@@ -9,6 +9,7 @@ import { setUserInfo } from 'scripts/settings/userSettings';
 import Dashboard from 'utils/dashboard';
 import Events from 'utils/events.ts';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
+import { clearFamilyTheme, loadFamilyTheme } from 'familyflix/theme';
 
 import ConnectionManager from './connectionManager';
 
@@ -40,6 +41,7 @@ class ServerConnections extends ConnectionManager {
 
         Events.on(this, 'localusersignedout', (_e, logoutInfo) => {
             setUserInfo(null, null);
+            clearFamilyTheme();
             // Ensure the updated credentials are persisted to storage
             credentialProvider.credentials(credentialProvider.credentials());
 
@@ -138,6 +140,9 @@ class ServerConnections extends ConnectionManager {
         const apiClient = this.getApiClient(user.ServerId);
         this.setLocalApiClient(apiClient);
         return setUserInfo(user.Id, apiClient).then(() => {
+            loadFamilyTheme(apiClient, user.Id).catch(error => {
+                console.warn('Family Flix theme could not be loaded:', error);
+            });
             if (window.NativeShell && typeof window.NativeShell.onLocalUserSignedIn === 'function') {
                 return window.NativeShell.onLocalUserSignedIn(user, apiClient.accessToken());
             }

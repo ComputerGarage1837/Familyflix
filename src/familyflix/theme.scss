@@ -1,0 +1,41 @@
+html[data-family-theme] {
+    color: var(--ff-text);
+    background-color: var(--ff-screen);
+}
+
+html[data-family-theme] .backgroundContainer,
+html[data-family-theme] .dialog,
+html[data-family-theme] .nowPlayingPlaylist,
+html[data-family-theme] .nowPlayingContextMenu {
+    background-color: var(--ff-screen);
+    color: var(--ff-text);
+}
+
+html[data-family-theme] .skinHeader-withBackground,
+html[data-family-theme] .mainDrawer,
+html[data-family-theme] .paperList,
+html[data-family-theme] .visualCardBox,
+html[data-family-theme] .formDialogHeader,
+html[data-family-theme] .formDialogFooter {
+    background-color: var(--ff-surface);
+    color: var(--ff-text);
+}
+
+html[data-family-theme] .button-submit,
+html[data-family-theme] .navMenuOption-selected,
+html[data-family-theme] .raised:focus-visible,
+html[data-family-theme] .paper-icon-button-light:focus-visible {
+    background-color: var(--ff-accent);
+    color: var(--ff-on-accent);
+}
+
+html[data-family-theme] .inputLabelFocused,
+html[data-family-theme] .selectLabelFocused,
+html[data-family-theme] .sectionTitleTextButton:hover,
+html[data-family-theme] .button-link {
+    color: var(--ff-accent);
+}
+
+html[data-family-theme] :focus-visible {
+    outline-color: var(--ff-secondary);
+}
