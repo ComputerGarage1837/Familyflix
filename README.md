@@ -30,6 +30,8 @@ updates at startup. Detail backgrounds prefer backdrops and wide thumbnails,
 and the Windows guide uses a two-hour timeline on large screens. All of these
 additions remain under runtime QA; no finished
 Windows release should be published from this branch yet.
+Both classic and newer Jellyfin desktop screens show the Family Flix clock
+according to the shared Android profile setting.
 
 This is the **only active Family Flix for Windows project**. The older
 `../familyflix-windows` WebView2 launcher is retired and must not be shipped.
