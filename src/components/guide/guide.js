@@ -119,6 +119,7 @@ function Guide(options) {
     let previewHls;
     let previewSessionId;
     let previewLiveStreamId;
+    let previewUsesHls = false;
     let previewStarted = false;
     let previewBufferRegistered = false;
     let previewVideo = null;
@@ -188,11 +189,12 @@ function Guide(options) {
 
     function stopPreviewStream(sessionId, liveStreamId) {
         const apiClient = ServerConnections.getApiClient(options.serverId);
+        const closing = [];
         // A normal ajax request is cancelled when the browser tab closes. Keep
         // the close request alive across pagehide so abandoned previews do not
         // consume all of an IPTV provider's limited stream slots.
         if (liveStreamId) {
-            fetch(apiClient.getUrl('LiveStreams/Close', { liveStreamId }), {
+            closing.push(fetch(apiClient.getUrl('LiveStreams/Close', { liveStreamId }), {
                 method: 'POST',
                 headers: { 'X-Emby-Token': apiClient.accessToken() },
                 keepalive: true
@@ -200,13 +202,14 @@ function Guide(options) {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
             }).catch(function () {
                 console.warn('Unable to close the previous live preview stream');
-            });
+            }));
         }
         if (sessionId) {
-            apiClient.stopActiveEncodings(sessionId).catch(function () {
+            closing.push(apiClient.stopActiveEncodings(sessionId).catch(function () {
                 console.warn('Unable to stop the previous live preview encoding');
-            });
+            }));
         }
+        return Promise.allSettled(closing);
     }
 
     function onPageHide() {
@@ -250,8 +253,9 @@ function Guide(options) {
             previewVideo.muted = true;
             previewVideo.controls = false;
         }
-        stopPreviewStream(closingSessionId, closingLiveStreamId);
+        const closing = stopPreviewStream(closingSessionId, closingLiveStreamId);
         updatePreviewControls();
+        return closing;
     }
 
     function showPreviewMessage(message) {
@@ -272,7 +276,7 @@ function Guide(options) {
             previewVideo.classList.add('is-playing');
             previewEmpty.classList.add('hide');
             updatePreviewControls();
-            if (previewSessionId && !previewBufferRegistered) {
+            if (previewUsesHls && previewSessionId && !previewBufferRegistered) {
                 const apiClient = ServerConnections.getApiClient(options.serverId);
                 const registeringSessionId = previewSessionId;
                 fetch(apiClient.getUrl('FamilyFlix/Buffer/Live/Register'), {
@@ -303,14 +307,13 @@ function Guide(options) {
 
     function openFullscreen(channelId) {
         const playInMainPlayer = function () {
-            releasePreview();
             // Fetch full playback metadata rather than using the lightweight guide DTO.
-            playbackManager.play({ ids: [channelId], serverId: options.serverId }).catch(function () {
+            releasePreview().then(() => playbackManager.play({ ids: [channelId], serverId: options.serverId })).catch(function () {
                 showPreviewMessage('Unable to play this channel. Please try another channel.');
                 console.warn('Family Flix Live TV full-screen playback failed', channelId);
             });
         };
-        if (previewVideo.readyState >= 2 && previewContainer.requestFullscreen) {
+        if (!window.NativeShell && previewVideo.readyState >= 2 && previewContainer.requestFullscreen) {
             previewVideo.muted = false;
             updatePreviewControls();
             previewContainer.requestFullscreen().catch(function () {
@@ -327,14 +330,15 @@ function Guide(options) {
             openFullscreen(channelId);
             return;
         }
-        releasePreview();
+        const previousClosed = releasePreview();
         previewChannelId = channelId;
         const channel = visibleChannelsById.get(channelId);
         previewLabel.textContent = channel?.Name || 'Selected channel';
         showPreviewMessage('Loading preview…');
         const requestId = previewRequestId;
         const apiClient = ServerConnections.getApiClient(options.serverId);
-        Promise.resolve().then(function () {
+        previousClosed.then(function () {
+            if (requestId !== previewRequestId) return null;
             const mediaSource = window.MediaSource || window.ManagedMediaSource;
             const profile = previewProfile(type => Boolean(mediaSource?.isTypeSupported(type)));
             return openPreview(apiClient, channelId, profile);
@@ -347,6 +351,8 @@ function Guide(options) {
                 if (!stream?.url) throw new Error('No live preview stream URL');
                 previewSessionId = stream.playSessionId;
                 previewLiveStreamId = stream.liveStreamId;
+                previewUsesHls = stream.mimeType === 'application/x-mpegURL';
+                console.info('Family Flix live preview format', stream.mimeType);
                 if (stream.mimeType === 'application/x-mpegURL' || /\.m3u8(?:\?|$)/i.test(stream.url)) {
                     return import('hls.js').then(function ({ default: Hls }) {
                         if (requestId !== previewRequestId) return;

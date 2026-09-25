@@ -8,13 +8,13 @@ describe('Live TV preview negotiation', () => {
         expect(profile.TranscodingProfiles[0]).toMatchObject({ VideoCodec: 'h264', AudioCodec: 'aac', MaxAudioChannels: '2' });
     });
     it('supports the open-codec Qt build without pretending it decodes H264', () => {
-        expect(previewProfile(type => /vp09|opus/.test(type)).TranscodingProfiles[0])
-            .toMatchObject({ Container: 'mp4', VideoCodec: 'vp9', AudioCodec: 'opus' });
+        expect(previewProfile(type => /webm/.test(type)).TranscodingProfiles[0])
+            .toMatchObject({ Container: 'webm', Protocol: 'http', VideoCodec: 'vp8', AudioCodec: 'opus' });
         expect(() => previewProfile(() => false)).toThrow();
     });
     const client = result => ({
         getUrl: (path, query) => path + (query ? '?liveStreamId=' + query.liveStreamId : ''),
-        getCurrentUserId: () => 'user', ajax: vi.fn().mockResolvedValue(result)
+        getCurrentUserId: () => 'user', accessToken: () => 'test-token', deviceId: () => 'test-device', ajax: vi.fn().mockResolvedValue(result)
     });
     it('opens an authenticated server-proxied HLS stream and retains its close identifiers', async () => {
         const api = client({ PlaySessionId: 'session', MediaSources: [{ TranscodingUrl: 'Videos/channel/master.m3u8', TranscodingSubProtocol: 'hls', LiveStreamId: 'live' }] });
@@ -26,6 +26,13 @@ describe('Live TV preview negotiation', () => {
         const api = client({ MediaSources: [{ LiveStreamId: 'rejected' }] });
         await expect(openPreview(api, 'channel', previewProfile(() => true))).rejects.toThrow();
         expect(api.ajax.mock.calls[1][0]).toMatchObject({ url: 'LiveStreams/Close?liveStreamId=rejected', type: 'POST' });
+    });
+    it('uses the server WebM endpoint in Qt, not a provider URL or an unsupported HLS codec', async () => {
+        const api = client({ PlaySessionId: 'session', MediaSources: [{ Id: 'source', SupportsTranscoding: true, LiveStreamId: 'live' }] });
+        api.getUrl = vi.fn((path) => path);
+        const stream = await openPreview(api, 'channel', previewProfile(type => /webm/.test(type)));
+        expect(stream).toMatchObject({ url: 'Videos/channel/stream.webm', mimeType: 'video/webm', liveStreamId: 'live' });
+        expect(api.getUrl.mock.calls[1][1]).toMatchObject({ VideoCodec: 'vp8', AudioCodec: 'opus', MaxWidth: 640, MaxFramerate: 25, Static: false });
     });
     it('includes channels beyond the first 1000', async () => {
         const api = { getLiveTvChannels: vi.fn().mockResolvedValueOnce({ Items: Array.from({ length: 1000 }, (_, Id) => ({ Id })), TotalRecordCount: 1001 }).mockResolvedValueOnce({ Items: [{ Id: 1000 }], TotalRecordCount: 1001 }) };
