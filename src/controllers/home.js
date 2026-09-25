@@ -29,6 +29,8 @@ class HomeView extends TabbedView {
             name: globalize.translate('Home')
         }, {
             name: globalize.translate('Favorites')
+        }, {
+            name: globalize.translate('AllLibraries')
         }];
     }
 
@@ -46,6 +48,11 @@ class HomeView extends TabbedView {
 
             case 1:
                 depends = 'favorites';
+                break;
+
+            case 2:
+                depends = 'alllibraries';
+                break;
         }
 
         const instance = this;

@@ -339,6 +339,7 @@ function refreshLibraryInfoInDrawer(user) {
 
     // libraries are added here
     html += '<div class="libraryMenuOptions"></div>';
+    html += `<a is="emby-linkbutton" class="navMenuOption lnkMediaFolder" data-itemid="alllibraries" href="#/home?tab=2"><span class="material-icons navMenuOptionIcon apps" aria-hidden="true"></span><span class="navMenuOptionText">${globalize.translate('AllLibraries')}</span></a>`;
 
     if (user.localUser?.Policy.IsAdministrator) {
         html += '<div class="adminMenuOptions">';
@@ -560,7 +561,9 @@ function updateLibraryNavLinks(page) {
         const lnkMediaFolder = elems[i];
         const itemId = lnkMediaFolder.getAttribute('data-itemid');
 
-        if (isChannelsPage && itemId === 'channels') {
+        if (itemId === 'alllibraries' && /^#\/home\?tab=2(?:&|$)/.test(window.location.hash)) {
+            lnkMediaFolder.classList.add('navMenuOption-selected');
+        } else if (isChannelsPage && itemId === 'channels') {
             lnkMediaFolder.classList.add('navMenuOption-selected');
         } else if (isLiveTvPage && itemId === 'livetv') {
             lnkMediaFolder.classList.add('navMenuOption-selected');
