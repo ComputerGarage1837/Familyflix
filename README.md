@@ -32,6 +32,8 @@ additions remain under runtime QA; no finished
 Windows release should be published from this branch yet.
 Both classic and newer Jellyfin desktop screens show the Family Flix clock
 according to the shared Android profile setting.
+The Deck and shared-settings code has local unit tests and targeted lint checks;
+packaged behavior still requires hands-on playback and navigation checks.
 
 This is the **only active Family Flix for Windows project**. The older
 `../familyflix-windows` WebView2 launcher is retired and must not be shipped.
