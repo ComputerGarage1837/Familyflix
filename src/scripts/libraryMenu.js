@@ -29,6 +29,7 @@ import { PluginType } from '../types/plugin.ts';
 import Events from '../utils/events.ts';
 import { getParameterByName } from '../utils/url.ts';
 import datetime from '../scripts/datetime';
+import * as userSettings from '../scripts/settings/userSettings';
 
 import '../elements/emby-button/paper-icon-button-light';
 
@@ -203,14 +204,20 @@ function updateHeaderUserButton(src) {
 }
 
 function updateClock() {
-    if (layoutManager.tv) {
-        currentTimeText.classList.remove('hide');
-        setInterval(function() {
-            currentTimeText.innerText = datetime.getDisplayTime(new Date());
-        }, 1000);
-    } else {
-        currentTimeText.classList.add('hide');
-    }
+    currentTimeText.classList.remove('hide');
+    const refresh = () => {
+        const now = new Date();
+        const date = new Intl.DateTimeFormat(undefined, {
+            weekday: 'short', month: 'short', day: 'numeric'
+        }).format(now);
+        currentTimeText.innerText = `${date}  •  ${datetime.getDisplayTime(now)}`;
+        currentTimeText.classList.toggle('guideClock',
+            /^#\/livetv(?:\?|$)/.test(window.location.hash)
+                && /(?:\?|&)tab=1(?:&|$)/.test(window.location.hash));
+    };
+    refresh();
+    window.setInterval(refresh, 30_000);
+    window.addEventListener('hashchange', refresh);
 }
 
 function showSearch() {
@@ -397,26 +404,30 @@ function getUserViews(apiClient, userId) {
     return queryClient
         .fetchQuery(getUserViewsQuery(toApi(apiClient), userId))
         .then(function (result) {
-            const items = result.Items;
-            const list = [];
-
-            for (let i = 0, length = items.length; i < length; i++) {
-                const view = items[i];
-                list.push(view);
-
-                if (view.CollectionType == 'livetv') {
-                    view.icon = 'live_tv';
-                    const guideView = Object.assign({}, view);
-                    guideView.Name = globalize.translate('Guide');
-                    guideView.ImageTags = {};
-                    guideView.icon = 'dvr';
-                    guideView.url = '#/livetv?tab=1';
-                    list.push(guideView);
-                }
-            }
-
-            return list;
+            return result.Items || [];
         });
+}
+
+function orderedMenuLibraries(items) {
+    const normalizeId = id => String(id || '').replaceAll('-', '').toLowerCase();
+    const order = String(userSettings.get('familyTvLibraryMenuOrderV1') || '')
+        .split(',').map(normalizeId);
+    const positions = new Map(order.map((id, index) => [id, index]));
+    const hidden = new Set(String(userSettings.get('familyTvHiddenLibrariesV1') || '')
+        .split(',').map(normalizeId));
+
+    return items
+        .filter(item => !hidden.has(normalizeId(item.Id)))
+        .map((item, index) => ({ item, index }))
+        .sort((left, right) => {
+            const leftPosition = positions.get(normalizeId(left.item.Id));
+            const rightPosition = positions.get(normalizeId(right.item.Id));
+            if (leftPosition == null && rightPosition == null) return left.index - right.index;
+            if (leftPosition == null) return 1;
+            if (rightPosition == null) return -1;
+            return leftPosition - rightPosition;
+        })
+        .map(({ item }) => item);
 }
 
 function showBySelector(selector, show) {
@@ -469,13 +480,14 @@ function updateLibraryMenu(user) {
 
     if (libraryMenuOptions) {
         getUserViews(apiClient, userId).then(function (result) {
-            const items = result;
+            const items = orderedMenuLibraries(result);
             let html = `<h3 class="sidebarHeader">${globalize.translate('HeaderMedia')}</h3>`;
             html += items.map(function (i) {
-                const icon = i.icon || imageHelper.getLibraryIcon(i.CollectionType);
+                const icon = i.CollectionType === 'livetv' ? 'live_tv' : imageHelper.getLibraryIcon(i.CollectionType);
                 const itemId = i.Id;
+                const href = i.CollectionType === 'livetv' ? '#/livetv?tab=1' : getItemHref(i, i.CollectionType);
 
-                return `<a is="emby-linkbutton" data-itemid="${itemId}" class="lnkMediaFolder navMenuOption" href="${getItemHref(i, i.CollectionType)}">
+                return `<a is="emby-linkbutton" data-itemid="${itemId}" class="lnkMediaFolder navMenuOption" href="${href}">
                                     <span class="material-icons navMenuOptionIcon ${icon}" aria-hidden="true"></span>
                                     <span class="sectionName navMenuOptionText">${escapeHtml(i.Name)}</span>
                                   </a>`;

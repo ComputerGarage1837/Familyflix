@@ -280,7 +280,11 @@ export function getCardImageUrl(item, apiClient, options, shape) {
     let itemId = null;
 
     /* eslint-disable sonarjs/no-duplicated-branches */
-    if (options.preferThumb && item.ImageTags?.Thumb) {
+    if (options.preferBackdrop && item.BackdropImageTags?.length) {
+        imgType = 'Backdrop';
+        imgTag = item.BackdropImageTags[0];
+        forceName = true;
+    } else if (options.preferThumb && item.ImageTags?.Thumb) {
         imgType = 'Thumb';
         imgTag = item.ImageTags.Thumb;
     } else if ((options.preferBanner || shape === 'banner') && item.ImageTags?.Banner) {

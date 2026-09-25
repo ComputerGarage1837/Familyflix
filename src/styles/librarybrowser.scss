@@ -1534,6 +1534,20 @@ div:not(.sectionTitleContainer-cards) > .sectionTitle-cards {
 }
 
 .currentTimeText {
-    padding-left: 0.8em;
-    padding-right: 0.8em;
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 0.65em);
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 1.1em;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    text-shadow: 0 2px 5px #000;
+
+    &.guideClock {
+        left: auto;
+        right: 168px;
+        transform: none;
+    }
 }

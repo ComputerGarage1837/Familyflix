@@ -56,7 +56,7 @@ function getLatestItemsHtmlFn(
     return function (items: BaseItemDto[]) {
         const cardLayout = false;
         let shape;
-        if (itemType === 'Channel' || viewType === 'movies' || viewType === 'books' || viewType === 'tvshows') {
+        if (itemType === 'Channel' || viewType === 'books') {
             shape = getPortraitShape(enableOverflow);
         } else if (viewType === 'music' || viewType === 'homevideos') {
             shape = getSquareShape(enableOverflow);
@@ -67,7 +67,8 @@ function getLatestItemsHtmlFn(
         return cardBuilder.getCardsHtml({
             items: items,
             shape: shape,
-            preferThumb: viewType !== 'movies' && viewType !== 'tvshows' && itemType !== 'Channel' && viewType !== 'music' ? 'auto' : null,
+            preferBackdrop: viewType === 'movies' || viewType === 'tvshows',
+            preferThumb: viewType !== 'music' && itemType !== 'Channel' ? 'auto' : null,
             showUnplayedIndicator: false,
             showChildCountIndicator: true,
             context: 'home',
