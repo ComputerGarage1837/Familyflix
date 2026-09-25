@@ -234,7 +234,7 @@ export function setBackdropImages(images) {
     currentRotationIndex = -1;
 
     if (images.length > 1 && enableRotation()) {
-        rotationInterval = setInterval(onRotationInterval, 10000);
+        rotationInterval = setInterval(onRotationInterval, 60000);
     }
 
     onRotationInterval();

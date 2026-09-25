@@ -1,4 +1,4 @@
-import { clearBackdrop, setBackdropImages, setBackdrops } from '../components/backdrop/backdrop';
+import { clearBackdrop, setBackdrop, setBackdropImages, setBackdrops } from '../components/backdrop/backdrop';
 import * as userSettings from './settings/userSettings';
 import libraryMenu from './libraryMenu';
 import { pageClassOn } from '../utils/dashboard';
@@ -31,7 +31,7 @@ function getBackdropItemIds(apiClient, userId, types, parentId) {
         ImageTypes: 'Backdrop',
         ParentId: parentId,
         EnableTotalRecordCount: false,
-        MaxOfficialRating: parentId ? '' : 'PG-13'
+        MaxOfficialRating: ''
     };
     return apiClient.getItems(apiClient.getCurrentUserId(), options).then(function (result) {
         const images = result.Items.map(function (i) {
@@ -46,16 +46,17 @@ function getBackdropItemIds(apiClient, userId, types, parentId) {
     });
 }
 
-function showBackdrop(type, parentId) {
+function showBackdrop(type, parentId, focusRequest) {
     const apiClient = ServerConnections.currentApiClient();
 
     if (apiClient) {
         getBackdropItemIds(apiClient, apiClient.getCurrentUserId(), type, parentId).then(function (images) {
+            if (focusRequest != null && focusRequest !== homeFocusRequest) return;
             if (images.length) {
                 setBackdrops(images.map(function (i) {
                     i.BackdropImageTags = [i.tag];
                     return i;
-                }));
+                }), undefined, true);
             } else {
                 clearBackdrop();
             }
@@ -83,9 +84,9 @@ pageClassOn('pageshow', 'page', function () {
             const type = page.getAttribute('data-backdroptype');
             if (type === 'splashscreen') {
                 showSplashScreen();
-            } else if (enabled()) {
+            } else if (page.classList.contains('homePage') || enabled()) {
                 const parentId = page.classList.contains('globalBackdropPage') ? '' : libraryMenu.getTopParentId();
-                showBackdrop(type, parentId);
+                showBackdrop(type, parentId, page.classList.contains('homePage') ? homeFocusRequest : undefined);
             } else {
                 page.classList.remove('backdropPage');
                 clearBackdrop();
@@ -94,5 +95,38 @@ pageClassOn('pageshow', 'page', function () {
             clearBackdrop();
         }
     }
+});
+
+let homeFocusRequest = 0;
+const focusedItems = new Map();
+document.addEventListener('focusin', event => {
+    if (!/^#\/home(?:\?|$)/.test(window.location.hash)) return;
+    const card = event.target.closest?.('.homePage .card[data-id]');
+    const request = ++homeFocusRequest;
+    if (!card) {
+        showBackdrop('movie,series', undefined, request);
+        return;
+    }
+
+    const itemId = card.dataset.id;
+    const apiClient = ServerConnections.currentApiClient();
+    if (!apiClient || !itemId) return;
+    const itemPromise = focusedItems.get(itemId)
+        || apiClient.getItem(apiClient.getCurrentUserId(), itemId);
+    focusedItems.set(itemId, itemPromise);
+    Promise.resolve(itemPromise).then(item => {
+        if (request !== homeFocusRequest || !/^#\/home(?:\?|$)/.test(window.location.hash)) return;
+        if (item.BackdropImageTags?.length || item.ParentBackdropImageTags?.length) {
+            setBackdrop(item);
+        } else if (item.ImageTags?.Thumb) {
+            setBackdrop(apiClient.getScaledImageUrl(item.Id, {
+                type: 'Thumb', tag: item.ImageTags.Thumb, maxWidth: 1920
+            }));
+        } else {
+            showBackdrop('movie,series', undefined, request);
+        }
+    }).catch(() => {
+        focusedItems.delete(itemId);
+    });
 });
 
