@@ -241,6 +241,12 @@ endif()
 
 target_link_libraries(${MAIN_TARGET} PRIVATE jmp_core)
 install(TARGETS ${MAIN_TARGET} DESTINATION ${INSTALL_BIN_DIR})
+if(WIN32 AND FAMILY_FLIX_WEB_DIR)
+  if(NOT EXISTS "${FAMILY_FLIX_WEB_DIR}/index.html")
+    message(FATAL_ERROR "Bundled desktop web client is missing index.html: ${FAMILY_FLIX_WEB_DIR}")
+  endif()
+  install(DIRECTORY "${FAMILY_FLIX_WEB_DIR}/" DESTINATION web-client/desktop)
+endif()
 
 set(EXE "${MAIN_NAME}.app")
 set(LIBPATH ${CMAKE_FIND_ROOT_PATH})

@@ -40,6 +40,21 @@ jobs:
       with:
         ref: ${{ github.sha }}
         submodules: recursive
+    - uses: actions/checkout@v7
+      with:
+        ref: familyflix-desktop-web
+        path: desktop-web
+        persist-credentials: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: desktop-web/package-lock.json
+    - name: Build dedicated desktop client
+      run: |
+        npm ci
+        npm run build:production
+      working-directory: desktop-web
     - name: Install Qt 6
       uses: jurplel/install-qt-action@v4
       with:
@@ -110,7 +125,7 @@ jobs:
         cd build
         set PATH=%PATH%;C:\Program Files (x86)\Inno Setup 6;%CD%
         set "QT_ROOT_DIR=%QT_ROOT_DIR:\=/%"
-        cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=output -DQTROOT=%QT_ROOT_DIR% -DMPV_INCLUDE_DIR=mpv/include -DMPV_LIBRARY=mpv/libmpv-2.dll -DCHECK_FOR_UPDATES=ON -DUSE_STATIC_MPVQT=ON ..
+        cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=output -DQTROOT=%QT_ROOT_DIR% -DMPV_INCLUDE_DIR=mpv/include -DMPV_LIBRARY=mpv/libmpv-2.dll -DFAMILY_FLIX_WEB_DIR=%CD%/../desktop-web/dist -DCHECK_FOR_UPDATES=ON -DUSE_STATIC_MPVQT=ON ..
         lib /def:mpv\mpv.def /out:mpv\libmpv-2.dll.lib /MACHINE:${{ matrix.machine }}
         ninja
         ninja windows_all

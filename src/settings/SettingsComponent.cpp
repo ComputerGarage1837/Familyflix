@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QStorageInfo>
+#include <QUrl>
 #include "SettingsComponent.h"
 #include "SettingsSection.h"
 #include "Paths.h"
@@ -764,6 +765,14 @@ bool SettingsComponent::resetAndSaveOldConfiguration()
 QString SettingsComponent::getWebClientUrl(bool desktop)
 {
   (void)desktop;
+#ifdef Q_OS_WIN
+  // The desktop client ships its own Jellyfin Web build. Never silently load
+  // the server's separately customized browser UI.
+  const QString bundledClient = Paths::webClientPath(QStringLiteral("desktop"));
+  if (!QFileInfo::exists(bundledClient))
+    qWarning() << "Family Flix desktop client is missing:" << bundledClient;
+  return QUrl::fromLocalFile(bundledClient).toString();
+#else
   QString url;
 
   url = SettingsComponent::Get().value(SETTINGS_SECTION_PATH, "startupurl_desktop").toString();
@@ -777,6 +786,7 @@ QString SettingsComponent::getWebClientUrl(bool desktop)
   qDebug() << "Using web-client URL: " << url;
 
   return url;
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

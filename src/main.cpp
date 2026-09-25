@@ -615,7 +615,7 @@ int main(int argc, char *argv[])
       });
     });
 #ifdef Q_OS_WIN
-    engine->load(QUrl(QStringLiteral("qrc:/nativeview.qml")));
+    engine->load(QUrl(QStringLiteral("qrc:/webview.qml")));
 #else
     engine->load(QUrl(QStringLiteral("qrc:/webview.qml")));
 #endif
