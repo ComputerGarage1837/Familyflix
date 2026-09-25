@@ -18,7 +18,8 @@ Family Night picker sourced from the current and selected participants'
 Watchlists. It also has an Android-style, keyboard-operable library rail with
 ordered/hidden libraries, Watchlist, Live TV, Family Night, Playlists, and
 Settings. The rail is enabled for this Windows shell even when its inherited
-Jellyfin web setting reports TV layout. The top bar has a direct Settings gear
+Jellyfin web setting reports TV layout. It collapses when pointer/focus moves
+back to content, and one Left press at a row edge opens and focuses it. The top bar has a direct Settings gear
 outside Kids Mode. The Playlists rail link opens the mixed-playlist library,
 and Windows keeps Add to Playlist available in the item menu even under the
 shell's TV layout. The client also loads the server's Watchlist browser UI in the
