@@ -64,6 +64,9 @@ public:
   Q_SIGNAL void pageContentReady(QString html, QString finalUrl, bool hadCSP);
 
   Q_INVOKABLE void checkForUpdates();
+  Q_INVOKABLE bool installFamilyFlixUpdate(const QString& downloadUrl, const QString& digest);
+  Q_SIGNAL void familyFlixUpdateProgress(int percent);
+  Q_SIGNAL void familyFlixUpdateFailed(const QString& message);
 
   // called by the web-client when everything is properly inited
   Q_INVOKABLE void hello(const QString& version);
@@ -141,6 +144,7 @@ private:
   QNetworkReply* m_resolveUrlReply;
   QTimer* m_connectivityRetryTimer;
   QString m_pendingConnectivityUrl;
+  bool m_familyFlixUpdateActive = false;
 
 };
 

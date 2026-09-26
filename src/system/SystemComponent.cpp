@@ -7,6 +7,9 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
+#include <QCryptographicHash>
+#include <QCoreApplication>
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QNetworkRequest>
@@ -19,6 +22,7 @@
 #include <QDebug>
 #include <QRegularExpression>
 #include <QPointer>
+#include <memory>
 #include <functional>
 
 #include <QtWebEngineCore/qtwebenginecoreglobal.h>
@@ -482,6 +486,64 @@ QString SystemComponent::recentCrashSummary() const
     return QString::fromUtf8(summary.read(1024)).trimmed();
 #endif
   return QString();
+}
+
+bool SystemComponent::installFamilyFlixUpdate(const QString& downloadUrl, const QString& digestText)
+{
+#ifdef Q_OS_WIN
+  if (m_familyFlixUpdateActive) return false;
+  const QUrl url(downloadUrl);
+  const QString digest = digestText.toLower();
+  if (url.scheme() != QStringLiteral("https") || url.host() != QStringLiteral("github.com")
+      || !url.path().startsWith(QStringLiteral("/ComputerGarage1837/Familyflix/releases/download/windows-v"))
+      || !QRegularExpression(QStringLiteral("^sha256:[0-9a-f]{64}$")).match(digest).hasMatch())
+    return false;
+  const QString directory = ProfileManager::activeProfile().cacheDir(QStringLiteral("updates"));
+  if (!QDir().mkpath(directory)) return false;
+  const QString destination = QDir(directory).filePath(QStringLiteral("Family-Flix-Windows-update.exe"));
+  auto output = std::make_shared<QSaveFile>(destination);
+  if (!output->open(QIODevice::WriteOnly)) return false;
+  m_familyFlixUpdateActive = true;
+  QNetworkRequest request(url);
+  request.setRawHeader("User-Agent", "FamilyFlixWindows");
+  auto* reply = m_networkManager->get(request);
+  connect(reply, &QNetworkReply::readyRead, this, [reply, output] {
+    output->write(reply->readAll());
+  });
+  connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {
+    if (total > 0) emit familyFlixUpdateProgress(static_cast<int>(100 * received / total));
+  });
+  connect(reply, &QNetworkReply::finished, this, [this, reply, output, destination, digest] {
+    output->write(reply->readAll());
+    const bool downloaded = reply->error() == QNetworkReply::NoError && output->commit();
+    reply->deleteLater();
+    m_familyFlixUpdateActive = false;
+    if (!downloaded) {
+      emit familyFlixUpdateFailed(QStringLiteral("Download failed. You can try again."));
+      return;
+    }
+    QFile file(destination);
+    QCryptographicHash checksum(QCryptographicHash::Sha256);
+    if (!file.open(QIODevice::ReadOnly) || !checksum.addData(&file)
+        || QString::fromLatin1(checksum.result().toHex()) != digest.mid(7)) {
+      file.close();
+      QFile::remove(destination);
+      emit familyFlixUpdateFailed(QStringLiteral("The update checksum did not match. Nothing was installed."));
+      return;
+    }
+    file.close();
+    if (!QProcess::startDetached(destination, {})) {
+      emit familyFlixUpdateFailed(QStringLiteral("The installer could not be started."));
+      return;
+    }
+    QCoreApplication::quit();
+  });
+  return true;
+#else
+  Q_UNUSED(downloadUrl)
+  Q_UNUSED(digestText)
+  return false;
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
