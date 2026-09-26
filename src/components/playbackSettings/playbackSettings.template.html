@@ -1,10 +1,31 @@
 <form style="margin: 0 auto;">
     <section class="verticalSection">
         <h2>Client diagnostics</h2>
-        <p>Send recent interface and forwarded player/updater errors to the server administrator. Passwords, URLs and file paths are removed. Native crash dumps are not included.</p>
+        <p>Send recent interface, player, updater and native crash summaries to the server administrator. Reports survive a restart. Passwords, URLs and file paths are removed. Native dump files stay on this PC.</p>
         <button type="button" is="emby-button" class="raised familySendDiagnostics">Send diagnostics</button>
         <p class="familyDiagnosticsStatus" role="status" aria-live="polite"></p>
     </section>
+    <fieldset class="verticalSection familyNativePlayerSettings hide">
+        <h2>Windows player and display</h2>
+        <p>These settings apply only to this Windows PC. They use the native player; Android device settings remain separate. A Windows screensaver is controlled by Windows itself, not by Family Flix.</p>
+        <div class="selectContainer"><select is="emby-select" class="familyNativeHardware" label="Hardware decoding">
+            <option value="copy">Hardware with compatibility (recommended)</option>
+            <option value="enabled">Full hardware acceleration</option>
+            <option value="disabled">Software decoding</option>
+        </select></div>
+        <label class="checkboxContainer"><input type="checkbox" is="emby-checkbox" class="familyNativeRefresh"><span>Match display refresh rate to video</span></label>
+        <div class="selectContainer"><select is="emby-select" class="familyNativeAudioOutput" label="Audio output type">
+            <option value="basic">Basic</option><option value="spdif">S/PDIF</option><option value="hdmi">HDMI</option>
+        </select></div>
+        <div class="selectContainer"><select is="emby-select" class="familyNativeChannels" label="Audio channels">
+            <option value="auto">Automatic</option><option value="2.0">Stereo</option>
+            <option value="5.1,2.0">5.1 surround</option><option value="7.1,5.1,2.0">7.1 surround</option>
+        </select></div>
+        <label class="checkboxContainer"><input type="checkbox" is="emby-checkbox" class="familyNativeNormalize"><span>Volume normalization</span></label>
+        <label class="checkboxContainer"><input type="checkbox" is="emby-checkbox" class="familyNativeExclusive"><span>Exclusive audio output</span></label>
+        <label class="checkboxContainer"><input type="checkbox" is="emby-checkbox" class="familyNativeAc3"><span>AC3 passthrough</span></label>
+        <label class="checkboxContainer"><input type="checkbox" is="emby-checkbox" class="familyNativeEac3"><span>E-AC3 passthrough (HDMI)</span></label>
+    </fieldset>
     <fieldset class="verticalSection familyPlaybackSettings" disabled>
         <h2>Family Flix playback</h2>
         <p class="familyPlaybackSyncStatus">Loading your shared Android / Windows preferences…</p>

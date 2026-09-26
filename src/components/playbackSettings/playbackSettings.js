@@ -19,6 +19,7 @@ import Events from '../../utils/events.ts';
 import toast from '../toast/toast';
 import template from './playbackSettings.template.html';
 import { bindDiagnostics } from 'familyflix/diagnostics';
+import { bindNativePlayerSettings } from 'familyflix/nativePlayerSettings';
 import { bindShortcutSettings } from 'familyflix/desktopShortcuts';
 
 import '../../elements/emby-select/emby-select';
@@ -423,6 +424,7 @@ class PlaybackSettings {
                     self.dataLoaded = true;
 
                     loadForm(context, user, userSettings, systemInfo, apiClient);
+                    bindNativePlayerSettings(context);
                     try {
                         const values = await loadPlaybackPreferences(apiClient, userId, true);
                         if (!self.options || self.options.userId !== userId) return;

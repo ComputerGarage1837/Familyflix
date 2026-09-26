@@ -1,4 +1,9 @@
-const entries = [];
+const storageKey = 'familyflix-windows-diagnostics-v1';
+let entries = [];
+try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (Array.isArray(saved)) entries = saved.filter(value => typeof value === 'string').slice(-120).map(value => value.slice(0, 1600));
+} catch { /* Storage may be unavailable or from an older version. */ }
 export function redactDiagnostic(value) {
     return String(value ?? '')
         .replace(/https?:\/\/[^\s"'<>]+/gi, '[URL removed]')
@@ -9,12 +14,34 @@ export function redactDiagnostic(value) {
 export function recordDiagnostic(reason, detail) {
     entries.push(`${new Date().toISOString()} ${redactDiagnostic(reason)}: ${redactDiagnostic(detail)}`);
     if (entries.length > 120) entries.splice(0, entries.length - 120);
+    try {
+        localStorage.setItem(storageKey, JSON.stringify(entries));
+    } catch { /* Continue without persistence if storage is full. */ }
 }
 export function clearDiagnostics() {
     entries.length = 0;
+    try {
+        localStorage.removeItem(storageKey);
+    } catch { /* Storage may be unavailable. */ }
 }
 export function diagnosticSnapshot() {
     return entries.join('\n');
+}
+async function nativeCrashSummary() {
+    try {
+        const bridge = await Promise.race([
+            window.apiPromise,
+            new Promise(resolve => setTimeout(() => resolve(null), 1000))
+        ]);
+        if (!bridge?.system?.recentCrashSummary) return '';
+        return await new Promise(resolve => {
+            const timeout = setTimeout(() => resolve(''), 1000);
+            bridge.system.recentCrashSummary(summary => {
+                clearTimeout(timeout);
+                resolve(redactDiagnostic(summary));
+            });
+        });
+    } catch { return ''; }
 }
 window.addEventListener('error', event => recordDiagnostic('Client error', event.message));
 window.addEventListener('unhandledrejection', event => recordDiagnostic('Unhandled request', event.reason?.message || 'Unknown failure'));
@@ -34,9 +61,11 @@ export async function sendDiagnostics(api) {
     const timeout = setTimeout(() => controller.abort(), 10000);
     // eslint-disable-next-line sonarjs/pseudo-random -- Report correlation only, not authentication.
     const reportId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const crash = await nativeCrashSummary();
     const report = `client: Family Flix Windows\ntype: diagnostic_report\nreport_id: ${reportId}\n`
-        + `platform: ${redactDiagnostic(navigator.userAgent)}\n\nRecent client errors (current session):\n${diagnosticSnapshot() || 'No errors captured.'}\n`
-        + '\nScope: client interface and forwarded player/updater errors; not a native crash dump.\n';
+        + `platform: ${redactDiagnostic(navigator.userAgent)}\n\nRecent client errors (retained across restarts):\n${diagnosticSnapshot() || 'No errors captured.'}\n`
+        + `\nLatest native crash: ${crash || 'None recorded.'}\n`
+        + '\nScope: client and native crash summary only; native minidump remains on this PC.\n';
     try {
         const response = await fetch(api.getUrl('ClientLog/Document'), {
             method: 'POST', headers: { 'X-Emby-Token': api.accessToken(), 'Content-Type': 'text/plain; charset=utf-8' },
