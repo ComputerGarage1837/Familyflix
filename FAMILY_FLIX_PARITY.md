@@ -13,14 +13,16 @@ Prompts are keyboard/remote navigable and cancel when their playback/profile
 context changes. These are ports into the active desktop client, not the retired
 Qt-native implementation below.
 
-Validation: 29 focused tests pass, including 10 new playback/prompt tests;
+Validation: all 188 frontend tests pass, including 10 new playback/prompt tests;
 TypeScript, targeted ESLint and the production desktop frontend build pass.
 Native Windows interaction validation and installer status are recorded in the
 family.11 validation report. This is not a declaration of complete Android parity.
 
 Known remaining active-client gaps include per-series playback overrides and
-track-intent sync, Android-equivalent device buffer controls, client diagnostic
-uploads, remote-shortcut customization, and the remaining detailed settings.
+track-intent sync, client diagnostic uploads, remote-shortcut customization,
+and the remaining detailed settings. The active native player already has
+separate VOD/live buffer controls and memory-to-disk logic; these need sustained
+runtime validation rather than a second implementation.
 Do not count implementation in the retired Qt-native client as completion.
 
 The Windows entry point now uses a dedicated, packaged vanilla Jellyfin Web
