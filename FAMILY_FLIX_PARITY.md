@@ -13,7 +13,7 @@ Prompts are keyboard/remote navigable and cancel when their playback/profile
 context changes. These are ports into the active desktop client, not the retired
 Qt-native implementation below.
 
-Validation: all 188 frontend tests pass, including 10 new playback/prompt tests;
+Validation: all 189 frontend tests pass, including 11 new playback/prompt tests;
 TypeScript, targeted ESLint and the production desktop frontend build pass.
 Native Windows interaction validation and installer status are recorded in the
 family.11 validation report. This is not a declaration of complete Android parity.
