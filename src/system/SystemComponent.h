@@ -50,6 +50,7 @@ public:
   Q_INVOKABLE QString getUserAgent();
 
   Q_INVOKABLE QString debugInformation();
+  Q_INVOKABLE QString recentCrashSummary() const;
 
   Q_INVOKABLE QStringList networkAddresses() const;
 

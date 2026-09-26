@@ -19,6 +19,7 @@
 #include <QTime>
 #include <QStorageInfo>
 #include <QDir>
+#include "system/SystemComponent.h"
 #include <climits>
 
 namespace {
@@ -819,6 +820,31 @@ void FamilyApiClient::reportIssue(const QString& itemId, const QString& category
     }
     emit issueReportFinished(true, QStringLiteral("Problem report sent."));
     if (m_selectedItem.value(QStringLiteral("Id")).toString() == itemId) openItem(itemId);
+  });
+}
+
+void FamilyApiClient::sendWindowsDiagnostics()
+{
+  if (!signedIn()) {
+    emit diagnosticReportFinished(false, QStringLiteral("Sign in before sending diagnostics."));
+    return;
+  }
+  const QString crash = SystemComponent::Get().recentCrashSummary();
+  const QByteArray body = QStringLiteral(
+    "client: Family Flix Windows\ntype: native_diagnostic_report\nversion: %1\n"
+    "latest_native_crash: %2\nminidump: retained locally, not uploaded\n")
+    .arg(QCoreApplication::applicationVersion(),
+         crash.isEmpty() ? QStringLiteral("none recorded") : crash).toUtf8();
+  QNetworkRequest report(server.resolved(QUrl(QStringLiteral("ClientLog/Document"))));
+  report.setRawHeader("X-Emby-Token", m_token.toUtf8());
+  report.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("text/plain; charset=utf-8"));
+  auto* reply = m_network.post(report, body);
+  connect(reply, &QNetworkReply::finished, this, [this, reply] {
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const bool ok = reply->error() == QNetworkReply::NoError && status >= 200 && status < 300;
+    reply->deleteLater();
+    emit diagnosticReportFinished(ok, ok ? QStringLiteral("Diagnostic report sent to the server administrator.")
+                                         : QStringLiteral("Could not send diagnostics. Please try again."));
   });
 }
 

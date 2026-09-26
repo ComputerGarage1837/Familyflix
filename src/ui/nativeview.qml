@@ -22,6 +22,12 @@ Window {
     property int familyNightAge: -1
     property int vodBufferMinutes: Number(components.settings.value("video", "familyVodBufferMinutes")) || 60
     property int liveBufferMinutes: Number(components.settings.value("video", "familyLiveBufferMinutes")) || 60
+    property string nativeHardwareMode: components.settings.value("video", "hardwareDecoding") || "copy"
+    property bool nativeRefreshMatching: components.settings.value("video", "refreshrate.auto_switch") === true
+    property string nativeAudioOutput: components.settings.value("audio", "devicetype") || "basic"
+    property string nativeAudioChannels: components.settings.value("audio", "channels") || "2.0"
+    property bool nativeAudioNormalize: components.settings.value("audio", "normalize") !== false
+    property bool nativeAudioExclusive: components.settings.value("audio", "exclusive") === true
     property string familyNightGenre: "Any"
     property var familyNightPick: ({})
     property string pendingFamilyNightId: ""
@@ -943,6 +949,10 @@ Window {
                 issueNote.clear()
                 window.page = "detail"
             }
+        }
+        function onDiagnosticReportFinished(success, message) {
+            window.notice = message
+            noticeTimer.restart()
         }
         function onCoWatchChanged() {
             if (window.chosenCoWatchUser.Id && familyApi.hasSavedProfile(window.chosenCoWatchUser.Id)) {
@@ -2412,6 +2422,60 @@ Window {
                 onClicked: familyApi.toggleSeriesThumbnails()
             }
             NativeAction { text: "Check Windows updates"; width: 325; onClicked: familyApi.checkWindowsUpdate(true) }
+            Text { text: "Windows player and display"; color: familyApi.themeText; font.pixelSize: 23; font.bold: true }
+            NativeAction {
+                text: "Hardware decoding: " + window.nativeHardwareMode
+                width: 325
+                onClicked: {
+                    const modes = ["copy", "enabled", "disabled"]
+                    window.nativeHardwareMode = modes[(modes.indexOf(window.nativeHardwareMode) + 1) % modes.length]
+                    components.settings.setValue("video", "hardwareDecoding", window.nativeHardwareMode)
+                }
+            }
+            NativeAction {
+                text: "Match video refresh rate: " + (window.nativeRefreshMatching ? "On" : "Off")
+                width: 325
+                onClicked: {
+                    window.nativeRefreshMatching = !window.nativeRefreshMatching
+                    components.settings.setValue("video", "refreshrate.auto_switch", window.nativeRefreshMatching)
+                }
+            }
+            NativeAction {
+                text: "Audio output: " + window.nativeAudioOutput.toUpperCase()
+                width: 325
+                onClicked: {
+                    const modes = ["basic", "spdif", "hdmi"]
+                    window.nativeAudioOutput = modes[(modes.indexOf(window.nativeAudioOutput) + 1) % modes.length]
+                    components.settings.setValue("audio", "devicetype", window.nativeAudioOutput)
+                }
+            }
+            NativeAction {
+                text: "Audio channels: " + window.nativeAudioChannels
+                width: 325
+                onClicked: {
+                    const modes = ["auto", "2.0", "5.1,2.0", "7.1,5.1,2.0"]
+                    window.nativeAudioChannels = modes[(modes.indexOf(window.nativeAudioChannels) + 1) % modes.length]
+                    components.settings.setValue("audio", "channels", window.nativeAudioChannels)
+                }
+            }
+            NativeAction {
+                text: "Volume normalization: " + (window.nativeAudioNormalize ? "On" : "Off")
+                width: 325
+                onClicked: {
+                    window.nativeAudioNormalize = !window.nativeAudioNormalize
+                    components.settings.setValue("audio", "normalize", window.nativeAudioNormalize)
+                }
+            }
+            NativeAction {
+                text: "Exclusive audio: " + (window.nativeAudioExclusive ? "On" : "Off")
+                width: 325
+                onClicked: {
+                    window.nativeAudioExclusive = !window.nativeAudioExclusive
+                    components.settings.setValue("audio", "exclusive", window.nativeAudioExclusive)
+                }
+            }
+            Text { text: "Windows controls the PC screensaver."; color: familyApi.themeText; font.pixelSize: 16 }
+            NativeAction { text: "Send Windows diagnostics"; width: 325; onClicked: familyApi.sendWindowsDiagnostics() }
             Flickable {
                 width: parent.width
                 height: 80

@@ -42,7 +42,7 @@ jobs:
         submodules: recursive
     - uses: actions/checkout@v7
       with:
-        ref: 5d5d51e87125d1d78b522eb8e33e16df47cd7ff6
+        ref: 2c7abfa89a98d2f18bdca01826d627c06dfabd57
         path: desktop-web
         persist-credentials: false
     - uses: actions/setup-node@v4
@@ -54,7 +54,7 @@ jobs:
       run: |
         npm ci
         npx tsc --noEmit
-        npx eslint src/familyflix/desktop*.js src/familyflix/diagnostics.js src/familyflix/relatedCast.js src/familyflix/series* src/familyflix/familySession* src/familyflix/issuePolicy.ts
+        npx eslint src/familyflix/desktop*.js src/familyflix/diagnostics.js src/familyflix/nativePlayerSettings*.js src/familyflix/relatedCast.js src/familyflix/series* src/familyflix/familySession* src/familyflix/issuePolicy.ts
         npx vitest run src/familyflix src/scripts/settings/appSettings.test.js src/components/guide/livePreview.test.js
         npx eslint src/familyflix/playbackPreferences.js src/familyflix/playbackPreferences.test.js src/familyflix/nextEpisodePrompt.js src/familyflix/nextEpisodePrompt.test.js src/components/playbackSettings/playbackSettings.js src/lib/jellyfin-apiclient/ServerConnections.js
         npx eslint src/index.jsx src/familyflix/deck.js src/familyflix/deck.test.js src/familyflix/theme.js src/familyflix/theme.test.js src/familyflix/issues.js src/familyflix/cowatch.js src/familyflix/familyNight.js src/familyflix/familyNightPicker.js src/familyflix/groupDeck.js src/familyflix/homeFeed.js src/familyflix/kidsMode.js src/familyflix/profileChooser.js src/familyflix/profiles.js src/familyflix/watchlistClient.js src/familyflix/watchlistClient.test.js src/components/cardbuilder/cardBuilder.js src/components/itemContextMenu.js src/components/playback/playbackmanager.js src/components/toolbar/AppToolbar.tsx src/components/toolbar/UserMenuButton.tsx src/components/homesections/sections/familyWatchlist.js src/components/homesections/sections/nextUp.ts src/components/homesections/sections/resume.ts src/components/guide/guide.js src/components/displaySettings/displaySettings.js src/scripts/autoBackdrops.js src/scripts/libraryMenu.js src/scripts/settings/appSettings.js src/scripts/settings/appSettings.test.js src/controllers/list.js src/controllers/livetv/livetvsuggested.js src/hooks/useFetchItems.ts

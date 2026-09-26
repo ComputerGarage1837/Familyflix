@@ -16,6 +16,12 @@
 #include <QDir>
 #include <QFile>
 #include <QTimer>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <DbgHelp.h>
+#include <cwchar>
+#include <cstdio>
+#endif
 
 #include "shared/Names.h"
 #include "system/SystemComponent.h"
@@ -44,8 +50,6 @@
 #endif
 
 #if defined(Q_OS_WIN) && defined(_M_X64)
-#include <windows.h>
-#include <cstdio>
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Check AVX2 support and swap libmpv DLL if needed (before delay-load triggers)
@@ -85,6 +89,48 @@ static void setupMpvFallback()
     fprintf(stderr, "Switched to fallback libmpv (non-AVX2)\n");
   else
     fprintf(stderr, "Failed to switch to fallback libmpv\n");
+}
+#endif
+
+#ifdef Q_OS_WIN
+static wchar_t crashDumpPath[MAX_PATH] = {};
+static wchar_t crashSummaryPath[MAX_PATH] = {};
+
+static LONG WINAPI captureFamilyFlixCrash(EXCEPTION_POINTERS* exception)
+{
+  // Avoid Qt and heap allocation in an already damaged process.
+  HANDLE dump = CreateFileW(crashDumpPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (dump != INVALID_HANDLE_VALUE) {
+    MINIDUMP_EXCEPTION_INFORMATION details = {GetCurrentThreadId(), exception, FALSE};
+    MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), dump, MiniDumpNormal,
+                      &details, nullptr, nullptr);
+    CloseHandle(dump);
+  }
+  HANDLE summary = CreateFileW(crashSummaryPath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (summary != INVALID_HANDLE_VALUE) {
+    SYSTEMTIME time;
+    GetSystemTime(&time);
+    char message[160];
+    const int length = snprintf(message, sizeof(message),
+      "Native Windows crash at %04u-%02u-%02uT%02u:%02u:%02uZ; exception 0x%08lX; dump saved locally.\n",
+      time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute, time.wSecond,
+      exception && exception->ExceptionRecord ? exception->ExceptionRecord->ExceptionCode : 0UL);
+    DWORD written = 0;
+    if (length > 0) WriteFile(summary, message, static_cast<DWORD>(length), &written, nullptr);
+    CloseHandle(summary);
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void enableFamilyFlixCrashCapture(const QString& logDirectory)
+{
+  const QString dump = QDir(logDirectory).filePath(QStringLiteral("familyflix-last-crash.dmp"));
+  const QString summary = QDir(logDirectory).filePath(QStringLiteral("familyflix-last-crash.txt"));
+  wcsncpy_s(crashDumpPath, dump.toStdWString().c_str(), _TRUNCATE);
+  wcsncpy_s(crashSummaryPath, summary.toStdWString().c_str(), _TRUNCATE);
+  SetUnhandledExceptionFilter(captureFamilyFlixCrash);
 }
 #endif
 
@@ -401,6 +447,9 @@ int main(int argc, char *argv[])
       Log::SetLogLevel(logLevel);
 
     Log::Init();
+#ifdef Q_OS_WIN
+    enableFamilyFlixCrashCapture(ProfileManager::activeProfile().logDir());
+#endif
 
     auto scale = parser.value("scale-factor");
     if (scale.isEmpty() || scale == "auto")

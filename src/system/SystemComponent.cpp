@@ -473,6 +473,17 @@ QString SystemComponent::debugInformation()
   return debugInfo;
 }
 
+QString SystemComponent::recentCrashSummary() const
+{
+#ifdef Q_OS_WIN
+  QFile summary(QDir(ProfileManager::activeProfile().logDir()).filePath(
+    QStringLiteral("familyflix-last-crash.txt")));
+  if (summary.open(QIODevice::ReadOnly | QIODevice::Text))
+    return QString::fromUtf8(summary.read(1024)).trimmed();
+#endif
+  return QString();
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 QStringList SystemComponent::networkAddresses() const
 {

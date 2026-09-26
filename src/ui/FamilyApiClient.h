@@ -272,6 +272,7 @@ public:
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE QString temporaryStorageGiB() const;
   Q_INVOKABLE void checkWindowsUpdate(bool manual = false);
+  Q_INVOKABLE void sendWindowsDiagnostics();
   Q_INVOKABLE void dismissWindowsUpdate();
   Q_INVOKABLE void refreshWatchlist();
   Q_INVOKABLE void refreshHouseholdWatchlist();
@@ -317,6 +318,7 @@ signals:
   void playbackChaptersChanged();
   void seriesPlaybackPreferencesChanged();
   void issueReportFinished(bool success, const QString& message);
+  void diagnosticReportFinished(bool success, const QString& message);
   void themeChanged();
   void windowsUpdateChanged();
   void errorOccurred(const QString& message);
