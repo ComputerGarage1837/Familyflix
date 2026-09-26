@@ -34,7 +34,7 @@ import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { bindSkipSegment } from './skipsegment.ts';
 import { kidsPlaybackReason, kidsSleepExpired, recordKidsPlayback, resetKidsPlayback } from 'familyflix/kidsMode';
 import { reportCoWatch } from 'familyflix/cowatch';
-import { currentPlaybackPreferences, preparePlaybackPreferences, resumedPosition, UninterruptedEpisodes } from 'familyflix/playbackPreferences';
+import { currentPlaybackPreferences, playbackProfileGeneration, preparePlaybackPreferences, resumedPosition, UninterruptedEpisodes } from 'familyflix/playbackPreferences';
 import { nextEpisodePrompt } from 'familyflix/nextEpisodePrompt';
 
 const UNLIMITED_ITEMS = -1;
@@ -2362,6 +2362,7 @@ export class PlaybackManager {
 
         function playInternal(item, playOptions, onPlaybackStartedFn, prevSource) {
             const familyRequest = ++familyTransition;
+            const familyProfile = playbackProfileGeneration();
             const kidsApiClient = ServerConnections.getApiClient(item.ServerId);
             const kidsReason = kidsPlaybackReason(kidsApiClient, item);
             if (kidsReason) {
@@ -2395,7 +2396,7 @@ export class PlaybackManager {
             }
 
             return preparePlaybackPreferences(apiClient).then(() => {
-                if (familyRequest !== familyTransition || apiClient?.getCurrentUserId() !== familyUserId) {
+                if (familyRequest !== familyTransition || familyProfile !== playbackProfileGeneration() || apiClient?.getCurrentUserId() !== familyUserId) {
                     const error = new Error('Playback request superseded');
                     error.familySuperseded = true;
                     throw error;
@@ -3578,8 +3579,9 @@ export class PlaybackManager {
                 const apiClient = ServerConnections.getApiClient(nextItem.item.ServerId);
 
                 const userId = apiClient.getCurrentUserId();
+                const profile = playbackProfileGeneration();
                 const isCurrent = () => transition === familyTransition && apiClient.getCurrentUserId() === userId
-                    && ServerConnections.currentApiClient() === apiClient;
+                    && profile === playbackProfileGeneration() && ServerConnections.currentApiClient() === apiClient;
                 const advance = async () => {
                     if (familyIsEpisode) {
                         familyEpisodes.completed(streamInfo.item.RunTimeTicks);

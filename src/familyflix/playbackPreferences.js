@@ -9,6 +9,11 @@ export const playbackDefaults = {
     enable_still_watching: 'DISABLED'
 };
 const records = new Map();
+let profileGeneration = 0;
+export const playbackProfileGeneration = () => profileGeneration;
+export function changePlaybackProfile() {
+    profileGeneration++;
+}
 const keyFor = (api, userId) => `${api.serverId()}:${userId}`;
 const bounded = (value, fallback, max) => {
     const number = Number(value);

@@ -1,4 +1,5 @@
 import './nextEpisodePrompt.scss';
+import * as inputManager from '../scripts/inputManager';
 
 /** Post-episode Android-style countdown. Zero means wait for an explicit choice. */
 export function nextEpisodePrompt(api, item, preferences, stillWatching, isCurrent) {
@@ -28,12 +29,30 @@ export function nextEpisodePrompt(api, item, preferences, stillWatching, isCurre
             if (settled) return;
             settled = true;
             clearInterval(timer);
+            inputManager.off(root, onCommand);
             root.remove();
             if (previousFocus?.isConnected) previousFocus.focus();
             resolve(choice && isCurrent());
         };
         play.addEventListener('click', () => finish(true));
         stop.addEventListener('click', () => finish(false));
+        const onCommand = event => {
+            const command = event.detail?.command;
+            if (['back', 'stop', 'home', 'settings', 'guide', 'livetv'].includes(command)) {
+                event.preventDefault();
+                event.stopPropagation();
+                finish(false);
+            } else if (['up', 'down', 'left', 'right'].includes(command)) {
+                event.preventDefault();
+                event.stopPropagation();
+                (document.activeElement === play ? stop : play).focus();
+            } else if (['select', 'play', 'playpause'].includes(command)) {
+                event.preventDefault();
+                event.stopPropagation();
+                finish(document.activeElement !== stop);
+            }
+        };
+        inputManager.on(root, onCommand);
         root.addEventListener('keydown', event => {
             if (['Escape', 'BrowserBack', 'Backspace'].includes(event.key)) {
                 event.preventDefault();

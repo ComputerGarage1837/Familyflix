@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextEpisodePrompt } from './nextEpisodePrompt';
+vi.mock('../scripts/inputManager', () => ({
+    on: (root, listener) => root.addEventListener('command', listener),
+    off: (root, listener) => root.removeEventListener('command', listener)
+}));
 
 const item = { Id: 'episode', SeriesName: 'Example', Name: 'Next episode', ParentIndexNumber: 2, IndexNumber: 3, ImageTags: { Primary: 'image' } };
 const api = { getImageUrl: () => '/episode.jpg' };
@@ -13,6 +17,15 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 describe('post-episode controls', () => {
+    it('consumes native remote Back and stops the timer', async () => {
+        const result = nextEpisodePrompt(api, item, settings, false, () => true);
+        const command = new CustomEvent('command', { detail: { command: 'back' }, bubbles: true, cancelable: true });
+        document.activeElement.dispatchEvent(command);
+        expect(command.defaultPrevented).toBe(true);
+        expect(await result).toBe(false);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(vi.getTimerCount()).toBe(0);
+    });
     it('counts down and releases the dialog at the configured time', async () => {
         const result = nextEpisodePrompt(api, item, settings, false, () => true);
         expect(document.querySelector('h3').textContent).toContain('S2 E3');
