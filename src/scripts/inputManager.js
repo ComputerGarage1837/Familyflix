@@ -4,6 +4,11 @@ import { playbackManager } from 'components/playback/playbackmanager';
 import { appRouter } from 'components/router/appRouter';
 import { AppFeature } from 'constants/appFeature';
 import dom from 'utils/dom';
+import { installDesktopShortcuts } from 'familyflix/desktopShortcuts';
+import { currentLongPress } from 'familyflix/playbackPreferences';
+import { ServerConnections } from 'lib/jellyfin-apiclient';
+
+installDesktopShortcuts(handleCommand, () => Boolean(playbackManager.currentItem()), () => currentLongPress(ServerConnections.currentApiClient()));
 
 let lastInputTime = new Date().getTime();
 

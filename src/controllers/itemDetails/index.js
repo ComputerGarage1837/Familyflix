@@ -35,6 +35,9 @@ import Dashboard from 'utils/dashboard';
 import Events from 'utils/events';
 import { getItemBackdropImageUrl } from 'utils/jellyfin-apiclient/backdropImage';
 import { bindIssueReport, loadIssueWarning } from 'familyflix/issues';
+import { bindSeriesSettings } from 'familyflix/seriesDetailSettings';
+import { refreshRelatedCast } from 'familyflix/relatedCast';
+import { captureSeriesPreferencesSession } from 'familyflix/seriesPreferences';
 
 import 'elements/emby-itemscontainer/emby-itemscontainer';
 import 'elements/emby-checkbox/emby-checkbox';
@@ -556,6 +559,7 @@ function reloadFromItem(instance, page, params, item, user) {
     const apiClient = ServerConnections.getApiClient(item.ServerId);
     loadIssueWarning(page, item, apiClient);
     bindIssueReport(page, item, apiClient);
+    bindSeriesSettings(page, item, apiClient);
 
     libraryMenu.setTitle('');
 
@@ -600,7 +604,26 @@ function reloadFromItem(instance, page, params, item, user) {
         page.querySelector('.btnSplitVersions').classList.add('hide');
     }
 
+    page.dataset.familyDetailItem = item.Id;
+    page.querySelectorAll('.familyDirectCommand').forEach(button => {
+        button.remove();
+    });
     itemContextMenu.getCommands(getContextMenuOptions(item, user)).then(commands => {
+        if (page.dataset.familyDetailItem !== item.Id) return;
+        if (window.NativeShell) {
+            hideAll(page, 'btnMoreCommands');
+            for (const command of commands) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'emby-button raised show-focus familyDirectCommand';
+                button.textContent = command.name;
+                button.addEventListener('click', () => {
+                    page.querySelector('.btnMoreCommands').dispatchEvent(new CustomEvent('click', { detail: { familyCommand: command.id } }));
+                });
+                page.querySelector('.mainDetailButtons').appendChild(button);
+            }
+            return;
+        }
         if (commands.length) {
             hideAll(page, 'btnMoreCommands', true);
         } else {
@@ -870,6 +893,10 @@ function setInitialCollapsibleState(page, item, apiClient, context, user) {
 
     renderCast(page, item, cast);
     renderGuestCast(page, item, guestCast);
+    refreshRelatedCast(page, item, ServerConnections.getApiClient(item.ServerId), people => {
+        renderCast(page, item, people.filter(person => person.Type !== PersonKind.GuestStar));
+        renderGuestCast(page, item, people.filter(person => person.Type === PersonKind.GuestStar));
+    });
 
     if (item.PartCount && item.PartCount > 1) {
         page.querySelector('#additionalPartsCollapsible').classList.remove('hide');
@@ -1964,6 +1991,8 @@ export default function (view, params) {
         return {
             startPositionTicks: startPosition,
             mediaSourceId: view.querySelector('.selectSource').value,
+            familyExplicitAudio: view.querySelector('.selectAudio').dataset.familyExplicit === 'true',
+            familyExplicitSubtitle: view.querySelector('.selectSubtitles').dataset.familyExplicit === 'true',
             audioStreamIndex: audioStreamIndex,
             subtitleStreamIndex: view.querySelector('.selectSubtitles').value
         };
@@ -2047,17 +2076,28 @@ export default function (view, params) {
         }]);
     }
 
-    function onMoreCommandsClick() {
+    function onMoreCommandsClick(event) {
         const button = this;
+        const commandId = event?.detail?.familyCommand;
+        const originalItem = currentItem;
         let selectedItem = view.querySelector('.selectSource').value || currentItem.Id;
 
         const apiClient = getApiClient();
+        const sameProfile = captureSeriesPreferencesSession(apiClient);
 
         apiClient.getItem(apiClient.getCurrentUserId(), selectedItem).then(function (item) {
+            if (!sameProfile() || currentItem !== originalItem) return;
             selectedItem = item;
 
             apiClient.getCurrentUser().then(function (user) {
-                itemContextMenu.show(getContextMenuOptions(selectedItem, user, button))
+                if (!sameProfile() || currentItem !== originalItem) return;
+                const options = getContextMenuOptions(selectedItem, user, button);
+                const action = commandId ? itemContextMenu.getCommands(options).then(commands => {
+                    if (!sameProfile() || currentItem !== originalItem) return { updated: false };
+                    if (!commands.some(command => command.id === commandId)) throw new Error('Action no longer available');
+                    return itemContextMenu.executeCommand(selectedItem, commandId, options);
+                }) : itemContextMenu.show(options);
+                action
                     .then(function (result) {
                         if (result.deleted) {
                             const parentId = selectedItem.SeasonId || selectedItem.SeriesId || selectedItem.ParentId;

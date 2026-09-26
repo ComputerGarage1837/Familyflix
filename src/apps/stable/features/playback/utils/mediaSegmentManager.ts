@@ -15,6 +15,8 @@ import { getMediaSegmentAction } from './mediaSegmentSettings';
 import { findCurrentSegment } from './mediaSegments';
 import { PlaybackSubscriber } from './playbackSubscriber';
 import { MediaSegmentAction } from '../constants/mediaSegmentAction';
+import { cachedSeriesPreferences } from 'familyflix/seriesPreferences';
+import { sharedIntroAction, seriesPlaybackIdentity } from 'familyflix/seriesPlaybackPolicy';
 
 class MediaSegmentManager extends PlaybackSubscriber {
     private hasSegments = false;
@@ -96,7 +98,8 @@ class MediaSegmentManager extends PlaybackSubscriber {
         this.mediaSegmentTypeActions = Object.values(MediaSegmentType)
             .map(type => ({
                 type,
-                action: getMediaSegmentAction(userSettings, type)
+                action: sharedIntroAction(cachedSeriesPreferences(seriesPlaybackIdentity(state.NowPlayingItem || {})), type,
+                    getMediaSegmentAction(userSettings, type)) as MediaSegmentAction
             }))
             .filter(({ action }) => !!action && action !== MediaSegmentAction.None)
             .reduce((acc, { type, action }) => {

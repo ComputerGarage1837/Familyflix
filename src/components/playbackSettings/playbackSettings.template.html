@@ -1,7 +1,17 @@
 <form style="margin: 0 auto;">
+    <section class="verticalSection">
+        <h2>Client diagnostics</h2>
+        <p>Send recent interface and forwarded player/updater errors to the server administrator. Passwords, URLs and file paths are removed. Native crash dumps are not included.</p>
+        <button type="button" is="emby-button" class="raised familySendDiagnostics">Send diagnostics</button>
+        <p class="familyDiagnosticsStatus" role="status" aria-live="polite"></p>
+    </section>
     <fieldset class="verticalSection familyPlaybackSettings" disabled>
         <h2>Family Flix playback</h2>
         <p class="familyPlaybackSyncStatus">Loading your shared Android / Windows preferences…</p>
+        <div class="selectContainer"><select is="emby-select" class="familyLongPress" label="Hold Enter / OK during playback">
+            <option value="REMOTE_GUIDE">Remote guide</option><option value="SUBTITLES">Subtitles</option>
+            <option value="AUDIO">Audio tracks</option><option value="PLAYBACK_INSPECTOR">Playback information</option><option value="NONE">Nothing</option>
+        </select></div>
         <div class="selectContainer">
             <select is="emby-select" class="familyNextUp" label="Next episode screen">
                 <option value="EXTENDED">Extended — artwork and episode details</option>

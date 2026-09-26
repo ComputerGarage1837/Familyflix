@@ -6,7 +6,8 @@ export const playbackDefaults = {
     next_up_behavior: 'EXTENDED',
     next_up_timeout: '7000',
     pref_resume_preroll: '0',
-    enable_still_watching: 'DISABLED'
+    enable_still_watching: 'DISABLED',
+    remote_long_press_center_action: 'REMOTE_GUIDE'
 };
 const records = new Map();
 let profileGeneration = 0;
@@ -32,6 +33,11 @@ export function normalizePlaybackPreferences(values = {}) {
 
 export function currentPlaybackPreferences(api, userId = api?.getCurrentUserId()) {
     return normalizePlaybackPreferences(api ? records.get(keyFor(api, userId))?.values : {});
+}
+
+export function currentLongPress(api) {
+    const value = api && records.get(keyFor(api, api.getCurrentUserId()))?.values?.remote_long_press_center_action;
+    return ['REMOTE_GUIDE', 'SUBTITLES', 'AUDIO', 'PLAYBACK_INSPECTOR', 'NONE'].includes(value) ? value : 'REMOTE_GUIDE';
 }
 
 export async function loadPlaybackPreferences(api, userId = api.getCurrentUserId(), force = false) {
@@ -63,6 +69,7 @@ export async function savePlaybackPreferences(api, userId, changes, original) {
     const expected = {};
     const changed = {};
     for (const key of Object.keys(playbackDefaults)) {
+        if (!(key in changes)) continue;
         if (changes[key] !== (original[key] ?? playbackDefaults[key])) {
             changed[key] = changes[key];
             expected[key] = original[key] ?? '';

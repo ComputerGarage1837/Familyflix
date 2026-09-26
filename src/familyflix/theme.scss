@@ -44,6 +44,12 @@ html[data-family-clock='IN_VIDEO'] .skinHeader:not(.osdHeader) .currentTimeText,
 html[data-family-clock='IN_MENUS'] .skinHeader.osdHeader .currentTimeText {
     display: none;
 }
+html[data-family-watched='HIDE_UNWATCHED'] .countIndicator,
+html[data-family-watched='EPISODES_ONLY'] .countIndicator,
+html[data-family-watched='EPISODES_ONLY'] .card:not([data-type='Episode']) .playedIndicator,
+html[data-family-watched='NEVER'] .countIndicator,
+html[data-family-watched='NEVER'] .playedIndicator { display: none; }
+
 .familyToolbarParty {
     display: grid;
     gap: .05rem;
@@ -67,6 +73,37 @@ html[data-family-clock='IN_MENUS'] .skinHeader.osdHeader .currentTimeText {
     font-size: .8rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+html[data-family-theme] .mainDetailButtons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 2px;
+    width: 100%;
+    max-width: 100%;
+    margin: .4rem 0;
+    padding: 0;
+    font-size: clamp(10px, .8vw, 14px);
+
+    > button {
+        flex: 1 0 auto;
+        width: auto;
+        min-width: 0;
+        height: auto;
+        min-height: 2.2em;
+        margin: 0;
+        padding: .4em .55em;
+        border-radius: 0;
+        background: var(--ff-surface, #182631);
+        color: var(--ff-text, #fff);
+        font-size: inherit;
+        white-space: nowrap;
+    }
+    > button:focus { background: var(--ff-accent, #20c5c7); color: var(--ff-on-accent, #071116); outline: 2px solid var(--ff-text, #fff); }
+    .detailButton-icon { font-size: 1.3em; }
+    .detailButton-content { height: auto; padding: 0; }
+    > .detailButton[title]:not([title=''])::after { content: attr(title); font-size: inherit; }
 }
 
 html[data-family-kids-spoilers='true'] .familyKidsUnwatchedEpisode {

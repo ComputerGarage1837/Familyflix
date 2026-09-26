@@ -18,6 +18,8 @@ import loading from '../loading/loading';
 import Events from '../../utils/events.ts';
 import toast from '../toast/toast';
 import template from './playbackSettings.template.html';
+import { bindDiagnostics } from 'familyflix/diagnostics';
+import { bindShortcutSettings } from 'familyflix/desktopShortcuts';
 
 import '../../elements/emby-select/emby-select';
 import '../../elements/emby-checkbox/emby-checkbox';
@@ -332,7 +334,8 @@ function save(instance, context, userId, userSettings, apiClient, enableSaveConf
                     next_up_behavior: context.querySelector('.familyNextUp').value,
                     next_up_timeout: String(Number(context.querySelector('.familyNextTimeout').value) * 1000),
                     pref_resume_preroll: context.querySelector('.familyResumeRewind').value,
-                    enable_still_watching: context.querySelector('.familyStillWatching').value
+                    enable_still_watching: context.querySelector('.familyStillWatching').value,
+                    remote_long_press_center_action: context.querySelector('.familyLongPress').value
                 }, instance.familyPlaybackAtLoad);
                 /* eslint-enable @typescript-eslint/naming-convention */
             }
@@ -374,6 +377,8 @@ function onSubmit(e) {
 
 function embed(options, self) {
     options.element.innerHTML = globalize.translateHtml(template, 'core');
+    bindDiagnostics(options.element, ServerConnections.getApiClient(options.serverId));
+    bindShortcutSettings(options.element);
 
     options.element.querySelector('form').addEventListener('submit', onSubmit.bind(self));
 
@@ -427,6 +432,7 @@ class PlaybackSettings {
                         context.querySelector('.familyNextTimeout').value = preferences.nextUpSeconds;
                         context.querySelector('.familyResumeRewind').value = preferences.resumeRewindSeconds;
                         context.querySelector('.familyStillWatching').value = preferences.stillWatching;
+                        context.querySelector('.familyLongPress').value = self.familyPlaybackAtLoad.remote_long_press_center_action || 'REMOTE_GUIDE';
                         context.querySelector('.chkEpisodeAutoPlay').checked = preferences.autoPlay;
                         context.querySelector('.fldEnableNextVideoOverlay').classList.add('hide');
                         context.querySelector('.familyPlaybackSettings').disabled = false;

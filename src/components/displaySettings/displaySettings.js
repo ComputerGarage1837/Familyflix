@@ -189,12 +189,14 @@ function save(instance, context, userId, userSettings, apiClient, enableSaveConf
                 const changes = {
                     app_theme: context.querySelector('#selectFamilyTheme').value,
                     pref_clock_behavior: context.querySelector('#selectFamilyClock').value,
-                    pref_show_backdrop: String(context.querySelector('#chkBackdrops').checked)
+                    pref_show_backdrop: String(context.querySelector('#chkBackdrops').checked),
+                    pref_watched_indicator_behavior: context.querySelector('#selectFamilyWatched').value
                 };
                 instance.familyValuesAtLoad = await saveFamilyProfileValues(apiClient, userId, changes, {
                     app_theme: values.app_theme || 'DARK',
                     pref_clock_behavior: values.pref_clock_behavior || 'ALWAYS',
-                    pref_show_backdrop: values.pref_show_backdrop || 'true'
+                    pref_show_backdrop: values.pref_show_backdrop || 'true',
+                    pref_watched_indicator_behavior: values.pref_watched_indicator_behavior || ''
                 });
                 await loadFamilyTheme(apiClient, userId);
             }
@@ -265,10 +267,12 @@ class DisplaySettings {
                     self.familyValuesAtLoad = values;
                     familyThemeSelect.value = familyThemes[values.app_theme] ? values.app_theme : 'DARK';
                     context.querySelector('#selectFamilyClock').value = values.pref_clock_behavior || 'ALWAYS';
+                    context.querySelector('#selectFamilyWatched').value = values.pref_watched_indicator_behavior || 'ALWAYS';
                     context.querySelector('#chkBackdrops').checked = values.pref_show_backdrop !== 'false';
                 }).catch(error => {
                     console.warn('Family Flix profile settings could not be loaded:', error);
                     familyThemeSelect.disabled = true;
+                    context.querySelector('#selectFamilyWatched').disabled = true;
                     context.querySelector('#selectFamilyClock').disabled = true;
                 }).finally(() => {
                     if (autoFocus) focusManager.autoFocus(context);

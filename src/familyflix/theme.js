@@ -66,6 +66,7 @@ export async function loadFamilyTheme(apiClient, userId) {
         applyFamilyTheme(selected);
         document.documentElement.dataset.familyClock = values.pref_clock_behavior || 'ALWAYS';
         document.documentElement.dataset.familyBackdrops = values.pref_show_backdrop || 'true';
+        document.documentElement.dataset.familyWatched = values.pref_watched_indicator_behavior || 'ALWAYS';
         document.dispatchEvent(new Event('familyflix-settings-updated'));
     }
     return selected;
@@ -106,6 +107,7 @@ export function clearFamilyTheme() {
     delete document.documentElement.dataset.familyTheme;
     delete document.documentElement.dataset.familyClock;
     delete document.documentElement.dataset.familyBackdrops;
+    delete document.documentElement.dataset.familyWatched;
     document.dispatchEvent(new Event('familyflix-settings-updated'));
     for (const name of ['screen', 'surface', 'accent', 'secondary', 'text', 'on-accent']) {
         document.documentElement.style.removeProperty(`--ff-${name}`);

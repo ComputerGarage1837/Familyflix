@@ -16,6 +16,7 @@ import { startIssueDecorations, stopIssueDecorations } from 'familyflix/issues';
 import { reconcileParty, rememberProfile } from 'familyflix/profiles';
 import { reportCoWatchPlayed } from 'familyflix/cowatch';
 import { applyKidsPresentation } from 'familyflix/kidsMode';
+import { clearDiagnostics } from 'familyflix/diagnostics';
 
 import ConnectionManager from './connectionManager';
 
@@ -46,6 +47,7 @@ class ServerConnections extends ConnectionManager {
         this.firstConnection = null;
 
         Events.on(this, 'localusersignedout', (_e, logoutInfo) => {
+            clearDiagnostics();
             setUserInfo(null, null);
             clearFamilyTheme();
             changePlaybackProfile();

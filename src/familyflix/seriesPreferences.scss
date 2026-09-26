@@ -1,0 +1,47 @@
+.familySeriesDialog {
+    box-sizing: border-box;
+    width: min(48rem, 94vw);
+    max-height: 88vh;
+    padding: 1.6rem;
+    border-radius: 0.8rem;
+
+    h2 { margin-top: 0; }
+    p { line-height: 1.5; }
+
+    .familySeriesFields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.2rem;
+
+        label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        select { width: 100%; }
+    }
+
+    .familySeriesStatus {
+        min-height: 3em;
+        opacity: 0.9;
+    }
+
+    .familySeriesActions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+    }
+
+    [aria-disabled="true"] { opacity: 0.65; }
+
+    button:focus-visible,
+    select:focus-visible {
+        outline: 3px solid currentColor;
+        outline-offset: 3px;
+    }
+}
+
+@media (max-width: 40rem) {
+    .familySeriesDialog .familySeriesFields { grid-template-columns: 1fr; }
+}

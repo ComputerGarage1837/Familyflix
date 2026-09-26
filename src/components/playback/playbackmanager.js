@@ -36,6 +36,10 @@ import { kidsPlaybackReason, kidsSleepExpired, recordKidsPlayback, resetKidsPlay
 import { reportCoWatch } from 'familyflix/cowatch';
 import { currentPlaybackPreferences, playbackProfileGeneration, preparePlaybackPreferences, resumedPosition, UninterruptedEpisodes } from 'familyflix/playbackPreferences';
 import { nextEpisodePrompt } from 'familyflix/nextEpisodePrompt';
+import { captureSeriesPreferencesSession, loadSeriesPreferences, rememberSeriesAudio } from 'familyflix/seriesPreferences';
+import { SERIES_DEFAULTS, seriesAutoplayAllowed } from 'familyflix/seriesPreferencePolicy';
+import { sharedSeriesTrackOptions } from 'familyflix/seriesPlaybackPolicy';
+import { recordDiagnostic } from 'familyflix/diagnostics';
 
 const UNLIMITED_ITEMS = -1;
 
@@ -1343,6 +1347,9 @@ export class PlaybackManager {
             if (player && !enableLocalPlaylistManagement(player)) {
                 return player.setAudioStreamIndex(index);
             }
+
+            const selectedTrack = self.currentMediaSource(player)?.MediaStreams?.find(stream => stream.Type === 'Audio' && stream.Index === Number(index));
+            if (selectedTrack) rememberSeriesAudio(self.currentItem(player), selectedTrack.Language);
 
             if (self.playMethod(player) === 'Transcode' || !player.canSetAudioStreamIndex()) {
                 changeStream(player, getCurrentTicks(player), { AudioStreamIndex: index });
@@ -2680,15 +2687,19 @@ export class PlaybackManager {
 
             const apiClient = ServerConnections.getApiClient(item.ServerId);
             const isLiveTv = [BaseItemKind.TvChannel, BaseItemKind.LiveTvChannel].includes(item.Type);
-            const getMediaStreams = isLiveTv ? Promise.resolve([]) : apiClient.getItem(apiClient.getCurrentUserId(), mediaSourceId || item.Id)
-                .then(fullItem => {
-                    return fullItem.MediaStreams;
-                });
+            const sessionCurrent = captureSeriesPreferencesSession(apiClient);
+            const fullItemPromise = isLiveTv ? Promise.resolve(item) : apiClient.getItem(apiClient.getCurrentUserId(), mediaSourceId || item.Id);
+            const sharedSettings = enableLocalPlaylistManagement(player) && item.Type === 'Episode' ?
+                fullItemPromise.then(fullItem => loadSeriesPreferences(fullItem, apiClient)) :
+                Promise.resolve({ values: SERIES_DEFAULTS });
 
-            return Promise.all([promise, player.getDeviceProfile(item), apiClient.getCurrentUser(), getMediaStreams]).then(function (responses) {
+            return Promise.all([promise, player.getDeviceProfile(item), apiClient.getCurrentUser(), fullItemPromise, sharedSettings]).then(function (responses) {
+                if (!sessionCurrent()) throw new DOMException('Profile changed before playback', 'AbortError');
                 const deviceProfile = responses[1];
                 const user = responses[2];
-                const mediaStreams = responses[3];
+                const mediaStreams = responses[3].MediaStreams || [];
+                const seriesValues = responses[4].values;
+                if (responses[3].SeriesId) item.SeriesId = responses[3].SeriesId;
 
                 const audioStreamIndex = playOptions.audioStreamIndex;
                 const subtitleStreamIndex = playOptions.subtitleStreamIndex;
@@ -2726,11 +2737,27 @@ export class PlaybackManager {
                     isIdFallbackNeeded = true;
                 }
 
+                const sharedTracks = sharedSeriesTrackOptions(seriesValues, mediaStreams, playOptions);
+                if (sharedTracks.audioStreamIndex != null) {
+                    options.audioStreamIndex = sharedTracks.audioStreamIndex;
+                    isIdFallbackNeeded = true;
+                } else if (playOptions.familyExplicitAudio && playOptions.audioStreamIndex != null) {
+                    options.audioStreamIndex = playOptions.audioStreamIndex;
+                }
+                if (sharedTracks.subtitleStreamIndex != null) {
+                    options.subtitleStreamIndex = sharedTracks.subtitleStreamIndex;
+                    isIdFallbackNeeded = true;
+                } else if (playOptions.familyExplicitSubtitle && playOptions.subtitleStreamIndex != null) {
+                    options.subtitleStreamIndex = playOptions.subtitleStreamIndex;
+                }
+                if (sharedTracks.clearSecondarySubtitle) trackOptions.DefaultSecondarySubtitleStreamIndex = -1;
+
                 if (isIdFallbackNeeded) {
                     mediaSourceId ||= item.Id;
                 }
 
                 return getPlaybackMediaSource(player, apiClient, deviceProfile, item, mediaSourceId, options).then(async (mediaSource) => {
+                    if (!sessionCurrent()) throw new DOMException('Profile changed before playback', 'AbortError');
                     if (trackOptions.DefaultSecondarySubtitleStreamIndex != null) {
                         mediaSource.DefaultSecondarySubtitleStreamIndex = trackOptions.DefaultSecondarySubtitleStreamIndex;
                     }
@@ -2752,6 +2779,7 @@ export class PlaybackManager {
 
                     const streamInfo = createStreamInfo(apiClient, item.MediaType, item, mediaSource, startPosition, player);
                     streamInfo.aspectRatio = playOptions.aspectRatio;
+                    streamInfo.familySeriesPreferences = seriesValues;
                     streamInfo.fullscreen = playOptions.fullscreen;
 
                     const playerData = getPlayerData(player);
@@ -3471,6 +3499,7 @@ export class PlaybackManager {
          * @param {MediaError} error.type
          */
         function onPlaybackError(e, error) {
+            recordDiagnostic('Playback failed', error?.message || error?.type || 'Player error');
             const player = this;
             error = error || {};
 
@@ -3527,7 +3556,7 @@ export class PlaybackManager {
             const familyApi = streamInfo?.item?.ServerId ? ServerConnections.getApiClient(streamInfo.item.ServerId) : null;
             const familyPreferences = currentPlaybackPreferences(familyApi);
             const familyIsEpisode = streamInfo?.item?.Type === 'Episode';
-            const familyAutomaticNext = !familyIsEpisode || familyPreferences.autoPlay;
+            const familyAutomaticNext = !familyIsEpisode || seriesAutoplayAllowed(streamInfo?.familySeriesPreferences || SERIES_DEFAULTS, familyPreferences.autoPlay);
             const nextItem = self._playNextAfterEnded && !errorOccurred && familyAutomaticNext ? self._playQueueManager.getNextItemInfo() : null;
             const transition = ++familyTransition;
 

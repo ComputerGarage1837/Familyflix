@@ -771,6 +771,7 @@ export async function show(options) {
 }
 
 export default {
+    executeCommand,
     getCommands,
     show
 };
