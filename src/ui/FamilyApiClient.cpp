@@ -23,6 +23,7 @@
 #include <QSaveFile>
 #include <QProcess>
 #include "system/SystemComponent.h"
+#include "core/ProfileManager.h"
 #include <climits>
 
 namespace {
@@ -1704,8 +1705,10 @@ void FamilyApiClient::installWindowsUpdate()
       return;
     }
     QFile file(destination);
+    QCryptographicHash checksum(QCryptographicHash::Sha256);
     if (!file.open(QIODevice::ReadOnly)
-        || QString::fromLatin1(QCryptographicHash::hash(&file, QCryptographicHash::Sha256).toHex())
+        || !checksum.addData(&file)
+        || QString::fromLatin1(checksum.result().toHex())
              != digest.mid(7)) {
       file.close();
       QFile::remove(destination);
