@@ -1,0 +1,31 @@
+.familyNextOverlay {
+    position: fixed;
+    z-index: 100000;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgb(0 0 0 / 85%);
+}
+.familyNextPanel {
+    max-width: min(44rem, 85vw);
+    max-height: 90vh;
+    overflow: auto;
+    padding: 2rem;
+    border: 1px solid var(--ff-accent, #20c5c7);
+    border-radius: 1rem;
+    background: var(--ff-surface, #102028);
+    color: var(--ff-text, #f4fbfc);
+    text-align: center;
+    img { width: 26rem; max-width: 100%; max-height: 35vh; object-fit: contain; }
+    button {
+        margin: .4rem;
+        padding: .8rem 1.2rem;
+        border: 2px solid var(--ff-accent, #20c5c7);
+        border-radius: .4rem;
+        background: var(--ff-screen, #071116);
+        color: var(--ff-text, #f4fbfc);
+        font: inherit;
+        cursor: pointer;
+        &:focus-visible, &:hover { background: var(--ff-accent, #20c5c7); color: var(--ff-on-accent, #042326); outline: 2px solid white; }
+    }
+}

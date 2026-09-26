@@ -34,6 +34,8 @@ import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { bindSkipSegment } from './skipsegment.ts';
 import { kidsPlaybackReason, kidsSleepExpired, recordKidsPlayback, resetKidsPlayback } from 'familyflix/kidsMode';
 import { reportCoWatch } from 'familyflix/cowatch';
+import { currentPlaybackPreferences, preparePlaybackPreferences, resumedPosition, UninterruptedEpisodes } from 'familyflix/playbackPreferences';
+import { nextEpisodePrompt } from 'familyflix/nextEpisodePrompt';
 
 const UNLIMITED_ITEMS = -1;
 
@@ -715,6 +717,15 @@ function sortPlayerTargets(a, b) {
 export class PlaybackManager {
     constructor() {
         const self = this;
+
+        let familyTransition = 0;
+        let familySessionOwner = '';
+        const familyEpisodes = new UninterruptedEpisodes();
+        const familyInteraction = () => {
+            if (self._currentPlayer && self.currentItem(self._currentPlayer)?.Type === 'Episode') familyEpisodes.interaction();
+        };
+        document.addEventListener('keydown', familyInteraction);
+        document.addEventListener('pointerdown', familyInteraction);
 
         const players = [];
         let currentTargetInfo;
@@ -2350,6 +2361,7 @@ export class PlaybackManager {
         }
 
         function playInternal(item, playOptions, onPlaybackStartedFn, prevSource) {
+            const familyRequest = ++familyTransition;
             const kidsApiClient = ServerConnections.getApiClient(item.ServerId);
             const kidsReason = kidsPlaybackReason(kidsApiClient, item);
             if (kidsReason) {
@@ -2376,12 +2388,25 @@ export class PlaybackManager {
 
             // TODO: This should be the media type requested, not the original media type
             const mediaType = item.MediaType;
+            const familyUserId = apiClient?.getCurrentUserId();
 
             if (playOptions.fullscreen) {
                 loading.show();
             }
 
-            return runInterceptors(item, playOptions)
+            return preparePlaybackPreferences(apiClient).then(() => {
+                if (familyRequest !== familyTransition || apiClient?.getCurrentUserId() !== familyUserId) {
+                    const error = new Error('Playback request superseded');
+                    error.familySuperseded = true;
+                    throw error;
+                }
+                const owner = `${apiClient?.serverId()}:${familyUserId}`;
+                if (familySessionOwner !== owner || !self._currentPlayer) familyEpisodes.reset();
+                familySessionOwner = owner;
+                playOptions.startPositionTicks = resumedPosition(playOptions.startPositionTicks,
+                    currentPlaybackPreferences(apiClient), item, Boolean(prevSource));
+                return runInterceptors(item, playOptions);
+            })
                 .catch(onInterceptorRejection)
                 .then(() => detectBitrate(apiClient, item, mediaType))
                 .then((bitrate) => {
@@ -2406,7 +2431,8 @@ export class PlaybackManager {
             Events.trigger(self, 'playbackcancelled');
         }
 
-        function onInterceptorRejection() {
+        function onInterceptorRejection(error) {
+            if (error?.familySuperseded) return Promise.reject(error);
             cancelPlayback();
 
             return Promise.reject();
@@ -3497,7 +3523,12 @@ export class PlaybackManager {
 
             const errorOccurred = displayErrorCode && typeof (displayErrorCode) === 'string';
 
-            const nextItem = self._playNextAfterEnded && !errorOccurred ? self._playQueueManager.getNextItemInfo() : null;
+            const familyApi = streamInfo?.item?.ServerId ? ServerConnections.getApiClient(streamInfo.item.ServerId) : null;
+            const familyPreferences = currentPlaybackPreferences(familyApi);
+            const familyIsEpisode = streamInfo?.item?.Type === 'Episode';
+            const familyAutomaticNext = !familyIsEpisode || familyPreferences.autoPlay;
+            const nextItem = self._playNextAfterEnded && !errorOccurred && familyAutomaticNext ? self._playQueueManager.getNextItemInfo() : null;
+            const transition = ++familyTransition;
 
             const nextMediaType = (nextItem ? nextItem.item.MediaType : null);
 
@@ -3524,6 +3555,7 @@ export class PlaybackManager {
             state.NextItem = playbackStopInfo.nextItem;
 
             if (!nextItem) {
+                familyEpisodes.reset();
                 self._playQueueManager.reset();
                 if (streamInfo?.item?.ServerId) resetKidsPlayback(ServerConnections.getApiClient(streamInfo.item.ServerId));
             }
@@ -3545,11 +3577,29 @@ export class PlaybackManager {
             } else if (nextItem) {
                 const apiClient = ServerConnections.getApiClient(nextItem.item.ServerId);
 
-                apiClient.getCurrentUser().then(function (user) {
-                    if (user.Configuration.EnableNextEpisodeAutoPlay || nextMediaType !== MediaType.Video) {
+                const userId = apiClient.getCurrentUserId();
+                const isCurrent = () => transition === familyTransition && apiClient.getCurrentUserId() === userId
+                    && ServerConnections.currentApiClient() === apiClient;
+                const advance = async () => {
+                    if (familyIsEpisode) {
+                        familyEpisodes.completed(streamInfo.item.RunTimeTicks);
+                        const needsConfirmation = familyEpisodes.needsConfirmation(familyPreferences.stillWatching);
+                        const accepted = await nextEpisodePrompt(apiClient, nextItem.item, familyPreferences, needsConfirmation, isCurrent);
+                        if (!isCurrent()) return;
+                        if (!accepted) {
+                            familyEpisodes.reset();
+                            self._playQueueManager.reset();
+                            cancelPlayback();
+                            return;
+                        }
+                        if (needsConfirmation) familyEpisodes.reset();
                         self.nextTrack();
+                    } else {
+                        const user = await apiClient.getCurrentUser();
+                        if (isCurrent() && (user.Configuration.EnableNextEpisodeAutoPlay || nextMediaType !== MediaType.Video)) self.nextTrack();
                     }
-                });
+                };
+                advance().catch(error => console.error('Unable to continue playback:', error));
             }
         }
 

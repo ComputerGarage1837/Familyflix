@@ -681,6 +681,9 @@ export default function (view) {
     }
 
     function showComingUpNext(player) {
+        // Family Flix presents the Android-style choice/countdown after the episode ends.
+        // Do not compete with it using the vanilla pre-end overlay.
+        if (window.NativeShell) return;
         import('../../../components/upnextdialog/upnextdialog').then(({ default: UpNextDialog }) => {
             if (!(currentVisibleMenu || currentUpNextDialog)) {
                 currentVisibleMenu = 'upnext';

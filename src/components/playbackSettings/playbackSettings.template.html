@@ -1,4 +1,30 @@
 <form style="margin: 0 auto;">
+    <fieldset class="verticalSection familyPlaybackSettings" disabled>
+        <h2>Family Flix playback</h2>
+        <p class="familyPlaybackSyncStatus">Loading your shared Android / Windows preferences…</p>
+        <div class="selectContainer">
+            <select is="emby-select" class="familyNextUp" label="Next episode screen">
+                <option value="EXTENDED">Extended — artwork and episode details</option>
+                <option value="MINIMAL">Minimal — episode details only</option>
+                <option value="DISABLED">Off</option>
+            </select>
+        </div>
+        <div class="inputContainer"><label>Next episode countdown (0–30 seconds; 0 waits for your choice)
+            <input is="emby-input" class="familyNextTimeout" type="number" min="0" max="30" step="1">
+        </label></div>
+        <div class="inputContainer"><label>Rewind when resuming (0–300 seconds)
+            <input is="emby-input" class="familyResumeRewind" type="number" min="0" max="300" step="1">
+        </label></div>
+        <div class="selectContainer">
+            <select is="emby-select" class="familyStillWatching" label="Are you still watching?">
+                <option value="DISABLED">Off</option>
+                <option value="SHORT">2 episodes or 60 minutes</option>
+                <option value="DEFAULT">3 episodes or 90 minutes</option>
+                <option value="LONG">5 episodes or 150 minutes</option>
+                <option value="VERY_LONG">8 episodes or 240 minutes</option>
+            </select>
+        </div>
+    </fieldset>
     <div class="verticalSection verticalSection-extrabottompadding">
         <h2 class="sectionTitle">
             ${HeaderAudioSettings}

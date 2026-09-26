@@ -11,6 +11,7 @@ import Events from 'utils/events.ts';
 import { toApi } from 'utils/jellyfin-apiclient/compat';
 import { clearFamilyTheme, loadFamilyTheme } from 'familyflix/theme';
 import { loadFamilySegmentActions } from 'familyflix/mediaSegments';
+import { loadPlaybackPreferences } from 'familyflix/playbackPreferences';
 import { startIssueDecorations, stopIssueDecorations } from 'familyflix/issues';
 import { reconcileParty, rememberProfile } from 'familyflix/profiles';
 import { reportCoWatchPlayed } from 'familyflix/cowatch';
@@ -167,6 +168,9 @@ class ServerConnections extends ConnectionManager {
             });
             loadFamilySegmentActions(apiClient, user.Id).catch(error => {
                 console.warn('Family Flix skip settings could not be loaded:', error);
+            });
+            loadPlaybackPreferences(apiClient, user.Id).catch(error => {
+                console.warn('Family Flix playback settings could not be loaded:', error);
             });
             startIssueDecorations(apiClient);
             if (window.NativeShell && typeof window.NativeShell.onLocalUserSignedIn === 'function') {

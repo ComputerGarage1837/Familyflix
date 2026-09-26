@@ -4,6 +4,7 @@ import escapeHTML from 'escape-html';
 import { MediaSegmentAction } from 'apps/stable/features/playback/constants/mediaSegmentAction';
 import { getId, getMediaSegmentAction } from 'apps/stable/features/playback/utils/mediaSegmentSettings';
 import { familySegmentActionsFromForm, loadFamilySegmentActions, saveFamilySegmentActions } from 'familyflix/mediaSegments';
+import { loadPlaybackPreferences, normalizePlaybackPreferences, savePlaybackPreferences } from 'familyflix/playbackPreferences';
 import { AppFeature } from 'constants/appFeature';
 import { ServerConnections } from 'lib/jellyfin-apiclient';
 
@@ -324,6 +325,17 @@ function save(instance, context, userId, userSettings, apiClient, enableSaveConf
 
     apiClient.getUser(userId).then(user => {
         saveUser(context, user, userSettings, apiClient).then(async () => {
+            if (instance.familyPlaybackAtLoad !== null) {
+                /* eslint-disable @typescript-eslint/naming-convention -- Android preference wire format. */
+                instance.familyPlaybackAtLoad = await savePlaybackPreferences(apiClient, userId, {
+                    pref_enable_tv_queuing: String(context.querySelector('.chkEpisodeAutoPlay').checked),
+                    next_up_behavior: context.querySelector('.familyNextUp').value,
+                    next_up_timeout: String(Number(context.querySelector('.familyNextTimeout').value) * 1000),
+                    pref_resume_preroll: context.querySelector('.familyResumeRewind').value,
+                    enable_still_watching: context.querySelector('.familyStillWatching').value
+                }, instance.familyPlaybackAtLoad);
+                /* eslint-enable @typescript-eslint/naming-convention */
+            }
             if (instance.familySegmentActionsAtLoad !== null) {
                 instance.familySegmentActionsAtLoad = await saveFamilySegmentActions(apiClient, userId,
                     familySegmentActionsFromForm(context), instance.familySegmentActionsAtLoad);
@@ -380,6 +392,7 @@ class PlaybackSettings {
     constructor(options) {
         this.options = options;
         this.familySegmentActionsAtLoad = null;
+        this.familyPlaybackAtLoad = null;
         embed(options, this);
     }
 
@@ -405,6 +418,24 @@ class PlaybackSettings {
                     self.dataLoaded = true;
 
                     loadForm(context, user, userSettings, systemInfo, apiClient);
+                    try {
+                        const values = await loadPlaybackPreferences(apiClient, userId, true);
+                        if (!self.options || self.options.userId !== userId) return;
+                        self.familyPlaybackAtLoad = values;
+                        const preferences = normalizePlaybackPreferences(values);
+                        context.querySelector('.familyNextUp').value = preferences.nextUp;
+                        context.querySelector('.familyNextTimeout').value = preferences.nextUpSeconds;
+                        context.querySelector('.familyResumeRewind').value = preferences.resumeRewindSeconds;
+                        context.querySelector('.familyStillWatching').value = preferences.stillWatching;
+                        context.querySelector('.chkEpisodeAutoPlay').checked = preferences.autoPlay;
+                        context.querySelector('.fldEnableNextVideoOverlay').classList.add('hide');
+                        context.querySelector('.familyPlaybackSettings').disabled = false;
+                        context.querySelector('.familyPlaybackSyncStatus').textContent = 'Shared with Family Flix on Android, separately for each profile.';
+                    } catch (error) {
+                        self.familyPlaybackAtLoad = null;
+                        context.querySelector('.familyPlaybackSyncStatus').textContent = 'Shared playback settings could not be loaded. Reopen this page to retry; existing Android settings are unchanged.';
+                        console.warn('Shared playback settings unavailable:', error);
+                    }
                 });
             });
         });
