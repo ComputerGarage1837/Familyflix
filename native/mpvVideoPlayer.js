@@ -204,6 +204,7 @@
              * @param e {Event} The event received from the `<video>` element
              */
             this.onError = async (error) => {
+                window.dispatchEvent(new CustomEvent('familyflix-diagnostic', { detail: String(error?.message || error || 'Native playback error') }));
                 this.removeMediaDialog();
                 console.error(`media error: ${error}`);
 

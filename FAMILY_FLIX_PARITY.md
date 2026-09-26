@@ -1,5 +1,25 @@
 # Family Flix Windows parity tracker
 
+## Active desktop additions: family.12 (2026-09-25)
+
+- Ported the Android-compatible per-series preference store, identity resolution,
+  editor, offline pending edits and conflict checks into the active desktop client.
+  Portable audio/subtitle language intent, intro Ask/Auto/Off and autoplay choices
+  are applied during playback; explicit choices for the current play win.
+- Added manual ClientLog diagnostic upload with bounded/redacted session errors,
+  plus native player/updater error forwarding. This is not a native crash dump.
+- Added device-local keyboard shortcuts wired through the native input bridge,
+  and Android-shared hold-OK behavior. Android integer key codes remain untouched.
+- Added seasonal/series cast fallback, visible detail context actions with the
+  original permission checks and confirmations, and a compact high-contrast action
+  strip. Narrow windows wrap rather than clip labels or hide actions.
+- Added Android-shared watched-indicator visibility controls.
+
+The new code passes frontend tests and static checks. Runtime/layout, actual
+native key-device behavior, long playback and cross-device interaction remain
+release-gate checks, not implied by code/build success. Hardware-specific Android
+decoder/audio settings are not blindly copied over Windows' native player options.
+
 ## Active desktop additions: family.11 (2026-09-25)
 
 The packaged official-desktop client now reads and edits Android's shared

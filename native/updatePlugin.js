@@ -31,7 +31,7 @@ class updatePlugin {
                         headers: { Accept: 'application/vnd.github+json' },
                         cache: 'no-store'
                     });
-                    if (!response.ok) return;
+                    if (!response.ok) throw new Error(`Update check failed (HTTP ${response.status})`);
                     const releases = await response.json();
                     const latest = releases.filter(release => !release.draft && !release.prerelease &&
                         windowsTag.test(release.tag_name || ''))
@@ -54,7 +54,8 @@ class updatePlugin {
                         confirmText: 'Open download'
                     });
                     api.system.openExternalUrl(latest.html_url);
-                } catch {
+                } catch (error) {
+                    if (error instanceof Error) window.dispatchEvent(new CustomEvent('familyflix-diagnostic', { detail: error.message }));
                     // Network failure or Later: do not interrupt playback or sign-in.
                 }
             };

@@ -28,6 +28,15 @@ class inputPlugin {
 
             api.input.hostInput.connect((actions) => {
                 actions.forEach(action => {
+                    if (action === 'family_long_enter') {
+                        window.familyDesktopLongPress?.();
+                        return;
+                    }
+                    if (action.startsWith('family_key_')) {
+                        const command = window.familyDesktopShortcut?.(action.slice('family_key_'.length));
+                        if (command) inputManager.handleCommand(command, {});
+                        return;
+                    }
                     if (action === 'shuffle') {
                         playbackManager.setQueueShuffleMode('Shuffle');
                     } else if (action === 'sorted') {
