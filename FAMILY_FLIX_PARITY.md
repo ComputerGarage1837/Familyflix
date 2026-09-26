@@ -1,5 +1,28 @@
 # Family Flix Windows parity tracker
 
+## Active desktop additions: family.11 (2026-09-25)
+
+The packaged official-desktop client now reads and edits Android's shared
+resume preroll, media queuing, Next Up mode/countdown and Still Watching settings.
+It uses the same per-server/per-user preference document and preserves unrelated
+keys, with edited-field conflict checks. Playback rewinds resumes only (not live
+TV or track/quality switches), and automatic episode transitions use an
+Extended/Minimal/Off post-episode prompt. A zero countdown waits for a choice.
+Still Watching uses Android's episode/time thresholds and interaction reset.
+Prompts are keyboard/remote navigable and cancel when their playback/profile
+context changes. These are ports into the active desktop client, not the retired
+Qt-native implementation below.
+
+Validation: 29 focused tests pass, including 10 new playback/prompt tests;
+TypeScript, targeted ESLint and the production desktop frontend build pass.
+Native Windows interaction validation and installer status are recorded in the
+family.11 validation report. This is not a declaration of complete Android parity.
+
+Known remaining active-client gaps include per-series playback overrides and
+track-intent sync, Android-equivalent device buffer controls, client diagnostic
+uploads, remote-shortcut customization, and the remaining detailed settings.
+Do not count implementation in the retired Qt-native client as completion.
+
 The Windows entry point now uses a dedicated, packaged vanilla Jellyfin Web
 10.11.5 client plus Jellyfin Desktop's native player. The table below describes
 the retired Qt-native experiment, not verified behavior in the new desktop
