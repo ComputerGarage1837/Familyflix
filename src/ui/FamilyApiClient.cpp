@@ -19,6 +19,9 @@
 #include <QTime>
 #include <QStorageInfo>
 #include <QDir>
+#include <QFile>
+#include <QSaveFile>
+#include <QProcess>
 #include "system/SystemComponent.h"
 #include <climits>
 
@@ -1632,6 +1635,7 @@ void FamilyApiClient::checkWindowsUpdate(bool manual)
         best = { { QStringLiteral("tag"), tag },
                  { QStringLiteral("name"), release.value(QStringLiteral("name"), tag) },
                  { QStringLiteral("downloadUrl"), download },
+                 { QStringLiteral("digest"), asset.value(QStringLiteral("digest")) },
                  { QStringLiteral("releaseUrl"), release.value(QStringLiteral("html_url")) } };
         break;
       }
@@ -1650,6 +1654,76 @@ void FamilyApiClient::dismissWindowsUpdate()
   if (!tag.isEmpty()) m_settings.setValue(QStringLiteral("windows/dismissedUpdateTag"), tag);
   m_windowsUpdate.clear();
   emit windowsUpdateChanged();
+}
+
+void FamilyApiClient::installWindowsUpdate()
+{
+#ifdef Q_OS_WIN
+  if (m_windowsUpdateDownloadActive) return;
+  const QUrl url(m_windowsUpdate.value(QStringLiteral("downloadUrl")).toString());
+  const QString digest = m_windowsUpdate.value(QStringLiteral("digest")).toString().toLower();
+  if (url.scheme() != QStringLiteral("https") || url.host() != QStringLiteral("github.com")
+      || !QRegularExpression(QStringLiteral("^sha256:[0-9a-f]{64}$")).match(digest).hasMatch()) {
+    emit errorOccurred(QStringLiteral("This update has no verifiable SHA-256 checksum. Open its release page instead."));
+    return;
+  }
+  const QString directory = ProfileManager::activeProfile().cacheDir(QStringLiteral("updates"));
+  if (!QDir().mkpath(directory)) {
+    emit errorOccurred(QStringLiteral("Could not prepare the update download folder."));
+    return;
+  }
+  const QString destination = QDir(directory).filePath(QStringLiteral("Family-Flix-Windows-update.exe"));
+  auto output = std::make_shared<QSaveFile>(destination);
+  if (!output->open(QIODevice::WriteOnly)) {
+    emit errorOccurred(QStringLiteral("Could not save the Windows update."));
+    return;
+  }
+  m_windowsUpdateDownloadActive = true;
+  m_windowsUpdate.insert(QStringLiteral("progress"), 0);
+  emit windowsUpdateChanged();
+  QNetworkRequest request(url);
+  request.setRawHeader("User-Agent", "FamilyFlixWindows");
+  auto* reply = m_network.get(request);
+  connect(reply, &QNetworkReply::readyRead, this, [reply, output] {
+    output->write(reply->readAll());
+  });
+  connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {
+    if (total <= 0) return;
+    m_windowsUpdate.insert(QStringLiteral("progress"), static_cast<int>(100 * received / total));
+    emit windowsUpdateChanged();
+  });
+  connect(reply, &QNetworkReply::finished, this, [this, reply, output, destination, digest] {
+    output->write(reply->readAll());
+    const bool downloaded = reply->error() == QNetworkReply::NoError && output->commit();
+    reply->deleteLater();
+    m_windowsUpdateDownloadActive = false;
+    if (!downloaded) {
+      m_windowsUpdate.remove(QStringLiteral("progress"));
+      emit windowsUpdateChanged();
+      emit errorOccurred(QStringLiteral("The update download failed. You can try again."));
+      return;
+    }
+    QFile file(destination);
+    if (!file.open(QIODevice::ReadOnly)
+        || QString::fromLatin1(QCryptographicHash::hash(&file, QCryptographicHash::Sha256).toHex())
+             != digest.mid(7)) {
+      file.close();
+      QFile::remove(destination);
+      m_windowsUpdate.remove(QStringLiteral("progress"));
+      emit windowsUpdateChanged();
+      emit errorOccurred(QStringLiteral("The update checksum did not match. Nothing was installed."));
+      return;
+    }
+    file.close();
+    if (!QProcess::startDetached(destination, {})) {
+      m_windowsUpdate.remove(QStringLiteral("progress"));
+      emit windowsUpdateChanged();
+      emit errorOccurred(QStringLiteral("The verified installer could not be started."));
+      return;
+    }
+    QCoreApplication::quit();
+  });
+#endif
 }
 
 void FamilyApiClient::stopWatchingTogether()

@@ -4059,13 +4059,17 @@ Window {
                     NativeAction {
                         id: updateDownloadButton
                         width: 245
-                        text: "Open installer download"
-                        onClicked: {
-                            Qt.openUrlExternally(familyApi.windowsUpdate.downloadUrl)
-                            familyApi.dismissWindowsUpdate()
-                        }
+                        text: familyApi.windowsUpdate.progress === undefined
+                            ? "Download and install" : "Downloading " + familyApi.windowsUpdate.progress + "%"
+                        enabled: familyApi.windowsUpdate.progress === undefined
+                        onClicked: familyApi.installWindowsUpdate()
                     }
-                    NativeAction { width: 150; text: "Not now"; onClicked: familyApi.dismissWindowsUpdate() }
+                    NativeAction {
+                        width: 150
+                        text: "Not now"
+                        enabled: familyApi.windowsUpdate.progress === undefined
+                        onClicked: familyApi.dismissWindowsUpdate()
+                    }
                 }
             }
         }

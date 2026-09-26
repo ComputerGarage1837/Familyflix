@@ -272,6 +272,7 @@ public:
   Q_INVOKABLE QString streamUrl(const QString& itemId) const;
   Q_INVOKABLE QString temporaryStorageGiB() const;
   Q_INVOKABLE void checkWindowsUpdate(bool manual = false);
+  Q_INVOKABLE void installWindowsUpdate();
   Q_INVOKABLE void sendWindowsDiagnostics();
   Q_INVOKABLE void dismissWindowsUpdate();
   Q_INVOKABLE void refreshWatchlist();
@@ -418,6 +419,7 @@ private:
   QVariantList m_familyNightCandidates;
   QVariantMap m_windowsUpdate;
   bool m_windowsUpdateCheckActive = false;
+  bool m_windowsUpdateDownloadActive = false;
   bool m_familyNightLoading = false;
   quint64 m_familyNightRevision = 0;
   QVariantList m_publicUsers;
