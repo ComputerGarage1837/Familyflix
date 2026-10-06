@@ -3,6 +3,7 @@ import { ItemsApiGetItemsRequest } from '@jellyfin/sdk/lib/generated-client/api/
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { AxiosRequestConfig } from 'axios';
 import { QUERY_OPTIONS } from '../constants/queryOptions';
+import { friendlySearchItems } from 'familyflix/friendlySearch';
 
 export const fetchItemsByType = async (
     api: Api,
@@ -10,6 +11,7 @@ export const fetchItemsByType = async (
     params?: ItemsApiGetItemsRequest,
     options?: AxiosRequestConfig
 ) => {
+    if (userId && params?.searchTerm) return friendlySearchItems(api, userId, { ...QUERY_OPTIONS, recursive: true, ...params }, options);
     const response = await getItemsApi(api).getItems(
         {
             ...QUERY_OPTIONS,
