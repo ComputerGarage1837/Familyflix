@@ -42,7 +42,7 @@ jobs:
         submodules: recursive
     - uses: actions/checkout@v7
       with:
-        ref: 2c7abfa89a98d2f18bdca01826d627c06dfabd57
+        ref: 119f706
         path: desktop-web
         persist-credentials: false
     - uses: actions/setup-node@v4
